@@ -12,3 +12,4 @@ android/
 .DS_Store
 coverage/
 *.tsbuildinfo
+excalidraw.log

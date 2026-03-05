@@ -1,0 +1,147 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  USER
+  CREATOR
+}
+
+enum KycStatus {
+  NONE
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum PostType {
+  TEXT
+  IMAGE
+  VIDEO
+}
+
+model User {
+  id              String    @id @default(uuid())
+  privyUserId     String    @unique
+  walletAddress   String    @unique
+  email           String?
+  username        String?   @unique
+  displayName     String?
+  bio             String?
+  avatarUrl       String?
+  bannerUrl       String?
+  role            UserRole  @default(USER)
+  kycStatus       KycStatus @default(NONE)
+  isAdminApproved Boolean   @default(false)
+  isAdmin         Boolean   @default(false)
+  tokenSymbol     String?
+  socialLinks     Json?
+  locationLat     Float?
+  locationLng     Float?
+  pushToken       String?
+  followerCount   Int       @default(0)
+  followingCount  Int       @default(0)
+  postCount       Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  posts      Post[]
+  likes      Like[]
+  comments   Comment[]
+  followers  Follow[]    @relation("following")
+  following  Follow[]    @relation("follower")
+  kycRecords KycRecord[]
+
+  @@index([role])
+  @@index([locationLat, locationLng])
+  @@map("users")
+}
+
+model Post {
+  id          String   @id @default(uuid())
+  creatorId   String
+  postType    PostType @default(TEXT)
+  content     String?
+  caption     String?
+  mediaUrl    String?
+  mediaUrls   Json?
+  latitude    Float
+  longitude   Float
+  likeCount   Int      @default(0)
+  commentCount Int     @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  creator  User      @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  likes    Like[]
+  comments Comment[]
+
+  @@index([creatorId])
+  @@index([createdAt])
+  @@index([latitude, longitude])
+  @@map("posts")
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([postId])
+  @@map("likes")
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, createdAt])
+  @@map("comments")
+}
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followingId])
+  @@map("follows")
+}
+
+model KycRecord {
+  id               String    @id @default(uuid())
+  userId           String
+  veriffSessionId  String    @unique
+  status           KycStatus @default(PENDING)
+  veriffDecision   Json?
+  veriffPerson     Json?
+  createdAt        DateTime  @default(now())
+  decidedAt        DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("kyc_records")
+}
