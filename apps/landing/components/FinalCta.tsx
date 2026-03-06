@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import WaitlistForm from './WaitlistForm';
 
 export default function FinalCta() {
@@ -32,36 +33,66 @@ export default function FinalCta() {
       ref={sectionRef}
       className="relative py-32 px-6 overflow-hidden"
     >
-      {/* Green glow background */}
+      {/* Animated green glow background */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[800px] h-[500px] bg-momento-primary/5 rounded-full blur-[150px]" />
+        <div className="w-[800px] h-[500px] bg-momento-primary/5 rounded-full blur-[150px] animate-pulse-glow" />
       </div>
 
+      {/* Decorative particle dots */}
+      <div className="particle-dot top-20 left-[15%]" style={{ animationDelay: '0s' }} />
+      <div className="particle-dot top-32 right-[20%]" style={{ animationDelay: '1.5s' }} />
+      <div className="particle-dot bottom-24 left-[30%]" style={{ animationDelay: '0.8s' }} />
+      <div className="particle-dot bottom-16 right-[25%]" style={{ animationDelay: '2.2s' }} />
+
       <div className="relative z-10 max-w-2xl mx-auto text-center">
+        {/* Logo mark */}
+        <div
+          className={`flex justify-center mb-6 transition-all duration-[800ms] ease-out
+                      ${visible ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+        >
+          <Image
+            src="/logo-white.svg"
+            alt="Momento"
+            width={36}
+            height={36}
+            className="animate-float"
+          />
+        </div>
+
         <h2
           className={`text-4xl sm:text-5xl font-extrabold tracking-tight mb-4
-                      transition-all duration-[800ms] ease-out
+                      transition-all duration-[800ms] ease-out delay-100
                       ${visible ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.9]'}`}
         >
           Be First.{' '}
-          <span className="text-momento-primary">Own the Culture.</span>
+          <span className="text-shimmer">Own the Culture.</span>
         </h2>
 
-        <p className="text-momento-text-secondary text-lg mb-10">
+        <p
+          className={`text-momento-text-secondary text-lg mb-10
+                      transition-all duration-[600ms] ease-out delay-200
+                      ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+        >
           Join the waitlist for early access to Momento.
         </p>
 
-        <div className="flex justify-center mb-10">
+        <div
+          className={`flex justify-center mb-10 transition-all duration-[600ms] ease-out delay-300
+                      ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+        >
           <WaitlistForm />
         </div>
 
         {/* Social links */}
-        <div className="flex items-center justify-center gap-6">
+        <div
+          className={`flex items-center justify-center gap-6 transition-all duration-[600ms] ease-out delay-[400ms]
+                      ${visible ? 'opacity-100' : 'opacity-0'}`}
+        >
           <a
-            href="https://twitter.com"
+            href="https://x.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-momento-text-tertiary hover:text-momento-primary transition-colors duration-200"
+            className="text-momento-text-tertiary hover:text-momento-primary transition-all duration-200 hover:scale-110"
             aria-label="Follow on X"
           >
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -69,10 +100,10 @@ export default function FinalCta() {
             </svg>
           </a>
           <a
-            href="https://instagram.com"
+            href="https://www.instagram.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-momento-text-tertiary hover:text-momento-primary transition-colors duration-200"
+            className="text-momento-text-tertiary hover:text-momento-primary transition-all duration-200 hover:scale-110"
             aria-label="Follow on Instagram"
           >
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">

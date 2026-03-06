@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -26,13 +27,23 @@ export default function Navbar() {
       }`}
     >
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-        <span className="text-white font-extrabold text-xl tracking-tight">
-          MOMENTO
-        </span>
+        <div className="flex items-center gap-3">
+          <Image
+            src="/logo-white.svg"
+            alt="Momento"
+            width={28}
+            height={28}
+            className="transition-transform duration-300 hover:scale-110"
+          />
+          <span className="text-white font-extrabold text-lg tracking-[6px] uppercase">
+            MOMENTO
+          </span>
+        </div>
         <button
           onClick={scrollToTop}
           className="px-5 py-2 rounded-full border border-momento-primary text-momento-primary text-sm font-semibold
-                     hover:bg-momento-primary hover:text-momento-bg transition-all duration-200"
+                     hover:bg-momento-primary hover:text-momento-bg hover:shadow-[0_0_20px_rgba(0,255,136,0.3)]
+                     transition-all duration-200"
         >
           Join Waitlist
         </button>

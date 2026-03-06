@@ -4,16 +4,22 @@ import { useEffect, useRef, useState } from 'react';
 
 const team = [
   {
-    name: 'Julian Vasil',
+    name: 'J V',
     title: 'Web3 Founder',
+    initial: 'J',
+    accentColor: 'bg-momento-primary/20',
   },
   {
-    name: 'Andrew Sacchetti',
-    title: 'AI Scientist',
+    name: 'S P',
+    title: 'AI Engineer/Architect',
+    initial: 'S',
+    accentColor: 'bg-blue-500/20',
   },
   {
-    name: 'Carly Trinier',
+    name: 'J T',
     title: 'Creator Economy Expert',
+    initial: 'J',
+    accentColor: 'bg-purple-500/20',
   },
 ];
 
@@ -55,18 +61,23 @@ export default function Team() {
           {team.map((member, i) => (
             <div
               key={member.name}
-              className={`p-6 rounded-2xl bg-momento-bg-secondary border border-momento-border
-                         transition-all duration-700 ease-out
+              className={`group p-6 rounded-2xl bg-momento-bg-secondary border border-momento-border
+                         hover:border-momento-primary/30 hover:shadow-[0_0_30px_rgba(0,255,136,0.08)]
+                         transition-all duration-700 ease-out cursor-default
                          ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
               style={{ transitionDelay: `${i * 120}ms` }}
             >
-              {/* Avatar placeholder */}
-              <div className="w-14 h-14 rounded-full bg-momento-bg-tertiary border border-momento-border mx-auto mb-4 flex items-center justify-center">
+              {/* Avatar with accent ring */}
+              <div className={`w-14 h-14 rounded-full ${member.accentColor} border border-momento-border
+                              mx-auto mb-4 flex items-center justify-center
+                              group-hover:border-momento-primary/40 transition-colors duration-300`}>
                 <span className="text-momento-primary font-bold text-lg">
-                  {member.name.charAt(0)}
+                  {member.initial}
                 </span>
               </div>
-              <h3 className="text-white font-semibold">{member.name}</h3>
+              <h3 className="text-white font-semibold group-hover:text-momento-primary transition-colors duration-300">
+                {member.name}
+              </h3>
               <p className="text-momento-text-secondary text-sm mt-1">
                 {member.title}
               </p>

@@ -4,21 +4,21 @@ import { useEffect, useRef, useState } from 'react';
 
 const valueProps = [
   {
-    title: 'Fans Want Ownership',
+    title: 'Bringing Control to the People',
     description:
-      'A generation raised on social media wants more than likes and follows. They want a stake in the culture they help build.',
+      'The current system is too centralized, too out of your control. Momento decentralizes income in the arts, allowing everyone to play in the space. The people dictate value, not algorithms.',
     direction: 'left' as const,
   },
   {
     title: 'Creators Deserve More',
     description:
-      'Creators are tired of building audiences that make platforms rich. Momento gives them a direct line to fan investment.',
+      'Creators build audiences that make platforms rich while seeing little in return. Momento gives them a direct line to fan investment and a new path to financial independence.',
     direction: 'right' as const,
   },
   {
-    title: 'The Infrastructure Is Ready',
+    title: 'Internet Capital Markets',
     description:
-      'The technology to power real consumer-grade financial products has matured. Momento is the product built on top of it.',
+      'The infrastructure for real consumer-grade financial products has matured. Momento is the product built on top of it \u2014 with stringent KYC and compliance from day one.',
     direction: 'left' as const,
   },
 ];
@@ -60,7 +60,8 @@ function ValueCard({
   return (
     <div
       ref={cardRef}
-      className={`flex items-start gap-6 p-8 rounded-2xl bg-momento-bg-secondary border border-momento-border
+      className={`group flex items-start gap-6 p-8 rounded-2xl bg-momento-bg-secondary border border-momento-border
+                  hover:border-momento-primary/20 hover:shadow-[0_0_40px_rgba(0,255,136,0.06)]
                   max-w-2xl transition-all duration-[800ms] ease-out
                   ${index % 2 === 1 ? 'ml-auto' : ''}
                   ${visible
@@ -68,11 +69,14 @@ function ValueCard({
                     : `opacity-0 ${direction === 'left' ? '-translate-x-12' : 'translate-x-12'}`
                   }`}
     >
-      <div className="shrink-0 w-10 h-10 rounded-lg bg-momento-primary/10 flex items-center justify-center mt-1">
+      <div className="shrink-0 w-10 h-10 rounded-lg bg-momento-primary/10 group-hover:bg-momento-primary/20
+                      flex items-center justify-center mt-1 transition-colors duration-300">
         <div className="w-2.5 h-2.5 rounded-full bg-momento-primary" />
       </div>
       <div>
-        <h3 className="text-white font-bold text-xl mb-2">{title}</h3>
+        <h3 className="text-white font-bold text-xl mb-2 group-hover:text-momento-primary transition-colors duration-300">
+          {title}
+        </h3>
         <p className="text-momento-text-secondary leading-relaxed">
           {description}
         </p>

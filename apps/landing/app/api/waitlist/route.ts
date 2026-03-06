@@ -3,6 +3,7 @@ import fs from 'fs/promises';
 import path from 'path';
 
 const DATA_FILE = path.join(process.cwd(), 'data', 'waitlist.json');
+const NOTIFY_EMAIL = 'sangeet@moment.network';
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,6 +43,10 @@ export async function POST(request: NextRequest) {
     // Ensure data directory exists and write
     await fs.mkdir(path.dirname(DATA_FILE), { recursive: true });
     await fs.writeFile(DATA_FILE, JSON.stringify(entries, null, 2));
+
+    // TODO: Send notification email to NOTIFY_EMAIL via SendGrid/Resend
+    // when email service is configured. For now, entries are stored in JSON.
+    console.log(`New waitlist signup: ${email.toLowerCase()} → notify ${NOTIFY_EMAIL}`);
 
     return NextResponse.json({
       success: true,
