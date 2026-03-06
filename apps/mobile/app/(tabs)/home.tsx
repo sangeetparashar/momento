@@ -3,7 +3,8 @@ import { View, StyleSheet, RefreshControl } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { TickerBanner, PostCard } from '@/components/features';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import { TickerBanner, PostCard, FeedSkeleton } from '@/components/features';
 import { Text } from '@/components/primitives';
 import { useFeed } from '@/hooks';
 import { COLORS, SPACING } from '@/styles/theme';
@@ -58,9 +59,9 @@ export default function HomeScreen() {
   const ListHeader = useCallback(
     () => (
       <View style={styles.headerContainer}>
-        <View style={styles.logoRow}>
+        <Animated.View entering={FadeIn.duration(600)} style={styles.logoRow}>
           <Text style={styles.logo}>M O M E N T O</Text>
-        </View>
+        </Animated.View>
         <TickerBanner
           title="TRENDING"
           items={TRENDING_ITEMS}
@@ -79,14 +80,16 @@ export default function HomeScreen() {
 
   const ListEmpty = useCallback(
     () =>
-      !feedQuery.isLoading ? (
+      feedQuery.isLoading ? (
+        <FeedSkeleton />
+      ) : (
         <View style={styles.emptyState}>
           <Text style={styles.emptyText}>No posts yet</Text>
           <Text style={styles.emptySubtext}>
             Follow creators to see their posts here
           </Text>
         </View>
-      ) : null,
+      ),
     [feedQuery.isLoading]
   );
 

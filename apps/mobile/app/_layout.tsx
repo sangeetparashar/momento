@@ -8,6 +8,8 @@ import { PrivyProvider } from '@privy-io/expo';
 import { QueryProvider } from '@/providers/QueryProvider';
 import { LocationProvider } from '@/providers/LocationProvider';
 import { NotificationProvider } from '@/providers/NotificationProvider';
+import { AuthBridge } from '@/providers/AuthBridge';
+import { ErrorBoundary } from '@/components/primitives';
 import { COLORS } from '@/styles/theme';
 import { ENV } from '@/config/env';
 
@@ -17,9 +19,11 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <QueryProvider>
           <PrivyProvider appId={ENV.PRIVY_APP_ID}>
+            <AuthBridge>
             <LocationProvider>
               <NotificationProvider>
                 <StatusBar style="light" />
+                <ErrorBoundary>
                 <Stack
                   screenOptions={{
                     headerShown: false,
@@ -57,8 +61,10 @@ export default function RootLayout() {
                     }}
                   />
                 </Stack>
+                </ErrorBoundary>
               </NotificationProvider>
             </LocationProvider>
+            </AuthBridge>
           </PrivyProvider>
         </QueryProvider>
       </SafeAreaProvider>
