@@ -39,9 +39,9 @@ export function useFeed(options: UseFeedOptions = {}) {
       if (radiusKm !== undefined) {
         // Fixed radius — just fetch
         response = await apiService.get<FeedResponse>('/feed', {
-          latitude: location?.latitude,
-          longitude: location?.longitude,
-          radiusKm: currentRadius,
+          lat: location?.latitude,
+          lng: location?.longitude,
+          radius: currentRadius,
           cursor,
         });
       } else {
@@ -49,9 +49,9 @@ export function useFeed(options: UseFeedOptions = {}) {
         for (const tier of RADIUS_TIERS_KM) {
           currentRadius = tier;
           response = await apiService.get<FeedResponse>('/feed', {
-            latitude: location?.latitude,
-            longitude: location?.longitude,
-            radiusKm: tier,
+            lat: location?.latitude,
+            lng: location?.longitude,
+            radius: tier,
             cursor,
           });
 
