@@ -3,7 +3,8 @@ import { View, StyleSheet, Pressable, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Text, Avatar } from '@/components/primitives';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import { Text, Avatar, AnimatedPressable } from '@/components/primitives';
 import { LikeButton } from './LikeButton';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -29,7 +30,10 @@ export function PostCard({ post }: PostCardProps) {
   }, [post.creatorId, router]);
 
   return (
-    <View style={styles.container}>
+    <Animated.View
+      entering={FadeInDown.duration(400).springify().damping(18)}
+      style={styles.container}
+    >
       {/* Creator Info Header */}
       <Pressable onPress={handleCreatorPress} style={styles.header}>
         <Avatar
@@ -50,7 +54,7 @@ export function PostCard({ post }: PostCardProps) {
 
       {/* Post Media */}
       {post.mediaUrl && (
-        <Pressable onPress={handleImagePress}>
+        <AnimatedPressable onPress={handleImagePress} scaleValue={0.98}>
           <Image
             source={{ uri: post.mediaUrl }}
             style={styles.image}
@@ -58,7 +62,7 @@ export function PostCard({ post }: PostCardProps) {
             transition={200}
             placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
           />
-        </Pressable>
+        </AnimatedPressable>
       )}
 
       {/* Actions Row */}
@@ -98,7 +102,7 @@ export function PostCard({ post }: PostCardProps) {
           <Text style={styles.captionText}>{post.caption}</Text>
         </View>
       )}
-    </View>
+    </Animated.View>
   );
 }
 
