@@ -14,6 +14,8 @@ import {
   TokenList,
   SwapModal,
   ComingSoonModal,
+  SettingsSheet,
+  ProfileSkeleton,
 } from '@/components/features';
 import { useUserProfile, useWalletBalance } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
@@ -30,6 +32,7 @@ export default function ProfileScreen() {
   const balance = walletQuery.data;
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [showComingSoon, setShowComingSoon] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [activeTab, setActiveTab] = useState<ProfileTab>('EDIT PROFILE');
 
   const isCreator = user?.role === UserRole.CREATOR;
@@ -51,7 +54,12 @@ export default function ProfileScreen() {
   }, []);
 
   const handleSettingsPress = useCallback(() => {
-    // Settings would go here
+    setShowSettings(true);
+  }, []);
+
+  const handleSettingsNavigate = useCallback((_route: string) => {
+    setShowSettings(false);
+    setShowComingSoon(true);
   }, []);
 
   return (
@@ -74,89 +82,95 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
 
-        {/* Creator Tabs */}
-        {isCreator && (
-          <View style={styles.tabsContainer}>
-            {(['EDIT PROFILE', 'NEW POST', 'ACCOUNT'] as ProfileTab[]).map(
-              (tab) => (
-                <Pressable
-                  key={tab}
-                  onPress={() => handleTabPress(tab)}
+        {isLoading && !user ? (
+          <ProfileSkeleton />
+        ) : (
+          <>
+            {/* Creator Tabs */}
+            {isCreator && (
+              <View style={styles.tabsContainer}>
+                {(['EDIT PROFILE', 'NEW POST', 'ACCOUNT'] as ProfileTab[]).map(
+                  (tab) => (
+                    <Pressable
+                      key={tab}
+                      onPress={() => handleTabPress(tab)}
+                      style={[
+                        styles.tabButton,
+                        activeTab === tab && styles.tabButtonActive,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.tabText,
+                          activeTab === tab && styles.tabTextActive,
+                        ]}
+                      >
+                        {tab}
+                      </Text>
+                    </Pressable>
+                  )
+                )}
+              </View>
+            )}
+
+            {/* Wallet Button */}
+            <Pressable
+              onPress={() => setShowSwapModal(true)}
+              style={styles.walletButton}
+            >
+              <Ionicons name="wallet-outline" size={20} color={COLORS.primary} />
+              <Text style={styles.walletText}>WALLET</Text>
+              <Ionicons
+                name="chevron-forward"
+                size={16}
+                color={COLORS.textTertiary}
+              />
+            </Pressable>
+
+            {/* Stats Cards */}
+            <View style={styles.statsRow}>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>24H CHANGE</Text>
+                <Text
                   style={[
-                    styles.tabButton,
-                    activeTab === tab && styles.tabButtonActive,
+                    styles.statValue,
+                    {
+                      color:
+                        (balance?.change24h ?? 0) >= 0
+                          ? COLORS.success
+                          : COLORS.error,
+                    },
                   ]}
                 >
-                  <Text
-                    style={[
-                      styles.tabText,
-                      activeTab === tab && styles.tabTextActive,
-                    ]}
-                  >
-                    {tab}
-                  </Text>
-                </Pressable>
-              )
-            )}
-          </View>
+                  {formatPercentage(balance?.change24h ?? 0)}
+                </Text>
+              </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>EARNINGS</Text>
+                <Text style={styles.statValue}>
+                  {formatCurrency(balance?.earningsToDate ?? 0)}
+                </Text>
+              </View>
+            </View>
+
+            {/* Chart */}
+            <PortfolioChart />
+
+            {/* Token List */}
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Portfolio</Text>
+              <Text style={styles.totalValue}>
+                {formatCurrency(balance?.totalValueUsd ?? 0)}
+              </Text>
+            </View>
+            <TokenList
+              tokens={balance?.tokens ?? []}
+              onBuyPress={handleBuyPress}
+            />
+
+            <View style={styles.bottomSpacer} />
+          </>
         )}
-
-        {/* Wallet Button */}
-        <Pressable
-          onPress={() => setShowSwapModal(true)}
-          style={styles.walletButton}
-        >
-          <Ionicons name="wallet-outline" size={20} color={COLORS.primary} />
-          <Text style={styles.walletText}>WALLET</Text>
-          <Ionicons
-            name="chevron-forward"
-            size={16}
-            color={COLORS.textTertiary}
-          />
-        </Pressable>
-
-        {/* Stats Cards */}
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>24H CHANGE</Text>
-            <Text
-              style={[
-                styles.statValue,
-                {
-                  color:
-                    (balance?.change24h ?? 0) >= 0
-                      ? COLORS.success
-                      : COLORS.error,
-                },
-              ]}
-            >
-              {formatPercentage(balance?.change24h ?? 0)}
-            </Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>EARNINGS</Text>
-            <Text style={styles.statValue}>
-              {formatCurrency(balance?.earningsToDate ?? 0)}
-            </Text>
-          </View>
-        </View>
-
-        {/* Chart */}
-        <PortfolioChart />
-
-        {/* Token List */}
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Portfolio</Text>
-          <Text style={styles.totalValue}>
-            {formatCurrency(balance?.totalValueUsd ?? 0)}
-          </Text>
-        </View>
-        <TokenList
-          tokens={balance?.tokens ?? []}
-          onBuyPress={handleBuyPress}
-        />
-
-        <View style={styles.bottomSpacer} />
       </ScrollView>
 
       {/* Modals */}
@@ -167,6 +181,11 @@ export default function ProfileScreen() {
       <ComingSoonModal
         visible={showComingSoon}
         onClose={() => setShowComingSoon(false)}
+      />
+      <SettingsSheet
+        visible={showSettings}
+        onClose={() => setShowSettings(false)}
+        onNavigate={handleSettingsNavigate}
       />
     </SafeAreaView>
   );
