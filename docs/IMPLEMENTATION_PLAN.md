@@ -32,7 +32,7 @@ Before planning, every gap from GAPS.md was verified against the actual source c
 
 The plan is organized into 4 sequential phases, ordered by dependency. Each phase is a self-contained unit of work with no external service or human intervention required.
 
-### Phase 1: API Contract Fixes (Foundation)
+### Phase 1: API Contract Fixes (Foundation) — COMPLETED 2026-03-10
 Fix the data layer so the mobile app can actually communicate with the API. Everything else depends on this.
 
 ### Phase 2: Missing Features (Core UX)
@@ -46,9 +46,11 @@ Pull-to-refresh, keyboard handling, delete account stub, type safety audit.
 
 ---
 
-## Phase 1: API Contract Fixes
+## Phase 1: API Contract Fixes — COMPLETED
 
 **Why first:** Every hook receives the wrong data shape. Nothing works until C1 is fixed, and C2-C6 are quick wins in the same pass.
+
+> **Status:** All 6 tasks completed, reviewed, committed (SHA: 9e41649), and pushed. All changes verified against API contracts.
 
 ### Task 1.1 — Unwrap API Response Envelope (C1)
 
