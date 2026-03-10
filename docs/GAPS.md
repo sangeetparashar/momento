@@ -1,25 +1,25 @@
 # Momento — Comprehensive Gap Audit & Next-Agent Playbook
 
 > Generated 2026-03-06 after Phase 4 completion (7 commits on main).
+> **Updated 2026-03-10**: All critical (C1-C7) and most major gaps resolved. See status markers below.
 > This document is the single source of truth for what's broken, what's missing, and exactly how to fix it.
 
 ---
 
 ## Table of Contents
 
-1. [Critical Gaps (7) — Blocks Core Functionality](#critical)
+1. [Critical Gaps (7) — ~~Blocks Core Functionality~~ ALL RESOLVED](#critical)
 2. [Major Gaps (10) — Significant Feature Holes](#major)
 3. [Minor Gaps (16) — Polish & Quality](#minor)
 4. [Nice-to-Have (10) — Future Improvements](#nice-to-have)
-5. [Recommended Fix Order](#fix-order)
-6. [Agent Assignment Strategy](#agent-strategy)
+5. [Remaining Work — What an Agent Can Tackle Next](#remaining-work)
 
 ---
 
 <a id="critical"></a>
-## 🔴 CRITICAL GAPS — Blocks Core Functionality
+## 🔴 CRITICAL GAPS — ~~Blocks Core Functionality~~ ALL RESOLVED (2026-03-10)
 
-These 7 issues mean the mobile app cannot communicate correctly with the API. **Fix these before anything else.**
+All 7 critical issues have been fixed. See commits `9e41649` (Phase 1), `98a62c2` (Phase 2), `da6993b` (Phase 3), `4a56b86` (Phase 4).
 
 ---
 
@@ -278,9 +278,11 @@ Also the "Post not found" state should show a loading skeleton first, not immedi
 <a id="major"></a>
 ## 🟠 MAJOR GAPS — Significant Feature Holes
 
+> **Status Update (2026-03-10):** M1, M3, M5, M6, M7, M10 resolved. M2 partially resolved (Delete Account done). M4, M8, M9 still open.
+
 ---
 
-### M1. Explore Screen Uses Feed Data for CREATORS Tab
+### ~~M1. Explore Screen Uses Feed Data for CREATORS Tab~~ ✅ RESOLVED
 
 **What:** The CREATORS tab on explore.tsx derives unique creators by deduplicating feed posts (lines 58-78). It should call `GET /creators/nearby` which already exists.
 
@@ -317,7 +319,7 @@ Wire into explore.tsx's CREATORS tab.
 
 ---
 
-### M2. Settings Sub-Screens All Show ComingSoonModal
+### M2. Settings Sub-Screens All Show ComingSoonModal — ⚠️ PARTIAL (Delete Account done)
 
 **What:** The SettingsSheet has 5 menu items (Favorites, Account Privacy, Device Permissions, Vault, Delete Account) but all just trigger ComingSoonModal.
 
@@ -332,7 +334,7 @@ Wire into explore.tsx's CREATORS tab.
 
 ---
 
-### M3. No Comment Creation
+### ~~M3. No Comment Creation~~ ✅ RESOLVED
 
 **What:** `post/[id].tsx` has a TextInput and send button but `handleSendComment` (line 96) just clears the input. No API call.
 
@@ -353,13 +355,13 @@ const handleSendComment = useCallback(() => {
 
 ---
 
-### M4. No Comment Deletion
+### M4. No Comment Deletion — 🔴 OPEN
 
 **What:** API has `DELETE /comments/[id]/route.ts` but no mobile hook or UI swipe-to-delete.
 
 ---
 
-### M5. User Location Never Synced to Server
+### ~~M5. User Location Never Synced to Server~~ ✅ RESOLVED
 
 **What:** `LocationProvider` captures GPS locally but never calls `PATCH /users/me/location` to sync location to the database. The API route exists and updates the PostGIS geography column.
 
@@ -369,7 +371,7 @@ const handleSendComment = useCallback(() => {
 
 ---
 
-### M6. Creator Application Flow Incomplete
+### ~~M6. Creator Application Flow Incomplete~~ ✅ RESOLVED (uses Linking.openURL)
 
 **What:** Beyond C4 (wrong endpoint), the Veriff redirect URL returned by the API isn't handled. The mobile hook gets back a `verificationUrl` but nothing opens it in a WebView or browser.
 
@@ -379,7 +381,7 @@ const handleSendComment = useCallback(() => {
 
 ---
 
-### M7. No Deep Linking / URL Scheme
+### ~~M7. No Deep Linking / URL Scheme~~ ✅ RESOLVED (scheme already configured)
 
 **What:** `expo-linking` is installed but no URL scheme is configured in `app.json`. Notifications that push routes like `/post/123` won't work from cold launch.
 
@@ -397,7 +399,7 @@ const handleSendComment = useCallback(() => {
 
 ---
 
-### M8. No Offline Support
+### M8. No Offline Support — 🔴 OPEN
 
 **What:** React Query has no persistence layer. If the app loses network, all screens show loading forever.
 
@@ -405,7 +407,7 @@ const handleSendComment = useCallback(() => {
 
 ---
 
-### M9. No Image Compression Before Upload
+### M9. No Image Compression Before Upload — 🔴 OPEN
 
 **What:** `useUpload.ts` sends images at full resolution (only `quality: 0.8` via ImagePicker). Large photos can be 5-10MB.
 
@@ -422,7 +424,7 @@ const compressed = await manipulateAsync(uri, [{ resize: { width: 1200 } }], {
 
 ---
 
-### M10. Shared Types May Not Match API Responses
+### ~~M10. Shared Types May Not Match API Responses~~ ✅ RESOLVED
 
 **What:** `PostWithCreator`, `FeedResponse`, `PublicCreator`, etc. in `packages/shared/src/types.ts` are hand-written. They may drift from what the API actually returns (e.g., the Prisma query in feed/route.ts adds `distanceMeters`, the raw SQL column names may differ).
 
@@ -474,71 +476,40 @@ const compressed = await manipulateAsync(uri, [{ resize: { width: 1200 } }], {
 
 ---
 
-<a id="fix-order"></a>
-## Recommended Fix Order
+<a id="remaining-work"></a>
+## Remaining Work — What an Agent Can Tackle Next
 
-### Phase 5A: API Contract Fixes (1 agent, ~30 min)
-Fix C1 → C2 → C3 → C4 → C5 → C6 in a single pass. All are mobile-side changes in `api.ts` and hooks.
+> All critical gaps (C1-C7) and most major gaps are resolved as of 2026-03-10.
+> See `docs/NEXT_STEPS.md` for the detailed, phased execution plan.
 
-**Files this agent touches:**
-- `apps/mobile/src/services/api.ts` — Unwrap envelope (C1) + fix upload field names (C2)
-- `apps/mobile/src/providers/NotificationProvider.tsx` — Fix push token path/payload (C3)
-- `apps/mobile/src/hooks/useKyc.ts` — Fix KYC endpoint path (C4)
-- `apps/mobile/src/hooks/useCreatorProfile.ts` — Change DELETE to POST for follow (C5)
-- `apps/mobile/src/hooks/useLike.ts` — Change DELETE to POST for like (C6)
+### Still Open (Agent-Executable)
 
-### Phase 5B: Post Detail & Comments (1 agent, ~20 min)
-Fix C7 + M3 + M4 + m16.
+| # | Gap | Priority | Effort |
+|---|-----|----------|--------|
+| M2 | Settings sub-screens (Account Privacy, Device Permissions, Favorites) | Medium | Medium |
+| M4 | Comment deletion (swipe-to-delete UI + hook) | Medium | Small |
+| M8 | Offline support (React Query persistence) | Medium | Medium |
+| M9 | Image compression before upload | Medium | Small |
+| m7 | Landing page `.env.local.example` | Low | Trivial |
+| m9 | API rate limiting middleware | High | Medium |
+| m10 | Landing page `aria-label` accessibility | Low | Small |
+| n1 | Test suite (zero tests exist) | High | Large |
+| n2 | CI/CD pipeline (GitHub Actions) | High | Medium |
+| n7 | ESLint + Prettier configuration | Medium | Small |
 
-**Files this agent touches:**
-- `apps/mobile/app/post/[id].tsx` — Add direct fetch fallback + wire comment creation
-- `apps/mobile/src/hooks/useCreateComment.ts` — New hook
-- `apps/mobile/src/hooks/useComments.ts` — New hook to fetch real comments
-- `apps/mobile/src/hooks/index.ts` — Update barrel exports
+### Still Open (Requires Human Intervention)
 
-### Phase 5C: Explore & Location (1 agent, ~20 min)
-Fix M1 + M5.
+| # | Gap | Why Human Needed |
+|---|-----|-----------------|
+| m1 | Placeholder PNGs | Requires branded design assets |
+| m2 | App icon + splash screen | Requires branded design assets |
+| m4 | Custom SVG tab icons | Requires Figma exports |
+| m13 | PortfolioChart real data | Requires price oracle API (Phase 2 roadmap) |
+| m14 | SwapModal execution | Requires Jupiter aggregator integration (Phase 2) |
+| m15 | Market screen real data | Requires market data API (Phase 2) |
+| n3 | Sentry error reporting | Requires Sentry account + DSN |
+| n4 | Analytics (Mixpanel/Amplitude) | Requires analytics account |
 
-**Files this agent touches:**
-- `apps/mobile/src/hooks/useNearbyCreators.ts` — New hook
-- `apps/mobile/app/(tabs)/explore.tsx` — Wire CREATORS tab to nearby API
-- `apps/mobile/src/providers/LocationProvider.tsx` — Sync location to server
+### Completed (Phases 1-4)
 
-### Phase 5D: Creator Flow & Deep Links (1 agent, ~15 min)
-Fix M6 + M7.
-
-**Files this agent touches:**
-- `apps/mobile/src/hooks/useKyc.ts` — Open Veriff URL in browser after apply
-- `apps/mobile/app.json` — Add URL scheme + linking config
-
----
-
-<a id="agent-strategy"></a>
-## Agent Assignment Strategy
-
-### Agent Isolation Zones (no file conflicts)
-
-| Agent | Zone | Files |
-|-------|------|-------|
-| **5A: API Contract** | `src/services/`, `src/hooks/use{Kyc,CreatorProfile,Like}.ts`, `src/providers/NotificationProvider.tsx` | 5 files |
-| **5B: Post & Comments** | `app/post/[id].tsx`, `src/hooks/use{Comments,CreateComment}.ts` | 3 files (+2 new) |
-| **5C: Explore & Location** | `app/(tabs)/explore.tsx`, `src/hooks/useNearbyCreators.ts`, `src/providers/LocationProvider.tsx` | 2 files (+1 new) |
-| **5D: Creator & Links** | `app.json`, `src/hooks/useKyc.ts` (caution: shared with 5A) | 2 files |
-
-**⚠️ Conflict Risk:** 5A and 5D both touch `useKyc.ts`. Run 5A first, then 5D, OR have 5A handle the endpoint fix and 5D handle the Veriff redirect logic in a separate function.
-
-### Pre-Agent Checklist
-
-Before launching any fix agent, verify:
-1. ✅ AuthBridge is wired (done in Phase 4)
-2. ✅ Feed params are correct (done in Phase 4)
-3. ✅ ErrorBoundary is in place (done in Phase 4)
-4. ⬜ C1 (envelope unwrap) is fixed — **this must be first** because every other fix depends on the API returning the right shape
-
-### Post-Fix Verification
-
-After each agent completes, verify:
-1. TypeScript compiles: `pnpm tsc --noEmit` in `apps/mobile`
-2. No import errors: all barrel exports (`index.ts`) are updated
-3. No circular dependencies: AuthBridge → api.ts → no hooks
-4. Hooks return expected shapes: check each `useQuery` returns the right type after envelope unwrap
+All critical gaps C1-C7, plus M1, M3, M5, M6, M7, M10, m3, m5, m11, m12, m16, and Delete Account (from M2).

@@ -3,13 +3,13 @@
 ## Purpose
 This document gives any future AI agent full context to pick up work on this codebase without losing any knowledge from the initial build session.
 
-## Current State (as of 2026-03-07, Phase 4 complete + landing page polished)
+## Current State (as of 2026-03-10, all implementation phases complete)
 
 ### What Exists
 - Complete monorepo scaffold: turbo + pnpm workspaces
 - Full API backend: 17 endpoints, 7 lib modules, Prisma schema, seed script
-- Full mobile app: 12 screens, 17 components, 8 hooks, 4 providers
-- Shared type package: all interfaces and enums
+- Full mobile app: 12 screens, 17 components, 11 hooks, 4 providers
+- Shared type package: all interfaces and enums (audited against API responses)
 - Landing page: 13 components, waitlist API, Tailwind, deployed on Vercel
   - Momento logo (geometric M mark SVG) + favicon
   - Wide letter-spacing MOMENTO wordmark (matches Figma)
@@ -19,27 +19,28 @@ This document gives any future AI agent full context to pick up work on this cod
   - Waitlist signups logged to Vercel function logs (uses /tmp on Vercel)
   - vercel.json with security headers
 - Error boundaries + loading skeletons
-- Settings sheet overlay (sub-screens are stubs)
+- Settings sheet overlay with working Delete Account flow
 - Animation system: AnimatedPressable, transitions.ts, enhanced PostCard/LikeButton
 - AuthBridge provider wiring Privy tokens into API service
-- Git: 11 commits on `main`, clean tree
+- All 7 critical API contract bugs fixed (C1-C7)
+- Real comments (fetch + create), nearby creators, location sync, post detail fallback
+- Pull-to-refresh on explore/market, KeyboardAvoidingView on forms
+- Creator application flow opens Veriff URL
+- Deep linking configured (scheme: momento)
+- Git: 15 commits on `main`, clean tree
 
-### What Does NOT Exist Yet / What's Broken
-- **7 critical mobile↔API contract bugs** — see [GAPS.md](./GAPS.md) section "Critical"
+### What Does NOT Exist Yet
 - No external services configured (all env vars are placeholders)
 - Prisma client not generated (need `pnpm approve-builds` then `npx prisma generate`)
 - Placeholder PNG assets (1x1 transparent PNGs)
-- No tests, no CI/CD
-- Explore screen uses feed data instead of `/creators/nearby` API
-- Comments are hardcoded dummies
-- Post detail has no direct API fetch (only reads feed cache)
+- No tests, no CI/CD, no ESLint/Prettier config
+- No API rate limiting
+- No offline support (React Query persistence)
+- No image compression before upload
+- Comment deletion UI (API exists, no mobile hook/UI)
+- Settings sub-screens still stubs (except Delete Account)
 - Waitlist storage is ephemeral on Vercel (/tmp) — needs proper DB for persistence
-
-### ⚠️ CRITICAL: Fix API Contract First
-Before ANY feature work, the 7 critical bugs in GAPS.md must be resolved.
-The most important is **C1: API response envelope not unwrapped**. Every
-API route returns `{ success, data }` but the mobile client doesn't unwrap
-the `data` field. This breaks EVERY hook. Fix `api.ts` line 118 first.
+- Market/swap/portfolio features use dummy data (Phase 2 roadmap)
 
 ## File Zones for Agent Work
 
@@ -220,25 +221,36 @@ import { getOrSetCache, invalidateCache } from '@/lib/redis';
 
 ## Known Issues to Fix
 
-> **START HERE:** Read [GAPS.md](./GAPS.md) for the full 43-item audit with exact code, line numbers, and fix strategies.
+> See [GAPS.md](./GAPS.md) for the full audit. See [NEXT_STEPS.md](./NEXT_STEPS.md) for the execution plan.
 
-### Still Broken (must fix before feature work)
-1. **7 critical API contract bugs** — C1-C7 in GAPS.md (envelope unwrap, upload fields, push token, KYC route, follow/like methods, post detail fetch)
-2. **Explore screen**: Should call `/creators/nearby` API for the CREATORS tab, currently derives creators from feed posts (M1)
-3. **Comments are hardcoded dummies**: No API fetch for comments, no comment creation (M3, M4, m16)
-4. **User location never synced to server** (M5)
-5. **Creator application flow incomplete** — Veriff redirect not handled (M6)
-6. **No deep linking / URL scheme** (M7)
+### Fixed (Phases 1-4, 2026-03-10)
+- ~~7 critical API contract bugs (C1-C7)~~ — All resolved
+- ~~Explore screen using feed data~~ → Now uses `/creators/nearby` (M1)
+- ~~Hardcoded dummy comments~~ → Real fetch + creation (M3, m16)
+- ~~User location not synced~~ → LocationProvider syncs to server (M5)
+- ~~Creator application flow~~ → Opens Veriff URL via Linking (M6)
+- ~~Deep linking~~ → scheme: momento configured (M7)
+- ~~Error boundaries + loading skeletons~~ → ErrorBoundary + Skeletons
+- ~~Settings sheet~~ → Working Delete Account flow
+- ~~Post detail no direct fetch~~ → useQuery fallback (C7)
+- ~~Shared types audit~~ → PostWithCreator + PublicCreator updated (M10)
+- ~~Pull-to-refresh~~ → explore + market screens (m3)
+- ~~KeyboardAvoidingView~~ → create-post + edit-profile (m5)
 
-### Fixed (Phase 4)
-- ~~Error boundaries~~ → ErrorBoundary component wrapping Stack navigator
-- ~~Loading states~~ → FeedSkeleton + ProfileSkeleton components
-- ~~Settings sheet~~ → SettingsSheet overlay on profile (sub-screens are stubs)
+### Still Open (Agent-Executable)
+1. **No tests** — Zero test files exist. Need Jest + RTL for hooks, Playwright or similar for API
+2. **No CI/CD** — Need GitHub Actions for lint/type-check/test
+3. **No ESLint/Prettier** — Referenced in scripts but not configured
+4. **No API rate limiting** — All routes unprotected (m9)
+5. **No comment deletion UI** — API route exists, no mobile hook/swipe-to-delete (M4)
+6. **No offline support** — React Query has no persistence layer (M8)
+7. **No image compression** — Large uploads, should add expo-image-manipulator (M9)
+8. **Settings sub-screens** — Account Privacy, Device Permissions, Favorites still stubs (M2)
 
-### Other Known Issues
-7. **Privy SDK**: `@privy-io/expo` API may have changed; verify `usePrivy()` returns `{ login, user, isReady, getAccessToken }`
-8. **Asset placeholders**: notification-icon.png and adaptive-icon.png are 1x1 transparent PNGs
-9. **Image compression**: No compression before upload; should add `expo-image-manipulator`
+### Requires Human Intervention
+- **Asset placeholders**: notification-icon.png and adaptive-icon.png are 1x1 transparent PNGs
+- **Privy SDK**: `@privy-io/expo` API may have changed; verify after service setup
+- **Market/swap/portfolio data**: Dummy data — needs Phase 2 price oracle integration
 
 ## Bugs Fixed (2026-03-06)
 
@@ -273,7 +285,7 @@ EXPO_PUBLIC_API_URL=       # API base URL (e.g., http://localhost:3000/api)
 EXPO_PUBLIC_PRIVY_APP_ID=  # Same Privy app ID
 ```
 
-## Phase 2 Roadmap (Not Yet Started)
+## Phase 2 Roadmap (Not Yet Started — Requires External Services)
 1. Price oracle integration (Jupiter/Birdeye API)
 2. Token swap execution (Jupiter aggregator)
 3. Creator token minting (Solana program)
@@ -281,6 +293,9 @@ EXPO_PUBLIC_PRIVY_APP_ID=  # Same Privy app ID
 5. Admin dashboard (or keep using Supabase Dashboard)
 6. Advanced analytics (post reach, engagement)
 7. Auth sync cron job (sync Privy users periodically)
-8. Image compression before upload
-9. Offline support via React Query persistence
-10. Loading skeletons and error boundaries
+
+## Next Agent Work (No Human Intervention Required)
+See `docs/NEXT_STEPS.md` for the full execution plan covering:
+- ESLint/Prettier setup, CI/CD pipeline, test suite
+- API rate limiting, comment deletion, image compression
+- Offline support, settings sub-screens, waitlist persistence
