@@ -35,7 +35,7 @@ The plan is organized into 4 sequential phases, ordered by dependency. Each phas
 ### Phase 1: API Contract Fixes (Foundation) — COMPLETED 2026-03-10
 Fix the data layer so the mobile app can actually communicate with the API. Everything else depends on this.
 
-### Phase 2: Missing Features (Core UX)
+### Phase 2: Missing Features (Core UX) — COMPLETED 2026-03-10
 Wire up features that have API endpoints but no mobile integration: comments, location sync, explore creators.
 
 ### Phase 3: Creator Flow & Navigation
@@ -196,9 +196,11 @@ The `liked` boolean is still used for optimistic updates, not for HTTP method se
 
 ---
 
-## Phase 2: Missing Features (Core UX)
+## Phase 2: Missing Features (Core UX) — COMPLETED
 
 **Why second:** With the data layer fixed, we can now wire up features that have backend API support but no mobile integration.
+
+> **Status:** All 5 tasks completed, reviewed, committed (SHA: 98a62c2), and pushed. 3 new hooks created, 5 existing files updated, CommentsResponse type added.
 
 ### Task 2.1 — Post Detail: Direct API Fetch Fallback (C7)
 
