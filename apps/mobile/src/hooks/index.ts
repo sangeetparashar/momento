@@ -6,3 +6,6 @@ export { useUserProfile } from './useUserProfile';
 export { useCreatePost } from './useCreatePost';
 export { useKyc } from './useKyc';
 export { useUpload } from './useUpload';
+export { useComments } from './useComments';
+export { useCreateComment } from './useCreateComment';
+export { useNearbyCreators } from './useNearbyCreators';

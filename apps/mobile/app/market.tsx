@@ -3,6 +3,7 @@ import {
   View,
   StyleSheet,
   ScrollView,
+  RefreshControl,
   Pressable,
   TextInput,
 } from 'react-native';
@@ -56,6 +57,14 @@ export default function MarketScreen() {
   const [activeTab, setActiveTab] = useState<MarketTab>('TRENDING');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [showComingSoon, setShowComingSoon] = useState(false);
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    // Market uses dummy data; simulate refresh delay
+    setTimeout(() => setRefreshing(false), 500);
+  }, []);
 
   const handleBack = useCallback(() => {
     router.back();
@@ -113,7 +122,17 @@ export default function MarketScreen() {
         <View style={styles.navSpacer} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
+          />
+        }
+      >
         {/* Search Bar */}
         <View style={styles.searchContainer}>
           <Ionicons

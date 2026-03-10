@@ -63,7 +63,11 @@ export interface PublicCreator {
   tokenSymbol?: string;
   socialLinks?: SocialLinks;
   followerCount: number;
+  followingCount?: number;
   postCount: number;
+  role?: UserRole;
+  createdAt?: string;
+  isFollowing?: boolean;
   distanceMeters?: number;
 }
 
@@ -87,6 +91,7 @@ export interface Post {
 export interface PostWithCreator extends Post {
   creator: PublicCreator;
   isLiked?: boolean;
+  distanceMeters?: number;
 }
 
 // Comment types
@@ -134,6 +139,12 @@ export interface FeedResponse {
 
 export interface NearbyCreatorsResponse {
   creators: PublicCreator[];
+}
+
+export interface CommentsResponse {
+  comments: Comment[];
+  nextCursor?: string;
+  hasMore: boolean;
 }
 
 export interface FollowResponse {

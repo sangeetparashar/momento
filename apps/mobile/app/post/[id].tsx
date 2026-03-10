@@ -8,8 +8,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,53 +20,11 @@ import { LikeButton } from '@/components/features';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo } from '@/utils/formatters';
-import { useFeed } from '@/hooks';
-import type { Comment } from '@momento/shared';
+import { useFeed, useComments, useCreateComment } from '@/hooks';
+import { apiService } from '@/services/api';
+import type { PostWithCreator } from '@momento/shared';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// Dummy comments for display
-const DUMMY_COMMENTS: Comment[] = [
-  {
-    id: '1',
-    postId: '',
-    userId: 'u1',
-    content: 'This is amazing! Love the vibe',
-    createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-    user: {
-      id: 'u1',
-      displayName: 'Alex Rivera',
-      username: 'alexr',
-      avatarUrl: undefined,
-    },
-  },
-  {
-    id: '2',
-    postId: '',
-    userId: 'u2',
-    content: 'Incredible work, keep it up!',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-    user: {
-      id: 'u2',
-      displayName: 'Jordan Kim',
-      username: 'jordank',
-      avatarUrl: undefined,
-    },
-  },
-  {
-    id: '3',
-    postId: '',
-    userId: 'u3',
-    content: 'Just bought some tokens. To the moon!',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
-    user: {
-      id: 'u3',
-      displayName: 'Sam Chen',
-      username: 'samc',
-      avatarUrl: undefined,
-    },
-  },
-];
 
 export default function PostScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -73,8 +33,8 @@ export default function PostScreen() {
   const [commentText, setCommentText] = useState('');
   const inputRef = useRef<TextInput>(null);
 
-  // Find the post from feed data
-  const post = useMemo(() => {
+  // Find the post from feed cache
+  const cachedPost = useMemo(() => {
     if (!feedQuery.data?.pages) return undefined;
     for (const page of feedQuery.data.pages) {
       const found = page.posts.find((p) => p.id === id);
@@ -82,6 +42,24 @@ export default function PostScreen() {
     }
     return undefined;
   }, [feedQuery.data, id]);
+
+  // Fallback: fetch directly from API if not in feed cache
+  const postQuery = useQuery({
+    queryKey: ['post', id],
+    queryFn: () => apiService.get<PostWithCreator>(`/posts/${id}`),
+    enabled: !!id && !cachedPost,
+  });
+
+  const post = cachedPost ?? postQuery.data;
+  const isPostLoading = !cachedPost && postQuery.isLoading;
+
+  const commentsQuery = useComments(id);
+  const comments = useMemo(() => {
+    if (!commentsQuery.data?.pages) return [];
+    return commentsQuery.data.pages.flatMap((page) => page.comments);
+  }, [commentsQuery.data]);
+
+  const createComment = useCreateComment(id!);
 
   const handleBack = useCallback(() => {
     router.back();
@@ -94,11 +72,26 @@ export default function PostScreen() {
   }, [post?.creatorId, router]);
 
   const handleSendComment = useCallback(() => {
-    if (!commentText.trim()) return;
-    // In production this would call an API
+    if (!commentText.trim() || !id) return;
+    createComment.mutate(commentText.trim());
     setCommentText('');
     inputRef.current?.blur();
-  }, [commentText]);
+  }, [commentText, id, createComment]);
+
+  if (isPostLoading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.navBar}>
+          <Pressable onPress={handleBack} style={styles.backButton} hitSlop={8}>
+            <Ionicons name="chevron-back" size={28} color={COLORS.textPrimary} />
+          </Pressable>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator color={COLORS.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!post) {
     return (
@@ -201,7 +194,7 @@ export default function PostScreen() {
           {/* Comments Section */}
           <View style={styles.commentsSection}>
             <Text style={styles.commentsTitle}>Comments</Text>
-            {DUMMY_COMMENTS.map((comment) => (
+            {comments.map((comment) => (
               <View key={comment.id} style={styles.commentItem}>
                 <Avatar
                   uri={comment.user.avatarUrl}
