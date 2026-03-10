@@ -4,8 +4,10 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/primitives';
@@ -22,11 +24,13 @@ import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatCurrency, formatPercentage } from '@/utils/formatters';
 import { UserRole, type TokenHolding } from '@momento/shared';
+import { apiService } from '@/services/api';
 
 type ProfileTab = 'EDIT PROFILE' | 'NEW POST' | 'ACCOUNT';
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user, isLoading } = useUserProfile();
   const walletQuery = useWalletBalance();
   const balance = walletQuery.data;
@@ -57,10 +61,39 @@ export default function ProfileScreen() {
     setShowSettings(true);
   }, []);
 
-  const handleSettingsNavigate = useCallback((_route: string) => {
-    setShowSettings(false);
-    setShowComingSoon(true);
-  }, []);
+  const handleSettingsNavigate = useCallback(
+    (route: string) => {
+      setShowSettings(false);
+      if (route === 'delete-account') {
+        Alert.alert(
+          'Delete Account',
+          'Are you sure you want to delete your account? This action cannot be undone.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Delete',
+              style: 'destructive',
+              onPress: async () => {
+                try {
+                  await apiService.delete('/users/me');
+                  queryClient.clear();
+                  router.replace('/login');
+                } catch {
+                  Alert.alert(
+                    'Error',
+                    'Failed to delete account. Please try again.',
+                  );
+                }
+              },
+            },
+          ],
+        );
+      } else {
+        setShowComingSoon(true);
+      }
+    },
+    [queryClient, router],
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

@@ -38,10 +38,10 @@ Fix the data layer so the mobile app can actually communicate with the API. Ever
 ### Phase 2: Missing Features (Core UX) — COMPLETED 2026-03-10
 Wire up features that have API endpoints but no mobile integration: comments, location sync, explore creators.
 
-### Phase 3: Creator Flow & Navigation
+### Phase 3: Creator Flow & Navigation — COMPLETED 2026-03-10
 Complete the creator application flow and ensure deep link navigation works end-to-end.
 
-### Phase 4: Polish & Hardening
+### Phase 4: Polish & Hardening — COMPLETED 2026-03-10
 Pull-to-refresh, keyboard handling, delete account stub, type safety audit.
 
 ---
@@ -362,7 +362,9 @@ Include a simple Haversine `getDistanceMeters` helper inline or in utils.
 
 ---
 
-## Phase 3: Creator Flow & Navigation
+## Phase 3: Creator Flow & Navigation — COMPLETED
+
+> **Status:** Both tasks completed, reviewed, committed (SHA: da6993b), and pushed. M7 required no code changes — deep linking already fully configured.
 
 ### Task 3.1 — Open Veriff URL After Creator Application (M6)
 
@@ -410,7 +412,9 @@ Expo Router handles this automatically via file-based routing when the scheme is
 
 ---
 
-## Phase 4: Polish & Hardening
+## Phase 4: Polish & Hardening — COMPLETED
+
+> **Status:** All 4 tasks completed, reviewed, committed, and pushed. Types audit found and fixed 2 mismatches (PostWithCreator missing distanceMeters, PublicCreator missing followingCount/role/createdAt/isFollowing).
 
 ### Task 4.1 — Pull-to-Refresh on Explore and Market Screens (m3)
 

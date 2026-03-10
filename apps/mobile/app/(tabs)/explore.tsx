@@ -4,6 +4,7 @@ import {
   StyleSheet,
   Pressable,
   FlatList,
+  RefreshControl,
   Dimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -37,6 +38,17 @@ export default function ExploreScreen() {
   const [activeTab, setActiveTab] = useState<ExploreTab>('CREATORS');
   const feedQuery = useFeed();
   const nearbyQuery = useNearbyCreators();
+
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([
+      feedQuery.refetch(),
+      nearbyQuery.refetch(),
+    ]);
+    setRefreshing(false);
+  }, [feedQuery, nearbyQuery]);
 
   const posts = useMemo(() => {
     if (!feedQuery.data?.pages) return [];
@@ -183,6 +195,14 @@ export default function ExploreScreen() {
       {/* Masonry Grid */}
       <FlatList
         data={[{ key: 'masonry' }]}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
+          />
+        }
         renderItem={() => (
           <View style={styles.masonryContainer}>
             <View style={styles.column}>

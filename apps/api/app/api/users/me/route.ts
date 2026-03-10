@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
-import { getOrSetCache, invalidateCache, cacheKeys, cacheTTL } from '@/lib/redis';
+import {
+  getOrSetCache,
+  invalidateCache,
+  cacheKeys,
+  cacheTTL,
+} from '@/lib/redis';
 
 export async function GET(request: NextRequest) {
   try {
@@ -158,6 +163,36 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json(
       { success: false, error: 'Failed to update user profile' },
       { status: 500 }
+    );
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  try {
+    const user = await requireAuth(request);
+
+    await prisma.$transaction([
+      prisma.like.deleteMany({ where: { userId: user.id } }),
+      prisma.comment.deleteMany({ where: { userId: user.id } }),
+      prisma.follow.deleteMany({
+        where: { OR: [{ followerId: user.id }, { followingId: user.id }] },
+      }),
+      prisma.post.deleteMany({ where: { creatorId: user.id } }),
+      prisma.kycRecord.deleteMany({ where: { userId: user.id } }),
+      prisma.user.delete({ where: { id: user.id } }),
+    ]);
+
+    return NextResponse.json({ success: true, data: { deleted: true } });
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Unauthorized') {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized' },
+        { status: 401 },
+      );
+    }
+    return NextResponse.json(
+      { success: false, error: 'Failed to delete account' },
+      { status: 500 },
     );
   }
 }
