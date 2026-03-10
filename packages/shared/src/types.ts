@@ -136,6 +136,12 @@ export interface NearbyCreatorsResponse {
   creators: PublicCreator[];
 }
 
+export interface CommentsResponse {
+  comments: Comment[];
+  nextCursor?: string;
+  hasMore: boolean;
+}
+
 export interface FollowResponse {
   following: boolean;
   followerCount: number;

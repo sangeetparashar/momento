@@ -10,7 +10,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@/components/primitives';
-import { useFeed } from '@/hooks';
+import { useFeed, useNearbyCreators } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import type { PostWithCreator, PublicCreator } from '@momento/shared';
@@ -36,6 +36,7 @@ export default function ExploreScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<ExploreTab>('CREATORS');
   const feedQuery = useFeed();
+  const nearbyQuery = useNearbyCreators();
 
   const posts = useMemo(() => {
     if (!feedQuery.data?.pages) return [];
@@ -55,28 +56,20 @@ export default function ExploreScreen() {
       }));
     }
 
-    // Derive unique creators from posts
-    const creatorsMap = new Map<string, PublicCreator>();
-    posts.forEach((post: PostWithCreator) => {
-      if (!creatorsMap.has(post.creator.id)) {
-        creatorsMap.set(post.creator.id, post.creator);
-      }
-    });
-
-    return Array.from(creatorsMap.values()).map(
-      (creator: PublicCreator, index: number) => ({
-        id: creator.id,
-        type: 'creator' as const,
-        imageUri: creator.avatarUrl || creator.bannerUrl,
-        label: creator.displayName || creator.username,
-        sublabel: creator.tokenSymbol
-          ? `$${creator.tokenSymbol}`
-          : undefined,
-        heightMultiplier: index % 3 === 0 ? 1.3 : 1.0,
-        creatorId: creator.id,
-      })
-    );
-  }, [activeTab, posts]);
+    // Use nearby creators API
+    const creators = nearbyQuery.data?.creators ?? [];
+    return creators.map((creator, index) => ({
+      id: creator.id,
+      type: 'creator' as const,
+      imageUri: creator.avatarUrl || creator.bannerUrl,
+      label: creator.displayName || creator.username,
+      sublabel: creator.tokenSymbol
+        ? `$${creator.tokenSymbol}`
+        : undefined,
+      heightMultiplier: index % 3 === 0 ? 1.3 : 1.0,
+      creatorId: creator.id,
+    }));
+  }, [activeTab, posts, nearbyQuery.data]);
 
   // Split items into two columns for masonry effect
   const { leftColumn, rightColumn } = useMemo(() => {
