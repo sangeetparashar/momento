@@ -62,7 +62,7 @@ When spawning agents, use these isolated zones to prevent conflicts:
 | Shared Types | `packages/shared/src/` | Shared interfaces + constants |
 | Landing Page | `apps/landing/` | Next.js 14 waitlist landing page |
 | Landing Components | `apps/landing/components/` | Navbar, Hero, Modal, Footer, etc. |
-| Docs | `docs/` | GAPS.md, agent-guide, architecture, patterns |
+| Docs | `docs/` | NEXT_STEPS.md, agent-guide, architecture, patterns |
 
 ## Key APIs and Contracts
 
@@ -221,7 +221,7 @@ import { getOrSetCache, invalidateCache } from '@/lib/redis';
 
 ## Known Issues to Fix
 
-> See [GAPS.md](./GAPS.md) for the full audit. See [NEXT_STEPS.md](./NEXT_STEPS.md) for the execution plan.
+> See [NEXT_STEPS.md](./NEXT_STEPS.md) for the full execution plan and completed work reference.
 
 ### Fixed (Phases 1-4, 2026-03-10)
 - ~~7 critical API contract bugs (C1-C7)~~ — All resolved

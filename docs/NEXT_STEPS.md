@@ -428,3 +428,73 @@ Phase 9 runs last (small scope, low priority).
 - App Store submissions (Apple, Google Play)
 - Phase 2 roadmap features (price oracle, token swaps, creator token minting)
 - Sentry/analytics integration (requires account setup)
+
+---
+
+## Future / Nice-to-Have (Beyond Phases 5-9)
+
+These items are lower priority or blocked by external dependencies. An agent can tackle them after the main phases, or they can be deferred to Phase 2.
+
+### Agent-Executable (Low Priority)
+
+| Item | Description | Notes |
+|------|-------------|-------|
+| React Query Devtools | Add `@tanstack/react-query-devtools` in dev builds | Quick win for debugging |
+| Storybook | Document primitives + features in isolated component viewer | Large effort, low urgency |
+| Push notification deep links | Wire notification taps to correct screens end-to-end | Partially done — `NotificationProvider` has routing logic, needs testing with real notifications |
+| Vault settings screen | Wallet connect/import flow UI | Depends on Solana wallet adapter integration |
+| Favorites settings screen | Saved posts/creators UI + API | Needs new `Favorite` model in Prisma, new API routes, new hooks |
+
+### Requires Human / External Services
+
+| Item | Description | Why Human Needed |
+|------|-------------|-----------------|
+| Placeholder PNGs | `notification-icon.png` and `adaptive-icon.png` are 1x1 transparent | Requires branded design assets |
+| App icon + splash screen | Expo defaults, no custom branding | Requires design from Figma |
+| Custom SVG tab icons | Currently using Ionicons strings | Requires Figma exports |
+| PortfolioChart real data | Hardcoded dummy data | Requires Jupiter/Birdeye price oracle API (Phase 2) |
+| SwapModal execution | UI-only, no actual swap | Requires Jupiter aggregator integration (Phase 2) |
+| Market screen real data | Dummy token rankings | Requires market data API (Phase 2) |
+| Real-time price updates | No WebSocket for live prices | Requires price feed service (Phase 2) |
+| Sentry error reporting | No crash/error tracking | Requires Sentry account + DSN |
+| Analytics (Mixpanel/Amplitude) | No event tracking | Requires analytics account |
+| i18n / Internationalization | English only | Requires translation files + i18n library |
+| Prisma client generation | `pnpm approve-builds` then `npx prisma generate` | Must be run manually after DB setup |
+| Seed script verification | `prisma/seed.ts` untested | Must be run manually after DB setup |
+
+---
+
+## Completed Work Reference (Phases 1-4)
+
+For historical context, these were all resolved prior to this plan. The original audit doc (`GAPS.md`) has been archived — all remaining items are captured above.
+
+### Critical Gaps — ALL RESOLVED
+| ID | Issue | Fix | Commit |
+|----|-------|-----|--------|
+| C1 | API response envelope not unwrapped | Centralized unwrap in `apiService.request()` | `9e41649` |
+| C2 | Upload presigned URL field name mismatch | Changed `presignedUrl` → `uploadUrl`, added `fileName` generation | `9e41649` |
+| C3 | Push token wrong path & payload | Fixed path to `/users/me/push-token`, field to `pushToken` | `9e41649` |
+| C4 | KYC route doesn't exist | Changed path from `/kyc/apply` to `/creators/apply` | `9e41649` |
+| C5 | Follow uses DELETE, API only has POST toggle | Changed to always POST | `9e41649` |
+| C6 | Like uses DELETE, API only has POST toggle | Changed to always POST | `9e41649` |
+| C7 | Post detail has no direct API fetch | Added `useQuery` fallback for `GET /posts/[id]` | `98a62c2` |
+
+### Major Gaps — RESOLVED
+| ID | Issue | Fix | Commit |
+|----|-------|-----|--------|
+| M1 | Explore screen uses feed data for creators | Created `useNearbyCreators` hook, wired to explore | `98a62c2` |
+| M3 | No comment creation | Created `useCreateComment` hook, wired to post detail | `98a62c2` |
+| M5 | User location never synced to server | Added sync in `LocationProvider` with 500m threshold | `98a62c2` |
+| M6 | Creator application flow incomplete | Opens Veriff URL via `Linking.openURL` on success | `da6993b` |
+| M7 | No deep linking / URL scheme | Already configured (`scheme: "momento"` in app.json) | `da6993b` |
+| M10 | Shared types don't match API responses | Audited and fixed `PostWithCreator`, `PublicCreator` | `4a56b86` |
+
+### Minor Gaps — RESOLVED
+| ID | Issue | Commit |
+|----|-------|--------|
+| m3 | No pull-to-refresh on explore/market | `4a56b86` |
+| m5 | No KeyboardAvoidingView on form screens | `4a56b86` |
+| m11 | Landing page social links | Earlier commit |
+| m12 | No favicon for landing page | Earlier commit |
+| m16 | Post detail shows hardcoded DUMMY_COMMENTS | `98a62c2` |
+| M2 (partial) | Delete Account flow | `4a56b86` |
