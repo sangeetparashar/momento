@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { Linking } from 'react-native';
 import type { User } from '@momento/shared';
 import { KycStatus } from '@momento/shared';
 import { apiService } from '@/services/api';
@@ -41,6 +42,14 @@ export function useKyc() {
   return useMutation<KycApplicationResponse, Error, KycApplicationPayload>({
     mutationFn: (payload) =>
       apiService.post<KycApplicationResponse>('/creators/apply', payload),
+
+    onSuccess: (data) => {
+      if (data.verificationUrl) {
+        Linking.openURL(data.verificationUrl).catch(() => {
+          // Silently fail if URL can't be opened
+        });
+      }
+    },
 
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: ['userProfile'] });
