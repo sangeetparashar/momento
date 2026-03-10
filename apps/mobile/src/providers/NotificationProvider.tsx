@@ -80,7 +80,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
 
     // Register the token with our API (fire and forget)
     try {
-      await apiService.post('/users/push-token', { token, platform: Platform.OS });
+      await apiService.post('/users/me/push-token', { pushToken: token });
     } catch {
       // Silently fail — token registration is non-critical
     }

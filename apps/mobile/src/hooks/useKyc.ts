@@ -4,10 +4,14 @@ import { KycStatus } from '@momento/shared';
 import { apiService } from '@/services/api';
 
 interface KycApplicationPayload {
+  /** First name for identity verification. */
+  firstName?: string;
+  /** Last name for identity verification. */
+  lastName?: string;
   /** Creator's desired token symbol (3-5 chars). */
-  tokenSymbol: string;
+  tokenSymbol?: string;
   /** Brief pitch or reason for applying as a creator. */
-  applicationText: string;
+  applicationText?: string;
   /** Optional social proof links. */
   socialLinks?: {
     youtube?: string;
@@ -21,8 +25,10 @@ interface KycApplicationPayload {
 }
 
 interface KycApplicationResponse {
-  kycStatus: KycStatus;
-  message: string;
+  status: string;
+  verificationUrl?: string;
+  sessionId?: string;
+  message?: string;
 }
 
 /**
@@ -34,7 +40,7 @@ export function useKyc() {
 
   return useMutation<KycApplicationResponse, Error, KycApplicationPayload>({
     mutationFn: (payload) =>
-      apiService.post<KycApplicationResponse>('/kyc/apply', payload),
+      apiService.post<KycApplicationResponse>('/creators/apply', payload),
 
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: ['userProfile'] });
