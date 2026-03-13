@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -18,8 +19,10 @@ import { LikeButton } from '@/components/features';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo } from '@/utils/formatters';
+import { useQuery } from '@tanstack/react-query';
 import { useFeed } from '@/hooks';
-import type { Comment } from '@momento/shared';
+import { apiService } from '@/services/api';
+import type { Comment, PostWithCreator } from '@momento/shared';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -74,7 +77,7 @@ export default function PostScreen() {
   const inputRef = useRef<TextInput>(null);
 
   // Find the post from feed data
-  const post = useMemo(() => {
+  const cachedPost = useMemo(() => {
     if (!feedQuery.data?.pages) return undefined;
     for (const page of feedQuery.data.pages) {
       const found = page.posts.find((p) => p.id === id);
@@ -82,6 +85,16 @@ export default function PostScreen() {
     }
     return undefined;
   }, [feedQuery.data, id]);
+
+  // Fallback: fetch directly from API if not in feed cache
+  const postQuery = useQuery<PostWithCreator>({
+    queryKey: ['post', id],
+    queryFn: () => apiService.get<PostWithCreator>(`/posts/${id}`),
+    enabled: !!id && !cachedPost,
+  });
+
+  const post = cachedPost ?? postQuery.data;
+  const isPostLoading = !cachedPost && postQuery.isLoading;
 
   const handleBack = useCallback(() => {
     router.back();
@@ -99,6 +112,25 @@ export default function PostScreen() {
     setCommentText('');
     inputRef.current?.blur();
   }, [commentText]);
+
+  if (isPostLoading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.navBar}>
+          <Pressable onPress={handleBack} style={styles.backButton} hitSlop={8}>
+            <Ionicons
+              name="chevron-back"
+              size={28}
+              color={COLORS.textPrimary}
+            />
+          </Pressable>
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!post) {
     return (

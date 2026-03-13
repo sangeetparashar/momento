@@ -25,10 +25,8 @@ export function useCreatorProfile(creatorId: string | undefined) {
     Error,
     { creatorId: string; follow: boolean }
   >({
-    mutationFn: ({ creatorId: id, follow }) =>
-      follow
-        ? apiService.post<FollowResponse>(`/creators/${id}/follow`)
-        : apiService.delete<FollowResponse>(`/creators/${id}/follow`),
+    mutationFn: ({ creatorId: id }) =>
+      apiService.post<FollowResponse>(`/creators/${id}/follow`),
 
     // Optimistic update
     onMutate: async ({ creatorId: id, follow }) => {

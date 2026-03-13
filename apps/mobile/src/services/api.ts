@@ -115,6 +115,15 @@ class ApiService {
       throw new ApiError(response.status, parsed);
     }
 
+    // Unwrap the { success, data } envelope used by all API routes
+    if (
+      parsed !== null &&
+      typeof parsed === 'object' &&
+      'success' in (parsed as Record<string, unknown>) &&
+      'data' in (parsed as Record<string, unknown>)
+    ) {
+      return (parsed as Record<string, unknown>).data as T;
+    }
     return parsed as T;
   }
 
@@ -184,14 +193,19 @@ class ApiService {
     fileUri: string,
     contentType: string,
   ): Promise<{ url: string }> {
-    // Step 1: Get presigned URL from the API
-    const { presignedUrl, publicUrl } = await this.post<{
-      presignedUrl: string;
+    // Generate a unique filename
+    const ext = contentType.split('/')[1] || 'bin';
+    const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+    // Step 1: Get upload URL from the API
+    const { uploadUrl, publicUrl } = await this.post<{
+      uploadUrl: string;
       publicUrl: string;
-    }>('/uploads/presign', { contentType });
+      path: string;
+    }>('/uploads/presign', { fileName, contentType });
 
     // Step 2: Upload the file
-    await this.uploadFile(presignedUrl, fileUri, contentType);
+    await this.uploadFile(uploadUrl, fileUri, contentType);
 
     // Step 3: Return the public URL
     return { url: publicUrl };

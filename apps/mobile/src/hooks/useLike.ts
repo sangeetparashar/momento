@@ -18,10 +18,8 @@ export function useLike() {
   const queryClient = useQueryClient();
 
   return useMutation<LikeResponse, Error, { postId: string; liked: boolean }>({
-    mutationFn: ({ postId, liked }) =>
-      liked
-        ? apiService.post<LikeResponse>(`/posts/${postId}/like`)
-        : apiService.delete<LikeResponse>(`/posts/${postId}/like`),
+    mutationFn: ({ postId }) =>
+      apiService.post<LikeResponse>(`/posts/${postId}/like`),
 
     onMutate: async ({ postId, liked }) => {
       // Cancel in-flight queries that would overwrite our optimistic update
