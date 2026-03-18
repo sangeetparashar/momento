@@ -7,4 +7,6 @@ export { ComingSoonModal } from './ComingSoonModal';
 export { SwapModal } from './SwapModal';
 export { SettingsSheet } from './SettingsSheet';
 export { FeedSkeleton } from './FeedSkeleton';
+export { ExploreSkeleton } from './ExploreSkeleton';
+export { CreatorProfileSkeleton } from './CreatorProfileSkeleton';
 export { ProfileSkeleton } from './ProfileSkeleton';

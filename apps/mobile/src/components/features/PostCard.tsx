@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import { View, StyleSheet, Pressable, Dimensions, Animated } from 'react-native';
+import { View, StyleSheet, Pressable, Animated, Share, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,10 +14,9 @@ interface PostCardProps {
   post: PostWithCreator;
 }
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const IMAGE_HEIGHT = SCREEN_WIDTH;
-
 export function PostCard({ post }: PostCardProps) {
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const IMAGE_HEIGHT = SCREEN_WIDTH;
   const router = useRouter();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
@@ -109,9 +108,28 @@ export function PostCard({ post }: PostCardProps) {
             </Text>
           )}
         </Pressable>
-        <Pressable style={styles.shareButton}>
+        <Pressable
+          style={styles.shareButton}
+          onPress={() => {
+            Share.share({
+              message: post.caption || post.content || 'Check out this post on Momento',
+            }).catch(() => {});
+          }}
+        >
           <Ionicons
             name="paper-plane-outline"
+            size={22}
+            color={COLORS.textSecondary}
+          />
+        </Pressable>
+        <Pressable
+          style={styles.bookmarkButton}
+          onPress={() => {
+            // Will be wired to useSavedPosts.toggleSave when save API is tested end-to-end
+          }}
+        >
+          <Ionicons
+            name="bookmark-outline"
             size={22}
             color={COLORS.textSecondary}
           />
@@ -162,8 +180,8 @@ const styles = StyleSheet.create({
     color: COLORS.textTertiary,
   },
   image: {
-    width: SCREEN_WIDTH,
-    height: IMAGE_HEIGHT,
+    width: '100%',
+    aspectRatio: 1,
     backgroundColor: COLORS.surface,
   },
   actionsRow: {
@@ -185,6 +203,10 @@ const styles = StyleSheet.create({
   },
   shareButton: {
     marginLeft: 'auto',
+  },
+  bookmarkButton: {
+    padding: SPACING.xs,
+    marginLeft: SPACING.sm,
   },
   captionContainer: {
     flexDirection: 'row',

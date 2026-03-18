@@ -57,10 +57,18 @@ export default function ProfileScreen() {
     setShowSettings(true);
   }, []);
 
-  const handleSettingsNavigate = useCallback((_route: string) => {
+  const handleSettingsNavigate = useCallback((route: string) => {
     setShowSettings(false);
-    setShowComingSoon(true);
-  }, []);
+    if (route === 'delete-account') {
+      router.push('/delete-account');
+    } else if (route === 'favorites') {
+      router.push('/settings/favorites');
+    } else if (route === 'permissions') {
+      router.push('/settings/permissions');
+    } else {
+      setShowComingSoon(true);
+    }
+  }, [router]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>

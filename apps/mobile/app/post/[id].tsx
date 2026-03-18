@@ -333,8 +333,8 @@ const styles = StyleSheet.create({
     color: COLORS.textTertiary,
   },
   postImage: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH,
+    width: '100%',
+    aspectRatio: 1,
     backgroundColor: COLORS.surface,
   },
   captionContainer: {

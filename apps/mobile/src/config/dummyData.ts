@@ -103,7 +103,6 @@ export const DUMMY_CREATORS: PublicCreator[] = [
     socialLinks: { instagram: 'deelmusic', twitter: 'deelmusic' },
     followerCount: 12400,
     postCount: 89,
-    distanceMeters: 1200,
   },
   {
     id: 'creator-2',
@@ -116,7 +115,6 @@ export const DUMMY_CREATORS: PublicCreator[] = [
     socialLinks: { instagram: 'bellecreates', website: 'https://belle.art' },
     followerCount: 8900,
     postCount: 156,
-    distanceMeters: 3500,
   },
   {
     id: 'creator-3',
@@ -129,7 +127,6 @@ export const DUMMY_CREATORS: PublicCreator[] = [
     socialLinks: { youtube: 'naanofficial', tiktok: 'naanofficial' },
     followerCount: 34200,
     postCount: 312,
-    distanceMeters: 7800,
   },
 ];
 

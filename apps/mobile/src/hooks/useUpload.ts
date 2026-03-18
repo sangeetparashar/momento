@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { apiService } from '@/services/api';
 import { showErrorToast } from '@/utils/toast';
 
@@ -74,24 +75,42 @@ export function useUpload(): UseUploadReturn {
       setError(null);
 
       try {
+        // Step 0: Compress images before upload
+        let processedUri = uri;
+        let processedMimeType = mimeType;
+
+        if (mimeType.startsWith('image/')) {
+          try {
+            const result = await ImageManipulator.manipulateAsync(
+              uri,
+              [{ resize: { width: 1200 } }],
+              { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+            );
+            processedUri = result.uri;
+            processedMimeType = 'image/jpeg';
+          } catch {
+            // Fall back to original if compression fails
+          }
+        }
+
         // Step 1: Get presigned URL
-        const ext = mimeType.split('/')[1] || 'bin';
+        const ext = processedMimeType.split('/')[1] || 'bin';
         const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
         const { uploadUrl, publicUrl } = await apiService.post<{
           uploadUrl: string;
           publicUrl: string;
           path: string;
-        }>('/uploads/presign', { fileName, contentType: mimeType });
+        }>('/uploads/presign', { fileName, contentType: processedMimeType });
 
         setProgress(0.2);
 
         // Step 2: Read file into blob
-        const fileResponse = await fetch(uri);
+        const fileResponse = await fetch(processedUri);
         const blob = await fileResponse.blob();
 
         // Step 3: Upload with real progress tracking via XHR
-        await uploadWithProgress(uploadUrl, blob, mimeType);
+        await uploadWithProgress(uploadUrl, blob, processedMimeType);
 
         return publicUrl;
       } catch (err) {

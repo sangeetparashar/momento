@@ -109,6 +109,57 @@ export async function notifyNewComment(
 }
 
 /**
+ * Notify a user when someone follows them.
+ */
+export async function notifyNewFollow(
+  followedUserId: string,
+  followerName: string
+): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { id: followedUserId },
+    select: { pushToken: true },
+  });
+
+  if (!user?.pushToken) return;
+
+  await sendPushNotifications([
+    {
+      to: user.pushToken,
+      title: 'New Follower',
+      body: `${followerName} started following you!`,
+      data: { type: 'new_follow' },
+      sound: 'default',
+    },
+  ]);
+}
+
+/**
+ * Notify a post creator when someone likes their post.
+ */
+export async function notifyNewLike(
+  postCreatorId: string,
+  likerName: string,
+  postId: string
+): Promise<void> {
+  const user = await prisma.user.findUnique({
+    where: { id: postCreatorId },
+    select: { pushToken: true },
+  });
+
+  if (!user?.pushToken) return;
+
+  await sendPushNotifications([
+    {
+      to: user.pushToken,
+      title: 'New Like',
+      body: `${likerName} liked your momento!`,
+      data: { type: 'new_like', postId },
+      sound: 'default',
+    },
+  ]);
+}
+
+/**
  * Notifies a user when their creator application is approved by admin.
  */
 export async function notifyCreatorApproval(

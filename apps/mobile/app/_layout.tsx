@@ -58,6 +58,17 @@ export default function RootLayout() {
                       animation: 'slide_from_bottom',
                     }}
                   />
+                  <Stack.Screen
+                    name="delete-account"
+                    options={{
+                      headerShown: false,
+                      presentation: 'modal',
+                    }}
+                  />
+                  <Stack.Screen
+                    name="settings"
+                    options={{ headerShown: false }}
+                  />
                 </Stack>
                 </ErrorBoundary>
               </NotificationProvider>

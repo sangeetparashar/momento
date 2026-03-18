@@ -67,3 +67,35 @@ export async function deleteFile(path: string): Promise<void> {
     throw new Error(`Failed to delete file: ${error.message}`);
   }
 }
+
+/**
+ * Extracts the Supabase storage path from a public URL.
+ * URL format: {SUPABASE_URL}/storage/v1/object/public/momento-uploads/{path}
+ */
+export function extractStoragePath(publicUrl: string): string | null {
+  const match = publicUrl.match(/momento-uploads\/(.+)$/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Deletes all media files associated with a post. Fire-and-forget.
+ */
+export async function deletePostMedia(
+  mediaUrl: string | null,
+  mediaUrls: unknown
+): Promise<void> {
+  const urls: string[] = [];
+  if (mediaUrl) urls.push(mediaUrl);
+  if (Array.isArray(mediaUrls)) {
+    urls.push(...mediaUrls.filter((u): u is string => typeof u === 'string'));
+  }
+
+  for (const url of urls) {
+    const path = extractStoragePath(url);
+    if (path) {
+      deleteFile(path).catch((err) =>
+        console.error('Failed to delete media file:', err)
+      );
+    }
+  }
+}

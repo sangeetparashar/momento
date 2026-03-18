@@ -57,6 +57,7 @@ model User {
   followers  Follow[]    @relation("following")
   following  Follow[]    @relation("follower")
   kycRecords KycRecord[]
+  savedPosts SavedPost[]
 
   @@index([role])
   @@index([locationLat, locationLng])
@@ -80,7 +81,8 @@ model Post {
 
   creator  User      @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   likes    Like[]
-  comments Comment[]
+  comments   Comment[]
+  savedPosts SavedPost[]
 
   @@index([creatorId])
   @@index([createdAt])
@@ -145,4 +147,18 @@ model KycRecord {
 
   @@index([userId])
   @@map("kyc_records")
+}
+
+model SavedPost {
+  id        String   @id @default(uuid())
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([userId, createdAt])
+  @@map("saved_posts")
 }

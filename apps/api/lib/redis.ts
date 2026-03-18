@@ -85,15 +85,15 @@ export async function invalidateCache(...patterns: string[]): Promise<void> {
         // Use SCAN with large COUNT to reduce round trips, pipeline batch deletes
         let cursor: string | number = 0;
         do {
-          const result = await redis.scan(cursor, { match: pattern, count: 100 });
+          const result: [string, string[]] = await redis.scan(cursor, { match: pattern, count: 100 });
           cursor = result[0];
-          const keys = result[1];
+          const keys: string[] = result[1];
           if (keys.length > 0) {
             const pipeline = redis.pipeline();
-            keys.forEach((key) => pipeline.del(key));
+            keys.forEach((key: string) => pipeline.del(key));
             await pipeline.exec();
           }
-        } while (cursor !== 0);
+        } while (String(cursor) !== '0');
       } else {
         await redis.del(pattern);
       }

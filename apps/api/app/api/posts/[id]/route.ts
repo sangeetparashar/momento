@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { getAuthUser, requireAuth } from '@/lib/auth';
 import { getOrSetCache, invalidateCache, cacheKeys, cacheTTL } from '@/lib/redis';
 import { readLimiter, writeLimiter, applyRateLimit } from '@/lib/ratelimit';
+import { deletePostMedia } from '@/lib/storage';
 
 export async function GET(
   request: NextRequest,
@@ -101,7 +102,7 @@ export async function DELETE(
     // Verify the post exists and belongs to the user
     const post = await prisma.post.findUnique({
       where: { id },
-      select: { id: true, creatorId: true },
+      select: { id: true, creatorId: true, mediaUrl: true, mediaUrls: true },
     });
 
     if (!post) {
@@ -130,6 +131,11 @@ export async function DELETE(
       'feed:*',
       `creator:${post.creatorId}:posts:*`,
       cacheKeys.creatorProfile(post.creatorId)
+    );
+
+    // Fire-and-forget: clean up storage
+    deletePostMedia(post.mediaUrl, post.mediaUrls).catch((err) =>
+      console.error('Media cleanup failed:', err)
     );
 
     return NextResponse.json({ success: true, data: { deleted: true } });

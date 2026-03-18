@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { requireAuth } from '@/lib/auth';
 import { invalidateCache, cacheKeys } from '@/lib/redis';
 import { writeLimiter, applyRateLimit } from '@/lib/ratelimit';
+import { notifyNewLike } from '@/lib/notifications';
 
 export async function POST(
   request: NextRequest,
@@ -115,6 +116,18 @@ export async function POST(
       });
       isLiked = true;
       newLikeCount = updatedPost?.likeCount ?? post.likeCount + 1;
+
+      // Send like notification (fire-and-forget), skip self-likes
+      if (user.id !== post.creatorId) {
+        const liker = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: { displayName: true, username: true },
+        });
+        const likerName = liker?.displayName || liker?.username || 'Someone';
+        notifyNewLike(post.creatorId, likerName, postId).catch((err) =>
+          console.error('Failed to send like notification:', err)
+        );
+      }
     }
 
     // Invalidate post cache

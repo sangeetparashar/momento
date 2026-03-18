@@ -1,11 +1,11 @@
 import React from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import { Skeleton, SkeletonText } from '@/components/primitives';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
 function PostCardSkeleton() {
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+
   return (
     <View style={styles.card}>
       {/* Header row: avatar + text lines */}

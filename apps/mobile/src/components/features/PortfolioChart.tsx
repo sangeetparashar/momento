@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, StyleSheet, Pressable, Dimensions } from 'react-native';
+import { View, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
 import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import { Text } from '@/components/primitives';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
@@ -17,8 +17,6 @@ const POINTS_MAP: Record<TimeRange, number> = {
   '1Y': 365,
 };
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CHART_WIDTH = SCREEN_WIDTH - SPACING.md * 4;
 const CHART_HEIGHT = 160;
 
 function generateChartData(points: number, seed: number = 42): number[] {
@@ -65,6 +63,8 @@ function createGradientPath(linePath: string, width: number, height: number): st
 }
 
 export function PortfolioChart() {
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const CHART_WIDTH = SCREEN_WIDTH - SPACING.md * 4;
   const [selectedRange, setSelectedRange] = useState<TimeRange>('1M');
 
   const chartData = useMemo(() => {

@@ -47,6 +47,10 @@ export const uploadPresignSchema = z.object({
   folder: z.string().max(255).regex(/^[a-zA-Z0-9_\/-]*$/, 'Invalid folder characters').optional(),
 });
 
+export const deleteAccountSchema = z.object({
+  confirmation: z.literal('DELETE'),
+});
+
 // Helper to validate and return parsed data or error response
 export function validateBody<T>(schema: z.ZodSchema<T>, body: unknown): { success: true; data: T } | { success: false; response: Response } {
   const result = schema.safeParse(body);

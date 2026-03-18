@@ -51,11 +51,9 @@ export function useCreatorProfile(creatorId: string | undefined) {
 
     onError: (_err, { creatorId: id }, context) => {
       // Roll back on failure
-      if (context && 'previous' in context) {
-        queryClient.setQueryData(
-          ['creator', id],
-          (context as { previous: CreatorProfileResponse }).previous,
-        );
+      const ctx = context as { previous?: CreatorProfileResponse } | undefined;
+      if (ctx?.previous) {
+        queryClient.setQueryData(['creator', id], ctx.previous);
       }
       showErrorToast('Failed to update follow status.');
     },

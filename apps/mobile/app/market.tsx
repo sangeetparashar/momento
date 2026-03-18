@@ -5,6 +5,7 @@ import {
   ScrollView,
   Pressable,
   TextInput,
+  RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -56,6 +57,12 @@ export default function MarketScreen() {
   const [activeTab, setActiveTab] = useState<MarketTab>('TRENDING');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [showComingSoon, setShowComingSoon] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(() => {
+    setIsRefreshing(true);
+    setTimeout(() => setIsRefreshing(false), 500);
+  }, []);
 
   const handleBack = useCallback(() => {
     router.back();
@@ -113,7 +120,16 @@ export default function MarketScreen() {
         <View style={styles.navSpacer} />
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.textTertiary}
+          />
+        }
+      >
         {/* Search Bar */}
         <View style={styles.searchContainer}>
           <Ionicons

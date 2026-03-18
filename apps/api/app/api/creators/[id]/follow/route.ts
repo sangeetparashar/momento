@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { requireAuth } from '@/lib/auth';
 import { invalidateCache, cacheKeys } from '@/lib/redis';
 import { writeLimiter, applyRateLimit } from '@/lib/ratelimit';
+import { notifyNewFollow } from '@/lib/notifications';
 
 export async function POST(
   request: NextRequest,
@@ -128,6 +129,16 @@ export async function POST(
       });
       isFollowing = true;
       newFollowerCount = updatedUser?.followerCount ?? targetUser.followerCount + 1;
+
+      // Send follow notification (fire-and-forget)
+      const follower = await prisma.user.findUnique({
+        where: { id: user.id },
+        select: { displayName: true, username: true },
+      });
+      const followerName = follower?.displayName || follower?.username || 'Someone';
+      notifyNewFollow(followingId, followerName).catch((err) =>
+        console.error('Failed to send follow notification:', err)
+      );
     }
 
     // Invalidate cached profiles

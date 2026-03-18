@@ -4,13 +4,14 @@ import {
   StyleSheet,
   Pressable,
   FlatList,
-  ActivityIndicator,
+  RefreshControl,
   useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@/components/primitives';
+import { ExploreSkeleton } from '@/components/features';
 import { useFeed, useNearbyCreators } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -37,7 +38,21 @@ export default function ExploreScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<ExploreTab>('CREATORS');
   const feedQuery = useFeed();
-  const { creators: nearbyCreators, isLoading: creatorsLoading } = useNearbyCreators();
+  const { creators: nearbyCreators, isLoading: creatorsLoading, refetch: refetchCreators } = useNearbyCreators();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      if (activeTab === 'CREATORS') {
+        await refetchCreators();
+      } else {
+        await feedQuery.refreshFeed();
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [activeTab, refetchCreators, feedQuery]);
 
   const posts = useMemo(() => {
     if (!feedQuery.data?.pages) return [];
@@ -183,9 +198,7 @@ export default function ExploreScreen() {
 
       {/* Masonry Grid */}
       {((activeTab === 'CREATORS' && creatorsLoading) || (activeTab === 'POSTS' && feedQuery.isLoading)) ? (
-        <View style={styles.emptyState}>
-          <ActivityIndicator size="large" color={COLORS.textTertiary} />
-        </View>
+        <ExploreSkeleton />
       ) : (
         <FlatList
           data={gridItems.length > 0 ? [{ key: 'masonry' }] : []}
@@ -201,6 +214,13 @@ export default function ExploreScreen() {
           )}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.listContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handleRefresh}
+              tintColor={COLORS.textTertiary}
+            />
+          }
           ListEmptyComponent={
             <View style={styles.emptyState}>
               <Text style={styles.emptyText}>

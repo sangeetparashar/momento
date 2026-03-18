@@ -59,11 +59,9 @@ export function useKyc() {
     },
 
     onError: (_err, _vars, context) => {
-      if (context && 'previous' in context) {
-        queryClient.setQueryData(
-          ['userProfile'],
-          (context as { previous: User }).previous,
-        );
+      const ctx = context as { previous?: User } | undefined;
+      if (ctx?.previous) {
+        queryClient.setQueryData(['userProfile'], ctx.previous);
       }
     },
 

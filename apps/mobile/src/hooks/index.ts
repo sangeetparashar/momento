@@ -8,3 +8,5 @@ export { useKyc } from './useKyc';
 export { useUpload } from './useUpload';
 export { useComments } from './useComments';
 export { useNearbyCreators } from './useNearbyCreators';
+export { useDeleteAccount } from './useDeleteAccount';
+export { useSavedPosts } from './useSavedPosts';

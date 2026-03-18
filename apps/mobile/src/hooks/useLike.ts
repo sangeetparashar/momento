@@ -78,18 +78,14 @@ export function useLike() {
 
     onError: (_err, { postId }, context) => {
       // Rollback
-      if (context && 'previousPost' in context) {
-        queryClient.setQueryData(
-          ['post', postId],
-          (context as { previousPost: PostWithCreator }).previousPost,
-        );
+      const ctx = context as { previousPost?: PostWithCreator; previousFeed?: InfiniteData<FeedResponse> } | undefined;
+      if (ctx?.previousPost) {
+        queryClient.setQueryData(['post', postId], ctx.previousPost);
       }
-      if (context && 'previousFeed' in context) {
+      if (ctx?.previousFeed) {
         queryClient.setQueriesData(
           { queryKey: ['feed'] },
-          () =>
-            (context as { previousFeed: InfiniteData<FeedResponse> })
-              .previousFeed,
+          () => ctx.previousFeed,
         );
       }
       showErrorToast('Failed to like post. Check your connection.');

@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
 
       const lastCreator = sliced[sliced.length - 1];
       const nextCursor = hasMore && lastCreator
-        ? String(Math.round(lastCreator.distanceMeters))
+        ? String(lastCreator.distanceMeters)
         : null;
 
       return { creators, nextCursor, hasMore };

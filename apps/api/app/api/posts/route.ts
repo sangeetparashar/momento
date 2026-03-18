@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the post and increment count atomically
-    const [post] = await prisma.$transaction([
+    const [postResult] = await prisma.$transaction([
       prisma.post.create({
         data: {
           creatorId: user.id,
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
           content: content || null,
           caption: caption || null,
           mediaUrl: mediaUrl || null,
-          mediaUrls: mediaUrls || null,
+          mediaUrls: mediaUrls ?? undefined,
           latitude,
           longitude,
         },
@@ -73,6 +73,8 @@ export async function POST(request: NextRequest) {
       `creator:${user.id}:posts:*`,
       `creator:${user.id}`
     );
+
+    const post = postResult as typeof postResult & { creator: { id: string; username: string | null; displayName: string | null; avatarUrl: string | null; bannerUrl: string | null; tokenSymbol: string | null; socialLinks: any; followerCount: number; postCount: number } };
 
     // Notify followers asynchronously (fire and forget) — after transaction success
     const creatorName = post.creator.displayName || post.creator.username || 'A creator';

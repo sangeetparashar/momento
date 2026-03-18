@@ -12,7 +12,7 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar } from '@/components/primitives';
-import { ComingSoonModal } from '@/components/features';
+import { ComingSoonModal, CreatorProfileSkeleton } from '@/components/features';
 import { useCreatorProfile } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -220,11 +220,15 @@ export default function CreatorScreen() {
       </View>
 
       {/* Content */}
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {activeTab === 'PROFILE' && renderProfileTab()}
-        {activeTab === 'POSTS' && renderPostsTab()}
-        {activeTab === 'TOKEN' && renderTokenTab()}
-      </ScrollView>
+      {isLoading ? (
+        <CreatorProfileSkeleton />
+      ) : (
+        <ScrollView showsVerticalScrollIndicator={false}>
+          {activeTab === 'PROFILE' && renderProfileTab()}
+          {activeTab === 'POSTS' && renderPostsTab()}
+          {activeTab === 'TOKEN' && renderTokenTab()}
+        </ScrollView>
+      )}
 
       {/* Coming Soon Modal */}
       <ComingSoonModal

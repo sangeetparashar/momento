@@ -42,7 +42,7 @@ export function Skeleton({
     <Animated.View
       style={[
         {
-          width,
+          width: width as number | `${number}%` | 'auto',
           height,
           borderRadius,
           backgroundColor: COLORS.surfaceElevated,
@@ -65,7 +65,7 @@ export function SkeletonText({ width = '100%', style }: SkeletonTextProps) {
       width={width}
       height={14}
       borderRadius={RADII.xs}
-      style={[{ marginBottom: 8 }, style] as ViewStyle}
+      style={[{ marginBottom: 8 }, style] as unknown as ViewStyle}
     />
   );
 }

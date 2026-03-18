@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef } from 'react';
-import { View, StyleSheet, Modal, Pressable, Animated, Dimensions } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, StyleSheet, Modal, Pressable, Animated, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/primitives';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
@@ -29,8 +29,6 @@ const MENU_ITEMS: SettingsMenuItem[] = [
   },
 ];
 
-const SCREEN_HEIGHT = Dimensions.get('window').height;
-
 interface SettingsSheetProps {
   visible: boolean;
   onClose: () => void;
@@ -42,11 +40,14 @@ export function SettingsSheet({
   onClose,
   onNavigate,
 }: SettingsSheetProps) {
+  const { height: SCREEN_HEIGHT } = useWindowDimensions();
+  const [internalVisible, setInternalVisible] = useState(visible);
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
 
   useEffect(() => {
     if (visible) {
+      setInternalVisible(true);
       Animated.parallel([
         Animated.timing(backdropOpacity, {
           toValue: 1,
@@ -59,7 +60,7 @@ export function SettingsSheet({
           useNativeDriver: true,
         }),
       ]).start();
-    } else {
+    } else if (internalVisible) {
       Animated.parallel([
         Animated.timing(backdropOpacity, {
           toValue: 0,
@@ -71,9 +72,11 @@ export function SettingsSheet({
           duration: 250,
           useNativeDriver: true,
         }),
-      ]).start();
+      ]).start(() => {
+        setInternalVisible(false);
+      });
     }
-  }, [visible, backdropOpacity, slideAnim]);
+  }, [visible]);
 
   const handleItemPress = useCallback(
     (route: string) => {
@@ -84,7 +87,7 @@ export function SettingsSheet({
 
   return (
     <Modal
-      visible={visible}
+      visible={internalVisible}
       transparent
       animationType="none"
       onRequestClose={onClose}

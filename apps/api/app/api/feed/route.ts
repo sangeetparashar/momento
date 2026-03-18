@@ -30,24 +30,13 @@ export async function GET(request: NextRequest) {
     const authUser = await getAuthUser(request);
     const userId = authUser?.id;
 
-    // Include userId in cache key so like status is per-user
-    const cacheKey = cacheKeys.feed(lat, lng, radiusKm, cursor) + (userId ? `:u:${userId}` : '');
+    // Shared cache key — no userId, so all users share the same feed cache
+    const cacheKey = cacheKeys.feed(lat, lng, radiusKm, cursor);
 
-    const feedData = await getOrSetCache(cacheKey, cacheTTL.feed, async () => {
-      // Build cursor condition and optional likes join
+    let feedData = await getOrSetCache(cacheKey, cacheTTL.feed, async () => {
       let cursorCondition = '';
       const params: any[] = [lng, lat, radiusMeters, PAGE_SIZE + 1];
-      let paramIndex = params.length; // next param index (1-based: paramIndex + 1)
-
-      let likesSelect = 'false::boolean as "isLiked"';
-      let likesJoin = '';
-
-      if (userId) {
-        paramIndex++;
-        likesSelect = `l."id" IS NOT NULL as "isLiked"`;
-        likesJoin = `LEFT JOIN "likes" l ON l."postId" = p."id" AND l."userId" = $${paramIndex}`;
-        params.push(userId);
-      }
+      let paramIndex = params.length;
 
       if (cursor) {
         paramIndex++;
@@ -55,7 +44,7 @@ export async function GET(request: NextRequest) {
         params.push(new Date(cursor));
       }
 
-      // Use PostGIS ST_DWithin for location-based filtering
+      // PostGIS feed query — no likes join (isLiked computed per-user after cache)
       const posts = await prisma.$queryRawUnsafe<any[]>(
         `
         SELECT
@@ -81,11 +70,9 @@ export async function GET(request: NextRequest) {
           u."socialLinks" as "creator_socialLinks",
           u."followerCount" as "creator_followerCount",
           u."postCount" as "creator_postCount",
-          ST_Distance(p."location", ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) as "distanceMeters",
-          ${likesSelect}
+          ST_Distance(p."location", ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) as "distanceMeters"
         FROM "posts" p
         JOIN "users" u ON p."creatorId" = u."id"
-        ${likesJoin}
         WHERE p."location" IS NOT NULL
           AND ST_DWithin(
             p."location",
@@ -114,10 +101,10 @@ export async function GET(request: NextRequest) {
         longitude: p.longitude,
         likeCount: p.likeCount,
         commentCount: p.commentCount,
-        createdAt: p.createdAt,
-        updatedAt: p.updatedAt,
+        createdAt: typeof p.createdAt === 'string' ? p.createdAt : new Date(p.createdAt).toISOString(),
+        updatedAt: typeof p.updatedAt === 'string' ? p.updatedAt : new Date(p.updatedAt).toISOString(),
         distanceMeters: Math.round(p.distanceMeters),
-        isLiked: p.isLiked === true,
+        isLiked: false,
         creator: {
           id: p.creator_id,
           username: p.creator_username,
@@ -132,7 +119,7 @@ export async function GET(request: NextRequest) {
       }));
 
       const nextCursor = hasMore
-        ? slicedPosts[slicedPosts.length - 1].createdAt.toISOString()
+        ? formattedPosts[formattedPosts.length - 1].createdAt
         : undefined;
 
       return {
@@ -141,6 +128,23 @@ export async function GET(request: NextRequest) {
         hasMore,
       };
     });
+
+    // Compute isLiked per-user outside the cache
+    if (userId && feedData.posts.length > 0) {
+      const postIds = feedData.posts.map((p: any) => p.id);
+      const likedPosts = await prisma.like.findMany({
+        where: { userId, postId: { in: postIds } },
+        select: { postId: true },
+      });
+      const likedSet = new Set(likedPosts.map((l) => l.postId));
+      feedData = {
+        ...feedData,
+        posts: feedData.posts.map((p: any) => ({
+          ...p,
+          isLiked: likedSet.has(p.id),
+        })),
+      };
+    }
 
     return NextResponse.json({ success: true, data: feedData });
   } catch (error) {
