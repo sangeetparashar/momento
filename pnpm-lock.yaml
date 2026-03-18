@@ -120,7 +120,7 @@ importers:
         version: link:../../packages/shared
       '@privy-io/expo':
         specifier: ^0.63.9
-        version: 0.63.9(e2caf218f546d2960d2beea3e9e2f50d)
+        version: 0.63.9(911625a13ede81c2fdce3a6c7226423f)
       '@privy-io/expo-native-extensions':
         specifier: 0.0.7
         version: 0.0.7(expo@54.0.33)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(bufferutil@4.1.0)(react@19.1.0))(react@19.1.0)
@@ -151,6 +151,9 @@ importers:
       expo-constants:
         specifier: ~18.0.13
         version: 18.0.13(expo@54.0.33)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(bufferutil@4.1.0)(react@19.1.0))
+      expo-crypto:
+        specifier: ~15.0.8
+        version: 15.0.8(expo@54.0.33)
       expo-dev-client:
         specifier: ~6.0.20
         version: 6.0.20(expo@54.0.33)
@@ -2408,8 +2411,8 @@ packages:
       expo: '*'
       react-native: '*'
 
-  expo-crypto@55.0.9:
-    resolution: {integrity: sha512-hYiZYRPMXGQXSgKjp/m84l/6Uq8mTeMts1C7bFZXN5M5TUOiRhrLeqMSYZFXrAlkFpXeO46V+Ts1CFauMBLuCw==}
+  expo-crypto@15.0.8:
+    resolution: {integrity: sha512-aF7A914TB66WIlTJvl5J6/itejfY78O7dq3ibvFltL9vnTALJ/7LYHvLT4fwmx9yUNS6ekLBtDGWivFWnj2Fcw==}
     peerDependencies:
       expo: '*'
 
@@ -5725,7 +5728,7 @@ snapshots:
       react: 19.1.0
       react-native: 0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(bufferutil@4.1.0)(react@19.1.0)
 
-  '@privy-io/expo@0.63.9(e2caf218f546d2960d2beea3e9e2f50d)':
+  '@privy-io/expo@0.63.9(911625a13ede81c2fdce3a6c7226423f)':
     dependencies:
       '@privy-io/api-types': 0.6.1
       '@privy-io/expo-native-extensions': 0.0.7(expo@54.0.33)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(bufferutil@4.1.0)(react@19.1.0))(react@19.1.0)
@@ -5733,7 +5736,7 @@ snapshots:
       '@scure/base': 1.2.6
       expo-apple-authentication: 55.0.8(expo@54.0.33)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(bufferutil@4.1.0)(react@19.1.0))
       expo-application: 7.0.8(expo@54.0.33)
-      expo-crypto: 55.0.9(expo@54.0.33)
+      expo-crypto: 15.0.8(expo@54.0.33)
       expo-linking: 8.0.11(expo@54.0.33)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(bufferutil@4.1.0)(react@19.1.0))(react@19.1.0)
       expo-secure-store: 15.0.8(expo@54.0.33)
       expo-web-browser: 15.0.10(expo@54.0.33)(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(bufferutil@4.1.0)(react@19.1.0))
@@ -7138,8 +7141,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  expo-crypto@55.0.9(expo@54.0.33):
+  expo-crypto@15.0.8(expo@54.0.33):
     dependencies:
+      base64-js: 1.5.1
       expo: 54.0.33(@babel/core@7.29.0)(@expo/metro-runtime@6.1.2)(bufferutil@4.1.0)(expo-router@6.0.23)(react-native-webview@13.15.0(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(bufferutil@4.1.0)(react@19.1.0))(react@19.1.0))(react-native@0.81.5(@babel/core@7.29.0)(@types/react@19.1.17)(bufferutil@4.1.0)(react@19.1.0))(react@19.1.0)
 
   expo-dev-client@6.0.20(expo@54.0.33):
