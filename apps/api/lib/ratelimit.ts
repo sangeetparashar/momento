@@ -8,37 +8,46 @@ let _redis: Redis | null = null;
 function getRateLimitRedis(): Redis | null {
   if (_redis) return _redis;
 
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
   if (!url || !token) return null;
 
   _redis = new Redis({ url, token });
   return _redis;
 }
 
-// ─── Rate Limiter Factory ────────────────────────────────────────────────────
+// ─── Lazy Rate Limiter Factory ──────────────────────────────────────────────
 
-function createLimiter(tokens: number, window: Parameters<typeof Ratelimit.slidingWindow>[1]) {
+const _limiters = new Map<string, Ratelimit | null>();
+
+function getLimiter(name: string, tokens: number, window: Parameters<typeof Ratelimit.slidingWindow>[1]): Ratelimit | null {
+  if (_limiters.has(name)) return _limiters.get(name)!;
+
   const redis = getRateLimitRedis();
-  if (!redis) return null;
+  if (!redis) {
+    _limiters.set(name, null);
+    return null;
+  }
 
-  return new Ratelimit({
+  const limiter = new Ratelimit({
     redis,
     limiter: Ratelimit.slidingWindow(tokens, window),
     analytics: true,
     prefix: 'momento:ratelimit',
   });
+  _limiters.set(name, limiter);
+  return limiter;
 }
 
-// ─── Rate Limiters ───────────────────────────────────────────────────────────
+// ─── Rate Limiters (lazy — created on first use, not at import time) ────────
 
-export const authLimiter = createLimiter(5, '1 m');
-export const readLimiter = createLimiter(60, '1 m');
-export const writeLimiter = createLimiter(30, '1 m');
-export const postCreateLimiter = createLimiter(5, '1 h');
-export const commentLimiter = createLimiter(20, '1 m');
-export const kycLimiter = createLimiter(1, '1 h');
-export const uploadLimiter = createLimiter(10, '1 m');
+export const authLimiter = { get: () => getLimiter('auth', 5, '1 m') };
+export const readLimiter = { get: () => getLimiter('read', 60, '1 m') };
+export const writeLimiter = { get: () => getLimiter('write', 30, '1 m') };
+export const postCreateLimiter = { get: () => getLimiter('postCreate', 5, '1 h') };
+export const commentLimiter = { get: () => getLimiter('comment', 20, '1 m') };
+export const kycLimiter = { get: () => getLimiter('kyc', 1, '1 h') };
+export const uploadLimiter = { get: () => getLimiter('upload', 10, '1 m') };
 
 // ─── Identifier Extraction ──────────────────────────────────────────────────
 
@@ -82,8 +91,10 @@ function getIdentifier(request: NextRequest): string {
  */
 export async function applyRateLimit(
   request: NextRequest,
-  limiter: Ratelimit | null
+  limiterRef: { get: () => Ratelimit | null } | Ratelimit | null
 ): Promise<NextResponse | null> {
+  // Resolve lazy limiter
+  const limiter = limiterRef && 'get' in limiterRef ? limiterRef.get() : limiterRef;
   // Graceful degradation: if Redis is not configured, allow all requests
   if (!limiter) return null;
 
