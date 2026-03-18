@@ -9,6 +9,7 @@ import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo, formatNumber } from '@/utils/formatters';
 import type { PostWithCreator } from '@momento/shared';
+import { apiService } from '@/services/api';
 
 interface PostCardProps {
   post: PostWithCreator;
@@ -125,7 +126,7 @@ export function PostCard({ post }: PostCardProps) {
         <Pressable
           style={styles.bookmarkButton}
           onPress={() => {
-            // Will be wired to useSavedPosts.toggleSave when save API is tested end-to-end
+            apiService.post('/users/me/saved', { postId: post.id }).catch(() => {});
           }}
         >
           <Ionicons

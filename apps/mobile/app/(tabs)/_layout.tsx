@@ -1,7 +1,8 @@
 import React, { useCallback, useRef } from 'react';
-import { Animated, Pressable, PressableProps, StyleProp, ViewStyle } from 'react-native';
+import { Animated, Platform, Pressable, PressableProps, StyleProp, ViewStyle } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '@/styles/theme';
 
 /**
@@ -51,6 +52,9 @@ function AnimatedTabButton(props: PressableProps & { style?: StyleProp<ViewStyle
 }
 
 export default function TabLayout() {
+  const insets = useSafeAreaInsets();
+  const bottomPadding = Math.max(insets.bottom, Platform.OS === 'android' ? 12 : 0);
+
   return (
     <Tabs
       screenOptions={{
@@ -59,8 +63,9 @@ export default function TabLayout() {
           backgroundColor: COLORS.background,
           borderTopColor: COLORS.border,
           borderTopWidth: 0.5,
-          height: 85,
+          height: 56 + bottomPadding,
           paddingTop: 8,
+          paddingBottom: bottomPadding,
         },
         tabBarShowLabel: false,
         tabBarActiveTintColor: COLORS.textPrimary,
