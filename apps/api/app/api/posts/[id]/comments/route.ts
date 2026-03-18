@@ -3,6 +3,8 @@ import prisma from '@/lib/prisma';
 import { requireAuth, getAuthUser } from '@/lib/auth';
 import { getOrSetCache, invalidateCache, cacheKeys, cacheTTL } from '@/lib/redis';
 import { notifyNewComment } from '@/lib/notifications';
+import { readLimiter, commentLimiter, applyRateLimit } from '@/lib/ratelimit';
+import { createCommentSchema, validateBody } from '@/lib/validation';
 
 const PAGE_SIZE = 20;
 
@@ -11,6 +13,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const rateLimitResponse = await applyRateLimit(request, readLimiter);
+    if (rateLimitResponse) return rateLimitResponse;
     const { id: postId } = await params;
     const { searchParams } = new URL(request.url);
     const cursor = searchParams.get('cursor') || undefined;
@@ -85,18 +89,16 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const rateLimitResponse = await applyRateLimit(request, commentLimiter);
+    if (rateLimitResponse) return rateLimitResponse;
+
     const user = await requireAuth(request);
     const { id: postId } = await params;
 
     const body = await request.json();
-    const { content } = body;
-
-    if (!content || !content.trim()) {
-      return NextResponse.json(
-        { success: false, error: 'Comment content is required' },
-        { status: 400 }
-      );
-    }
+    const validation = validateBody(createCommentSchema, body);
+    if (!validation.success) return validation.response;
+    const { content } = validation.data;
 
     // Check post exists
     const post = await prisma.post.findUnique({

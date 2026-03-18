@@ -6,11 +6,12 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import * as Location from 'expo-location';
 import { apiService } from '@/services/api';
 
-/** How often to refresh the user's location (5 minutes). */
-const LOCATION_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+/** How often to refresh the user's location (15 minutes). */
+const LOCATION_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 
 export interface LocationCoords {
   latitude: number;
@@ -122,18 +123,41 @@ export function LocationProvider({ children }: LocationProviderProps) {
     });
   }, [location]);
 
-  // Request permission and start polling on mount
+  // Request permission and start polling on mount; pause when backgrounded
   useEffect(() => {
     requestPermissionAndFetch();
 
-    intervalRef.current = setInterval(() => {
-      fetchLocation();
-    }, LOCATION_REFRESH_INTERVAL_MS);
+    const startPolling = () => {
+      if (intervalRef.current) return;
+      intervalRef.current = setInterval(() => {
+        fetchLocation();
+      }, LOCATION_REFRESH_INTERVAL_MS);
+    };
 
-    return () => {
+    const stopPolling = () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
+    };
+
+    startPolling();
+
+    const handleAppState = (nextState: AppStateStatus) => {
+      if (nextState === 'active') {
+        // Refresh immediately when foregrounded, then resume interval
+        fetchLocation();
+        startPolling();
+      } else {
+        stopPolling();
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppState);
+
+    return () => {
+      stopPolling();
+      subscription.remove();
     };
   }, [requestPermissionAndFetch, fetchLocation]);
 

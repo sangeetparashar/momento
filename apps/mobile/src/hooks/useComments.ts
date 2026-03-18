@@ -1,6 +1,7 @@
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQueryClient, InfiniteData } from '@tanstack/react-query';
 import { apiService } from '@/services/api';
-import type { Comment } from '@momento/shared';
+import type { Comment, FeedResponse } from '@momento/shared';
+import { showErrorToast } from '@/utils/toast';
 
 interface CommentsResponse {
   comments: Comment[];
@@ -28,9 +29,28 @@ export function useComments(postId: string | undefined) {
       apiService.post<Comment>(`/posts/${postId}/comments`, { content }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['post', postId, 'comments'] });
-      // Also update comment count in feed cache
-      queryClient.invalidateQueries({ queryKey: ['feed'] });
       queryClient.invalidateQueries({ queryKey: ['post', postId] });
+      // Surgically update commentCount in feed cache instead of invalidating all pages
+      queryClient.setQueriesData<InfiniteData<FeedResponse>>(
+        { queryKey: ['feed'] },
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              posts: page.posts.map((post) =>
+                post.id === postId
+                  ? { ...post, commentCount: post.commentCount + 1 }
+                  : post,
+              ),
+            })),
+          };
+        },
+      );
+    },
+    onError: () => {
+      showErrorToast('Failed to post comment.');
     },
   });
 

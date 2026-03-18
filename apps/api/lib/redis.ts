@@ -69,7 +69,7 @@ export async function getOrSetCache<T>(
   const data = await fetcher();
 
   try {
-    await getRedis().set(key, JSON.stringify(data), { ex: ttlSeconds });
+    await getRedis().set(key, data, { ex: ttlSeconds });
   } catch (error) {
     console.error('Redis SET error:', error);
   }
@@ -79,20 +79,23 @@ export async function getOrSetCache<T>(
 
 export async function invalidateCache(...patterns: string[]): Promise<void> {
   try {
+    const redis = getRedis();
     for (const pattern of patterns) {
-      // If pattern contains wildcard, scan and delete
       if (pattern.includes('*')) {
-        let cursor = 0;
+        // Use SCAN with large COUNT to reduce round trips, pipeline batch deletes
+        let cursor: string | number = 0;
         do {
-          const result = await getRedis().scan(cursor, { match: pattern, count: 100 });
+          const result = await redis.scan(cursor, { match: pattern, count: 100 });
           cursor = result[0];
           const keys = result[1];
           if (keys.length > 0) {
-            await getRedis().del(...keys);
+            const pipeline = redis.pipeline();
+            keys.forEach((key) => pipeline.del(key));
+            await pipeline.exec();
           }
         } while (cursor !== 0);
       } else {
-        await getRedis().del(pattern);
+        await redis.del(pattern);
       }
     }
   } catch (error) {

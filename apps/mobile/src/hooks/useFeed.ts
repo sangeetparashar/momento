@@ -1,3 +1,4 @@
+import { useRef, useCallback } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import type { FeedResponse } from '@momento/shared';
 import { apiService } from '@/services/api';
@@ -22,7 +23,14 @@ export function useFeed(options: UseFeedOptions = {}) {
   const { location } = useLocation();
   const { radiusKm, enabled = true } = options;
 
-  return useInfiniteQuery<FeedResponse>({
+  /**
+   * Cache the last radius tier that returned enough posts so subsequent
+   * fetches (pagination, background refetches) skip the smaller tiers.
+   * Reset to null only on explicit pull-to-refresh.
+   */
+  const lastSuccessfulRadius = useRef<number | null>(null);
+
+  const query = useInfiniteQuery<FeedResponse>({
     queryKey: [
       'feed',
       location?.latitude,
@@ -45,8 +53,14 @@ export function useFeed(options: UseFeedOptions = {}) {
           cursor,
         });
       } else {
-        // Auto-expanding radius
-        for (const tier of RADIUS_TIERS_KM) {
+        // Auto-expanding radius — start from cached tier if available
+        const startTierIndex = lastSuccessfulRadius.current
+          ? RADIUS_TIERS_KM.indexOf(lastSuccessfulRadius.current as (typeof RADIUS_TIERS_KM)[number])
+          : 0;
+        const startIndex = startTierIndex >= 0 ? startTierIndex : 0;
+
+        for (let i = startIndex; i < RADIUS_TIERS_KM.length; i++) {
+          const tier = RADIUS_TIERS_KM[i];
           currentRadius = tier;
           response = await apiService.get<FeedResponse>('/feed', {
             lat: location?.latitude,
@@ -61,6 +75,9 @@ export function useFeed(options: UseFeedOptions = {}) {
             break;
           }
         }
+
+        // Cache the winning tier for future fetches
+        lastSuccessfulRadius.current = currentRadius;
       }
 
       return response!;
@@ -71,4 +88,15 @@ export function useFeed(options: UseFeedOptions = {}) {
     enabled: enabled && location !== null,
     staleTime: 30_000,
   });
+
+  /**
+   * Pull-to-refresh handler: resets the cached radius so the expansion
+   * starts fresh from the smallest tier, then refetches.
+   */
+  const refreshFeed = useCallback(async () => {
+    lastSuccessfulRadius.current = null;
+    await query.refetch();
+  }, [query]);
+
+  return { ...query, refreshFeed };
 }

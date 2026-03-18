@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Post, PostType } from '@momento/shared';
 import { apiService } from '@/services/api';
 import { useLocation } from '@/providers/LocationProvider';
+import { showErrorToast } from '@/utils/toast';
 
 interface CreatePostInput {
   postType: PostType;
@@ -38,6 +39,9 @@ export function useCreatePost() {
       // Refresh the feed and the user's profile (post count)
       queryClient.invalidateQueries({ queryKey: ['feed'] });
       queryClient.invalidateQueries({ queryKey: ['userProfile'] });
+    },
+    onError: () => {
+      showErrorToast('Failed to create post. Please try again.');
     },
   });
 }

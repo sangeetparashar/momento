@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { invalidateCache, cacheKeys } from '@/lib/redis';
+import { writeLimiter, applyRateLimit } from '@/lib/ratelimit';
 
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const rateLimitResponse = await applyRateLimit(request, writeLimiter);
+    if (rateLimitResponse) return rateLimitResponse;
     const user = await requireAuth(request);
     const { id } = await params;
 

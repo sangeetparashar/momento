@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getOrSetCache, cacheKeys, cacheTTL } from '@/lib/redis';
+import { readLimiter, applyRateLimit } from '@/lib/ratelimit';
 
 const PAGE_SIZE = 20;
 
@@ -9,6 +10,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const rateLimitResponse = await applyRateLimit(request, readLimiter);
+    if (rateLimitResponse) return rateLimitResponse;
     const { id } = await params;
     const { searchParams } = new URL(request.url);
     const cursor = searchParams.get('cursor') || undefined;

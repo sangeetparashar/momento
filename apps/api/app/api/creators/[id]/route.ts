@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getAuthUser } from '@/lib/auth';
 import { getOrSetCache, cacheKeys, cacheTTL } from '@/lib/redis';
+import { readLimiter, applyRateLimit } from '@/lib/ratelimit';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const rateLimitResponse = await applyRateLimit(request, readLimiter);
+    if (rateLimitResponse) return rateLimitResponse;
     const { id } = await params;
     const authUser = await getAuthUser(request);
 

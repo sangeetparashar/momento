@@ -2,12 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { getAuthUser } from '@/lib/auth';
 import { getOrSetCache, cacheKeys, cacheTTL } from '@/lib/redis';
+import { readLimiter, applyRateLimit } from '@/lib/ratelimit';
 
 const DEFAULT_RADIUS_KM = 50;
 const PAGE_SIZE = 20;
 
 export async function GET(request: NextRequest) {
   try {
+    const rateLimitResponse = await applyRateLimit(request, readLimiter);
+    if (rateLimitResponse) return rateLimitResponse;
     const { searchParams } = new URL(request.url);
     const lat = parseFloat(searchParams.get('lat') || '0');
     const lng = parseFloat(searchParams.get('lng') || '0');
@@ -25,16 +28,30 @@ export async function GET(request: NextRequest) {
 
     // Get the authenticated user for like status (optional)
     const authUser = await getAuthUser(request);
+    const userId = authUser?.id;
 
-    const cacheKey = cacheKeys.feed(lat, lng, radiusKm, cursor);
+    // Include userId in cache key so like status is per-user
+    const cacheKey = cacheKeys.feed(lat, lng, radiusKm, cursor) + (userId ? `:u:${userId}` : '');
 
-    let feedData = await getOrSetCache(cacheKey, cacheTTL.feed, async () => {
-      // Build cursor condition
+    const feedData = await getOrSetCache(cacheKey, cacheTTL.feed, async () => {
+      // Build cursor condition and optional likes join
       let cursorCondition = '';
       const params: any[] = [lng, lat, radiusMeters, PAGE_SIZE + 1];
+      let paramIndex = params.length; // next param index (1-based: paramIndex + 1)
+
+      let likesSelect = 'FALSE as "isLiked"';
+      let likesJoin = '';
+
+      if (userId) {
+        paramIndex++;
+        likesSelect = `l."id" IS NOT NULL as "isLiked"`;
+        likesJoin = `LEFT JOIN "likes" l ON l."postId" = p."id" AND l."userId" = $${paramIndex}`;
+        params.push(userId);
+      }
 
       if (cursor) {
-        cursorCondition = `AND p."createdAt" < $5`;
+        paramIndex++;
+        cursorCondition = `AND p."createdAt" < $${paramIndex}`;
         params.push(new Date(cursor));
       }
 
@@ -64,9 +81,11 @@ export async function GET(request: NextRequest) {
           u."socialLinks" as "creator_socialLinks",
           u."followerCount" as "creator_followerCount",
           u."postCount" as "creator_postCount",
-          ST_Distance(p."location", ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) as "distanceMeters"
+          ST_Distance(p."location", ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) as "distanceMeters",
+          ${likesSelect}
         FROM "posts" p
         JOIN "users" u ON p."creatorId" = u."id"
+        ${likesJoin}
         WHERE p."location" IS NOT NULL
           AND ST_DWithin(
             p."location",
@@ -98,6 +117,7 @@ export async function GET(request: NextRequest) {
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
         distanceMeters: Math.round(p.distanceMeters),
+        isLiked: Boolean(p.isLiked),
         creator: {
           id: p.creator_id,
           username: p.creator_username,
@@ -121,33 +141,6 @@ export async function GET(request: NextRequest) {
         hasMore,
       };
     });
-
-    // Clone posts to avoid mutating the cached object
-    feedData = { ...feedData, posts: feedData.posts.map((p: any) => ({ ...p })) };
-
-    // If authenticated, check which posts the user has liked
-    if (authUser && feedData.posts.length > 0) {
-      const postIds = feedData.posts.map((p: any) => p.id);
-      const userLikes = await prisma.like.findMany({
-        where: {
-          userId: authUser.id,
-          postId: { in: postIds },
-        },
-        select: { postId: true },
-      });
-
-      const likedPostIds = new Set(userLikes.map((l) => l.postId));
-      feedData.posts = feedData.posts.map((p: any) => ({
-        ...p,
-        isLiked: likedPostIds.has(p.id),
-      }));
-    } else {
-      // Default isLiked to false for unauthenticated users
-      feedData.posts = feedData.posts.map((p: any) => ({
-        ...p,
-        isLiked: false,
-      }));
-    }
 
     return NextResponse.json({ success: true, data: feedData });
   } catch (error) {

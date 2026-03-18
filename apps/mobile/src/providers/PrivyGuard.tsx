@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import Constants from 'expo-constants';
 import { ENV } from '@/config/env';
+import { apiService } from '@/services/api';
 
 /**
  * PrivyGuard wraps PrivyProvider + AuthBridge.
@@ -20,6 +21,13 @@ export const usePrivyGuard = () => useContext(PrivyGuardContext);
 
 export function PrivyGuard({ children }: { children: React.ReactNode }) {
   const isExpoGo = Constants.appOwnership === 'expo';
+  const isPrivyAvailable = !isExpoGo;
+
+  useEffect(() => {
+    if (!isPrivyAvailable) {
+      apiService.setTokenGetter(async () => null);
+    }
+  }, [isPrivyAvailable]);
 
   if (isExpoGo) {
     console.warn('[PrivyGuard] Running in Expo Go — Privy auth disabled (needs dev build)');

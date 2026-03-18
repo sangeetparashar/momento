@@ -1,0 +1,64 @@
+import { z } from 'zod';
+
+export const createPostSchema = z.object({
+  postType: z.enum(['TEXT', 'IMAGE', 'VIDEO']),
+  content: z.string().max(5000).optional().nullable(),
+  caption: z.string().max(2200).optional().nullable(),
+  mediaUrl: z.string().url().optional().nullable(),
+  mediaUrls: z.array(z.string().url()).max(10).optional().nullable(),
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+});
+
+export const createCommentSchema = z.object({
+  content: z.string().min(1).max(2000).trim(),
+});
+
+export const updateProfileSchema = z.object({
+  username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores').optional(),
+  displayName: z.string().min(1).max(50).optional(),
+  bio: z.string().max(500).optional(),
+  avatarUrl: z.string().url().optional().nullable(),
+  bannerUrl: z.string().url().optional().nullable(),
+  tokenSymbol: z.string().min(2).max(10).regex(/^[A-Z0-9]+$/, 'Token symbol must be uppercase letters and numbers').optional(),
+  socialLinks: z.object({
+    instagram: z.string().max(100).optional(),
+    twitter: z.string().max(100).optional(),
+    youtube: z.string().max(200).optional(),
+    spotify: z.string().max(200).optional(),
+    soundcloud: z.string().max(100).optional(),
+    tiktok: z.string().max(100).optional(),
+    website: z.string().url().max(200).optional(),
+  }).optional().nullable(),
+});
+
+export const locationSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+});
+
+export const pushTokenSchema = z.object({
+  pushToken: z.string().min(1),
+});
+
+export const uploadPresignSchema = z.object({
+  fileName: z.string().min(1).max(255),
+  contentType: z.string().min(1),
+  folder: z.string().max(255).regex(/^[a-zA-Z0-9_\/-]*$/, 'Invalid folder characters').optional(),
+});
+
+// Helper to validate and return parsed data or error response
+export function validateBody<T>(schema: z.ZodSchema<T>, body: unknown): { success: true; data: T } | { success: false; response: Response } {
+  const result = schema.safeParse(body);
+  if (!result.success) {
+    const errors = result.error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', ');
+    return {
+      success: false,
+      response: new Response(
+        JSON.stringify({ success: false, error: `Validation error: ${errors}` }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      ),
+    };
+  }
+  return { success: true, data: result.data };
+}

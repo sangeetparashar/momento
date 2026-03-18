@@ -6,6 +6,7 @@ import type {
   FeedResponse,
 } from '@momento/shared';
 import { apiService } from '@/services/api';
+import { showErrorToast } from '@/utils/toast';
 
 /**
  * Like / unlike mutation with optimistic updates across:
@@ -91,11 +92,12 @@ export function useLike() {
               .previousFeed,
         );
       }
+      showErrorToast('Failed to like post. Check your connection.');
     },
 
     onSettled: (_data, _err, { postId }) => {
+      // Only invalidate the specific post — feed is already optimistically updated
       queryClient.invalidateQueries({ queryKey: ['post', postId] });
-      queryClient.invalidateQueries({ queryKey: ['feed'] });
     },
   });
 }

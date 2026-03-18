@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { getOrSetCache, invalidateCache, cacheKeys, cacheTTL } from '@/lib/redis';
+import { readLimiter, writeLimiter, applyRateLimit } from '@/lib/ratelimit';
+import { updateProfileSchema, validateBody } from '@/lib/validation';
 
 export async function GET(request: NextRequest) {
   try {
+    const rateLimitResponse = await applyRateLimit(request, readLimiter);
+    if (rateLimitResponse) return rateLimitResponse;
     const authUser = await requireAuth(request);
 
     const user = await getOrSetCache(
@@ -66,25 +70,20 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
+    const rateLimitResponse = await applyRateLimit(request, writeLimiter);
+    if (rateLimitResponse) return rateLimitResponse;
+
     const authUser = await requireAuth(request);
 
     const body = await request.json();
-
-    // Whitelist of updatable fields
-    const allowedFields = [
-      'username',
-      'displayName',
-      'bio',
-      'avatarUrl',
-      'bannerUrl',
-      'tokenSymbol',
-      'socialLinks',
-    ];
+    const validation = validateBody(updateProfileSchema, body);
+    if (!validation.success) return validation.response;
 
     const updateData: Record<string, any> = {};
-    for (const field of allowedFields) {
-      if (body[field] !== undefined) {
-        updateData[field] = body[field];
+    const validatedData = validation.data;
+    for (const [key, value] of Object.entries(validatedData)) {
+      if (value !== undefined) {
+        updateData[key] = value;
       }
     }
 

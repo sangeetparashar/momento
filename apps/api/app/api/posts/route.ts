@@ -3,28 +3,19 @@ import prisma from '@/lib/prisma';
 import { requireCreator } from '@/lib/auth';
 import { invalidateCache } from '@/lib/redis';
 import { notifyNewPost } from '@/lib/notifications';
+import { postCreateLimiter, applyRateLimit } from '@/lib/ratelimit';
+import { createPostSchema, validateBody } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await applyRateLimit(request, postCreateLimiter);
+    if (rateLimitResponse) return rateLimitResponse;
     const user = await requireCreator(request);
 
     const body = await request.json();
-    const { postType, content, caption, mediaUrl, mediaUrls, latitude, longitude } = body;
-
-    // Validate required fields
-    if (latitude === undefined || longitude === undefined) {
-      return NextResponse.json(
-        { success: false, error: 'Latitude and longitude are required' },
-        { status: 400 }
-      );
-    }
-
-    if (!postType) {
-      return NextResponse.json(
-        { success: false, error: 'Post type is required' },
-        { status: 400 }
-      );
-    }
+    const validation = validateBody(createPostSchema, body);
+    if (!validation.success) return validation.response;
+    const { postType, content, caption, mediaUrl, mediaUrls, latitude, longitude } = validation.data;
 
     // Validate based on post type
     if (postType === 'TEXT' && !content) {
@@ -41,40 +32,40 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create the post
-    const post = await prisma.post.create({
-      data: {
-        creatorId: user.id,
-        postType,
-        content: content || null,
-        caption: caption || null,
-        mediaUrl: mediaUrl || null,
-        mediaUrls: mediaUrls || null,
-        latitude,
-        longitude,
-      },
-      include: {
-        creator: {
-          select: {
-            id: true,
-            username: true,
-            displayName: true,
-            avatarUrl: true,
-            bannerUrl: true,
-            tokenSymbol: true,
-            socialLinks: true,
-            followerCount: true,
-            postCount: true,
+    // Create the post and increment count atomically
+    const [post] = await prisma.$transaction([
+      prisma.post.create({
+        data: {
+          creatorId: user.id,
+          postType,
+          content: content || null,
+          caption: caption || null,
+          mediaUrl: mediaUrl || null,
+          mediaUrls: mediaUrls || null,
+          latitude,
+          longitude,
+        },
+        include: {
+          creator: {
+            select: {
+              id: true,
+              username: true,
+              displayName: true,
+              avatarUrl: true,
+              bannerUrl: true,
+              tokenSymbol: true,
+              socialLinks: true,
+              followerCount: true,
+              postCount: true,
+            },
           },
         },
-      },
-    });
-
-    // Increment the creator's post count
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { postCount: { increment: 1 } },
-    });
+      }),
+      prisma.user.update({
+        where: { id: user.id },
+        data: { postCount: { increment: 1 } },
+      }),
+    ]);
 
     // Invalidate feed and creator caches
     await invalidateCache(
@@ -83,7 +74,7 @@ export async function POST(request: NextRequest) {
       `creator:${user.id}`
     );
 
-    // Notify followers asynchronously (fire and forget)
+    // Notify followers asynchronously (fire and forget) — after transaction success
     const creatorName = post.creator.displayName || post.creator.username || 'A creator';
     notifyNewPost(user.id, creatorName, post.id).catch((err) =>
       console.error('Failed to send new post notifications:', err)

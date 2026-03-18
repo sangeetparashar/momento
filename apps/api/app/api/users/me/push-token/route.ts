@@ -1,20 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
+import { writeLimiter, applyRateLimit } from '@/lib/ratelimit';
+import { pushTokenSchema, validateBody } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await applyRateLimit(request, writeLimiter);
+    if (rateLimitResponse) return rateLimitResponse;
     const user = await requireAuth(request);
 
     const body = await request.json();
-    const { pushToken } = body;
-
-    if (!pushToken || typeof pushToken !== 'string') {
-      return NextResponse.json(
-        { success: false, error: 'Push token is required and must be a string' },
-        { status: 400 }
-      );
-    }
+    const validation = validateBody(pushTokenSchema, body);
+    if (!validation.success) return validation.response;
+    const { pushToken } = validation.data;
 
     // Validate Expo push token format
     if (!pushToken.startsWith('ExponentPushToken[') && !pushToken.startsWith('ExpoPushToken[')) {

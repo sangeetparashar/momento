@@ -96,35 +96,47 @@ class ApiService {
       fetchOptions.body = JSON.stringify(body);
     }
 
-    const response = await fetch(url, fetchOptions);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-    // No-content responses
-    if (response.status === 204) {
-      return undefined as T;
-    }
+    try {
+      const response = await fetch(url, { ...fetchOptions, signal: controller.signal });
+      clearTimeout(timeoutId);
 
-    let parsed: unknown;
-    const contentType = response.headers.get('content-type');
-    if (contentType?.includes('application/json')) {
-      parsed = await response.json();
-    } else {
-      parsed = await response.text();
-    }
+      // No-content responses
+      if (response.status === 204) {
+        return undefined as T;
+      }
 
-    if (!response.ok) {
-      throw new ApiError(response.status, parsed);
-    }
+      let parsed: unknown;
+      const contentType = response.headers.get('content-type');
+      if (contentType?.includes('application/json')) {
+        parsed = await response.json();
+      } else {
+        parsed = await response.text();
+      }
 
-    // Unwrap the { success, data } envelope used by all API routes
-    if (
-      parsed !== null &&
-      typeof parsed === 'object' &&
-      'success' in (parsed as Record<string, unknown>) &&
-      'data' in (parsed as Record<string, unknown>)
-    ) {
-      return (parsed as Record<string, unknown>).data as T;
+      if (!response.ok) {
+        throw new ApiError(response.status, parsed);
+      }
+
+      // Unwrap the { success, data } envelope used by all API routes
+      if (
+        parsed !== null &&
+        typeof parsed === 'object' &&
+        'success' in (parsed as Record<string, unknown>) &&
+        'data' in (parsed as Record<string, unknown>)
+      ) {
+        return (parsed as Record<string, unknown>).data as T;
+      }
+      return parsed as T;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new ApiError(408, 'Request timed out. Please check your connection and try again.');
+      }
+      throw error;
     }
-    return parsed as T;
   }
 
   // ---------------------------------------------------------------------------

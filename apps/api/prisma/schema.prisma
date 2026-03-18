@@ -84,6 +84,7 @@ model Post {
 
   @@index([creatorId])
   @@index([createdAt])
+  @@index([creatorId, createdAt])
   @@index([latitude, longitude])
   @@map("posts")
 }

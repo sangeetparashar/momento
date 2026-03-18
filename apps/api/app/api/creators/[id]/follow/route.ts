@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { requireAuth } from '@/lib/auth';
 import { invalidateCache, cacheKeys } from '@/lib/redis';
+import { writeLimiter, applyRateLimit } from '@/lib/ratelimit';
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const rateLimitResponse = await applyRateLimit(request, writeLimiter);
+    if (rateLimitResponse) return rateLimitResponse;
     const user = await requireAuth(request);
     const { id: followingId } = await params;
 
@@ -47,43 +51,89 @@ export async function POST(
 
     if (existingFollow) {
       // Unfollow: delete the follow and decrement counts
-      await prisma.$transaction([
-        prisma.follow.delete({
-          where: { id: existingFollow.id },
-        }),
-        prisma.user.update({
-          where: { id: followingId },
-          data: { followerCount: { decrement: 1 } },
-        }),
-        prisma.user.update({
-          where: { id: user.id },
-          data: { followingCount: { decrement: 1 } },
-        }),
-      ]);
+      try {
+        await prisma.$transaction([
+          prisma.follow.delete({
+            where: { id: existingFollow.id },
+          }),
+          prisma.user.update({
+            where: { id: followingId },
+            data: { followerCount: { decrement: 1 } },
+          }),
+          prisma.user.update({
+            where: { id: user.id },
+            data: { followingCount: { decrement: 1 } },
+          }),
+        ]);
 
-      isFollowing = false;
-      newFollowerCount = Math.max(0, targetUser.followerCount - 1);
+        const updatedUser = await prisma.user.findUnique({
+          where: { id: followingId },
+          select: { followerCount: true },
+        });
+        isFollowing = false;
+        newFollowerCount = Math.max(0, updatedUser?.followerCount ?? 0);
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+          const currentFollow = await prisma.follow.findUnique({
+            where: { followerId_followingId: { followerId: user.id, followingId } },
+          });
+          const currentUser = await prisma.user.findUnique({
+            where: { id: followingId },
+            select: { followerCount: true },
+          });
+          return NextResponse.json({
+            success: true,
+            data: { following: !!currentFollow, followerCount: Math.max(0, currentUser?.followerCount ?? 0) },
+          });
+        }
+        throw error;
+      }
     } else {
       // Follow: create the follow and increment counts
-      await prisma.$transaction([
-        prisma.follow.create({
-          data: {
-            followerId: user.id,
-            followingId,
-          },
-        }),
-        prisma.user.update({
-          where: { id: followingId },
-          data: { followerCount: { increment: 1 } },
-        }),
-        prisma.user.update({
-          where: { id: user.id },
-          data: { followingCount: { increment: 1 } },
-        }),
-      ]);
+      try {
+        await prisma.$transaction([
+          prisma.follow.create({
+            data: {
+              followerId: user.id,
+              followingId,
+            },
+          }),
+          prisma.user.update({
+            where: { id: followingId },
+            data: { followerCount: { increment: 1 } },
+          }),
+          prisma.user.update({
+            where: { id: user.id },
+            data: { followingCount: { increment: 1 } },
+          }),
+        ]);
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          // Concurrent follow request already created the follow — return current state
+          const currentFollow = await prisma.follow.findUnique({
+            where: { followerId_followingId: { followerId: user.id, followingId } },
+          });
+          const currentUser = await prisma.user.findUnique({
+            where: { id: followingId },
+            select: { followerCount: true },
+          });
+          return NextResponse.json({
+            success: true,
+            data: {
+              following: !!currentFollow,
+              followerCount: currentUser?.followerCount ?? 0,
+            },
+          });
+        }
+        throw error;
+      }
 
+      const updatedUser = await prisma.user.findUnique({
+        where: { id: followingId },
+        select: { followerCount: true },
+      });
       isFollowing = true;
-      newFollowerCount = targetUser.followerCount + 1;
+      newFollowerCount = updatedUser?.followerCount ?? targetUser.followerCount + 1;
     }
 
     // Invalidate cached profiles

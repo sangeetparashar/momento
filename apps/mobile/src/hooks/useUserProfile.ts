@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { User } from '@momento/shared';
 import { apiService } from '@/services/api';
+import { showErrorToast } from '@/utils/toast';
 
 type UpdateProfilePayload = Partial<
   Pick<
@@ -47,6 +48,7 @@ export function useUserProfile(enabled = true) {
           (context as { previous: User }).previous,
         );
       }
+      showErrorToast('Failed to update profile.');
     },
 
     onSettled: () => {

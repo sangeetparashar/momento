@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { createPresignedUpload } from '@/lib/storage';
+import { uploadLimiter, applyRateLimit } from '@/lib/ratelimit';
+import { uploadPresignSchema, validateBody } from '@/lib/validation';
 
 const ALLOWED_CONTENT_TYPES = [
   'image/jpeg',
@@ -16,17 +18,15 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await applyRateLimit(request, uploadLimiter);
+    if (rateLimitResponse) return rateLimitResponse;
+
     const user = await requireAuth(request);
 
     const body = await request.json();
-    const { fileName, contentType, folder } = body;
-
-    if (!fileName || !contentType) {
-      return NextResponse.json(
-        { success: false, error: 'fileName and contentType are required' },
-        { status: 400 }
-      );
-    }
+    const validation = validateBody(uploadPresignSchema, body);
+    if (!validation.success) return validation.response;
+    const { fileName, contentType, folder } = validation.data;
 
     if (!ALLOWED_CONTENT_TYPES.includes(contentType)) {
       return NextResponse.json(
@@ -39,7 +39,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Determine upload folder (sanitize to prevent path traversal)
-    const safeFolder = (folder || `users/${user.id}`).replace(/\.\.\//g, '').replace(/^\/+/, '');
+    const safeFolder = (folder || `users/${user.id}`).replace(/^\/+/, '');
+    if (safeFolder.includes('..')) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid folder path' },
+        { status: 400 }
+      );
+    }
 
     const result = await createPresignedUpload(safeFolder, fileName, contentType);
 

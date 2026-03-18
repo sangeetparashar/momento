@@ -10,6 +10,7 @@ import { LocationProvider } from '@/providers/LocationProvider';
 import { NotificationProvider } from '@/providers/NotificationProvider';
 import { ErrorBoundary } from '@/components/primitives';
 import { COLORS } from '@/styles/theme';
+import Toast from 'react-native-toast-message';
 
 export default function RootLayout() {
   return (
@@ -64,6 +65,7 @@ export default function RootLayout() {
           </PrivyGuard>
         </QueryProvider>
       </SafeAreaProvider>
+      <Toast />
     </GestureHandlerRootView>
   );
 }

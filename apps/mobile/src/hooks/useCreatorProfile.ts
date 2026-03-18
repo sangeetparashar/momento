@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { PublicCreator, FollowResponse } from '@momento/shared';
 import { apiService } from '@/services/api';
+import { showErrorToast } from '@/utils/toast';
 
 interface CreatorProfileResponse extends PublicCreator {
   isFollowing: boolean;
@@ -56,6 +57,7 @@ export function useCreatorProfile(creatorId: string | undefined) {
           (context as { previous: CreatorProfileResponse }).previous,
         );
       }
+      showErrorToast('Failed to update follow status.');
     },
 
     onSettled: (_data, _err, { creatorId: id }) => {

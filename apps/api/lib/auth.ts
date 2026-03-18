@@ -55,7 +55,7 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
 
   const privyUserId = claims.userId;
 
-  // Look up or create user in our database
+  // Check if user already exists in our database
   let user = await prisma.user.findUnique({
     where: { privyUserId },
     select: {
@@ -78,8 +78,14 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
       return null;
     }
 
-    user = await prisma.user.create({
-      data: {
+    // Use upsert to avoid race condition when two concurrent first-login
+    // requests both pass the findUnique check above. The second request
+    // will hit the `update` branch (no-op) instead of failing with a
+    // unique constraint violation.
+    user = await prisma.user.upsert({
+      where: { privyUserId },
+      update: {},
+      create: {
         privyUserId,
         walletAddress: wallet.address,
         email: email || null,

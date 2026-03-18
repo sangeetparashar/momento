@@ -3,9 +3,12 @@ import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { createVeriffSession } from '@/lib/veriff';
 import { invalidateCache, cacheKeys } from '@/lib/redis';
+import { kycLimiter, applyRateLimit } from '@/lib/ratelimit';
 
 export async function POST(request: NextRequest) {
   try {
+    const rateLimitResponse = await applyRateLimit(request, kycLimiter);
+    if (rateLimitResponse) return rateLimitResponse;
     const authUser = await requireAuth(request);
 
     // Get full user record
@@ -24,21 +27,6 @@ export async function POST(request: NextRequest) {
     if (user.role === 'CREATOR') {
       return NextResponse.json(
         { success: false, error: 'Already a creator' },
-        { status: 400 }
-      );
-    }
-
-    // Check if KYC is already pending or verified
-    if (user.kycStatus === 'PENDING') {
-      return NextResponse.json(
-        { success: false, error: 'KYC verification already in progress' },
-        { status: 400 }
-      );
-    }
-
-    if (user.kycStatus === 'VERIFIED') {
-      return NextResponse.json(
-        { success: false, error: 'KYC already verified, awaiting admin approval' },
         { status: 400 }
       );
     }
@@ -74,6 +62,25 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // Atomically transition kycStatus NONE → PENDING to prevent concurrent
+    // requests from both creating Veriff sessions (TOCTOU race condition).
+    // Only one request can win this update; losers get count === 0.
+    const updated = await prisma.user.updateMany({
+      where: {
+        id: user.id,
+        kycStatus: 'NONE',
+      },
+      data: { kycStatus: 'PENDING' },
+    });
+
+    if (updated.count === 0) {
+      // Another request already started KYC, or user is already verified
+      return NextResponse.json(
+        { success: false, error: 'KYC verification already in progress or completed' },
+        { status: 400 }
+      );
+    }
+
     // Parse optional body for name
     let firstName: string | undefined;
     let lastName: string | undefined;
@@ -85,7 +92,7 @@ export async function POST(request: NextRequest) {
       // No body is fine
     }
 
-    // Create Veriff session
+    // Create Veriff session (only one request reaches here per user)
     const session = await createVeriffSession(user.id, firstName, lastName);
 
     // Store KYC record
@@ -95,12 +102,6 @@ export async function POST(request: NextRequest) {
         veriffSessionId: session.id,
         status: 'PENDING',
       },
-    });
-
-    // Update user KYC status
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { kycStatus: 'PENDING' },
     });
 
     await invalidateCache(cacheKeys.userProfile(user.id));
