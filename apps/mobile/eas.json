@@ -7,33 +7,40 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleDebug"
+      },
       "ios": {
         "simulator": true
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "http://localhost:3001",
-        "EXPO_PUBLIC_PRIVY_APP_ID": "dev-privy-app-id",
-        "EXPO_PUBLIC_SOLANA_RPC_URL": "https://api.devnet.solana.com",
+        "EXPO_PUBLIC_API_URL": "https://momento-api-ten.vercel.app/api",
+        "EXPO_PUBLIC_PRIVY_APP_ID": "cmjbzyj4q00twlb0d1uc5w0sb",
+        "EXPO_PUBLIC_SOLANA_RPC_URL": "https://devnet.helius-rpc.com/?api-key=b04d4e94-cc50-4905-a43d-909652645bd2",
         "EXPO_PUBLIC_SOLANA_NETWORK": "devnet"
       }
     },
     "preview": {
       "distribution": "internal",
       "autoIncrement": true,
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://staging-api.momento.app",
-        "EXPO_PUBLIC_PRIVY_APP_ID": "staging-privy-app-id",
-        "EXPO_PUBLIC_SOLANA_RPC_URL": "https://api.devnet.solana.com",
+        "EXPO_PUBLIC_API_URL": "https://momento-api-ten.vercel.app/api",
+        "EXPO_PUBLIC_PRIVY_APP_ID": "cmjbzyj4q00twlb0d1uc5w0sb",
+        "EXPO_PUBLIC_SOLANA_RPC_URL": "https://devnet.helius-rpc.com/?api-key=b04d4e94-cc50-4905-a43d-909652645bd2",
         "EXPO_PUBLIC_SOLANA_NETWORK": "devnet"
       }
     },
     "production": {
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://api.momento.app",
-        "EXPO_PUBLIC_PRIVY_APP_ID": "prod-privy-app-id",
-        "EXPO_PUBLIC_SOLANA_RPC_URL": "https://api.mainnet-beta.solana.com",
-        "EXPO_PUBLIC_SOLANA_NETWORK": "mainnet-beta"
+        "EXPO_PUBLIC_API_URL": "https://momento-api-ten.vercel.app/api",
+        "EXPO_PUBLIC_PRIVY_APP_ID": "cmjbzyj4q00twlb0d1uc5w0sb",
+        "EXPO_PUBLIC_SOLANA_RPC_URL": "https://devnet.helius-rpc.com/?api-key=b04d4e94-cc50-4905-a43d-909652645bd2",
+        "EXPO_PUBLIC_SOLANA_NETWORK": "devnet"
       }
     }
   },
