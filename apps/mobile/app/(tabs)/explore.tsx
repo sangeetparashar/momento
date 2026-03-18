@@ -4,8 +4,8 @@ import {
   StyleSheet,
   Pressable,
   FlatList,
-  Dimensions,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
@@ -18,9 +18,7 @@ import type { PostWithCreator, PublicCreator } from '@momento/shared';
 
 type ExploreTab = 'CREATORS' | 'POSTS';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLUMN_GAP = SPACING.xs;
-const ITEM_WIDTH = (SCREEN_WIDTH - SPACING.md * 2 - COLUMN_GAP) / 2;
 
 interface GridItem {
   id: string;
@@ -34,6 +32,8 @@ interface GridItem {
 }
 
 export default function ExploreScreen() {
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const ITEM_WIDTH = useMemo(() => (SCREEN_WIDTH - SPACING.md * 2 - COLUMN_GAP) / 2, [SCREEN_WIDTH]);
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<ExploreTab>('CREATORS');
   const feedQuery = useFeed();
@@ -135,7 +135,7 @@ export default function ExploreScreen() {
         </Pressable>
       );
     },
-    [handleItemPress]
+    [handleItemPress, ITEM_WIDTH]
   );
 
   return (
@@ -182,13 +182,13 @@ export default function ExploreScreen() {
       </View>
 
       {/* Masonry Grid */}
-      {activeTab === 'CREATORS' && creatorsLoading ? (
+      {((activeTab === 'CREATORS' && creatorsLoading) || (activeTab === 'POSTS' && feedQuery.isLoading)) ? (
         <View style={styles.emptyState}>
           <ActivityIndicator size="large" color={COLORS.textTertiary} />
         </View>
       ) : (
         <FlatList
-          data={[{ key: 'masonry' }]}
+          data={gridItems.length > 0 ? [{ key: 'masonry' }] : []}
           renderItem={() => (
             <View style={styles.masonryContainer}>
               <View style={styles.column}>

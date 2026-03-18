@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import type { Post, PostType } from '@momento/shared';
+import type { PostWithCreator, PostType } from '@momento/shared';
 import { apiService } from '@/services/api';
 import { useLocation } from '@/providers/LocationProvider';
 import { showErrorToast } from '@/utils/toast';
@@ -20,7 +20,7 @@ export function useCreatePost() {
   const queryClient = useQueryClient();
   const { location } = useLocation();
 
-  return useMutation<Post, Error, CreatePostInput>({
+  return useMutation<PostWithCreator, Error, CreatePostInput>({
     mutationFn: (input) => {
       if (!location) {
         return Promise.reject(
@@ -28,7 +28,7 @@ export function useCreatePost() {
         );
       }
 
-      return apiService.post<Post>('/posts', {
+      return apiService.post<PostWithCreator>('/posts', {
         ...input,
         latitude: location.latitude,
         longitude: location.longitude,

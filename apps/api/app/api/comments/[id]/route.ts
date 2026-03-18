@@ -48,10 +48,7 @@ export async function DELETE(
     // Delete comment and decrement count
     await prisma.$transaction([
       prisma.comment.delete({ where: { id } }),
-      prisma.post.update({
-        where: { id: comment.postId },
-        data: { commentCount: { decrement: 1 } },
-      }),
+      prisma.$executeRaw`UPDATE "posts" SET "commentCount" = GREATEST("commentCount" - 1, 0), "updatedAt" = NOW() WHERE "id" = ${comment.postId}`,
     ]);
 
     // Invalidate caches

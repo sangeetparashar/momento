@@ -48,6 +48,13 @@ function getIdentifier(request: NextRequest): string {
   if (authHeader) {
     const token = authHeader.replace(/^Bearer\s+/i, '');
     if (token.length > 0) {
+      try {
+        const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
+        const userId = payload.sub || payload.userId || payload.sid;
+        if (userId) return `auth:${userId}`;
+      } catch {
+        // Fall through to token prefix if JWT decode fails
+      }
       return `auth:${token.substring(0, 32)}`;
     }
   }

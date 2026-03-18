@@ -60,7 +60,6 @@ export function TokenList({ tokens, onBuyPress }: TokenListProps) {
                 },
               ]}
             >
-              {(token.change24h ?? 0) >= 0 ? '+' : ''}
               {formatPercentage(token.change24h ?? 0)}
             </Text>
           </View>

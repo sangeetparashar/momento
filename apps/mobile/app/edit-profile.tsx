@@ -91,14 +91,19 @@ export default function EditProfileScreen() {
       }
     });
 
-    updateProfile({
-      displayName: displayName.trim(),
-      bio: bio.trim(),
-      socialLinks,
-      avatarUrl: avatarUri,
-    });
-
-    router.back();
+    updateProfile(
+      {
+        displayName: displayName.trim(),
+        bio: bio.trim(),
+        socialLinks,
+        avatarUrl: avatarUri,
+      },
+      {
+        onSuccess: () => {
+          router.back();
+        },
+      }
+    );
   }, [
     displayName,
     bio,

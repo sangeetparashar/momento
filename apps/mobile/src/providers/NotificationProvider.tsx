@@ -40,10 +40,7 @@ interface NotificationContextValue {
   lastNotification: any | null;
 }
 
-const NotificationContext = createContext<NotificationContextValue>({
-  pushToken: null,
-  lastNotification: null,
-});
+const NotificationContext = createContext<NotificationContextValue | null>(null);
 
 interface NotificationProviderProps {
   children: React.ReactNode;
@@ -120,7 +117,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       } else if (data.type === 'creator' && data.creatorId) {
         router.push(`/creator/${data.creatorId}`);
       } else if (data.type === 'wallet') {
-        router.push('/wallet');
+        router.push('/(tabs)/profile');
       }
     },
     [router],
@@ -170,7 +167,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
  */
 export function useNotifications(): NotificationContextValue {
   const ctx = useContext(NotificationContext);
-  if (!ctx) {
+  if (ctx === null) {
     throw new Error(
       'useNotifications must be used within a NotificationProvider',
     );

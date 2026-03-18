@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Pressable, StyleSheet, Animated } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +24,11 @@ export function LikeButton({
   const [isLiked, setIsLiked] = useState(initialLiked);
   const [likeCount, setLikeCount] = useState(initialCount);
   const likeMutation = useLike();
+
+  useEffect(() => {
+    setIsLiked(initialLiked);
+    setLikeCount(initialCount);
+  }, [initialLiked, initialCount]);
 
   const scale = useRef(new Animated.Value(1)).current;
   const rotation = useRef(new Animated.Value(0)).current;

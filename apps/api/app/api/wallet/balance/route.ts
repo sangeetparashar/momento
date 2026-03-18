@@ -2,9 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { fetchWalletBalance } from '@/lib/helius';
 import { getOrSetCache, cacheKeys, cacheTTL } from '@/lib/redis';
+import { readLimiter, applyRateLimit } from '@/lib/ratelimit';
 
 export async function GET(request: NextRequest) {
   try {
+    const rateLimitResponse = await applyRateLimit(request, readLimiter);
+    if (rateLimitResponse) return rateLimitResponse;
     const user = await requireAuth(request);
 
     if (!user.walletAddress) {

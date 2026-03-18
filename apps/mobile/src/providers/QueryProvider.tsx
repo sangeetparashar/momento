@@ -38,8 +38,8 @@ export function QueryProvider({ children }: QueryProviderProps) {
         dehydrateOptions: {
           shouldDehydrateQuery: (query) => {
             // Only persist feed, profile, and creator queries
-            const key = query.queryKey[0] as string;
-            return ['feed', 'userProfile', 'creatorProfile', 'nearbyCreators'].includes(key);
+            const key = String(query.queryKey[0]);
+            return ['feed', 'userProfile', 'creator', 'creators', 'walletBalance'].includes(key);
           },
         },
       }}

@@ -118,14 +118,11 @@ export async function DELETE(
       );
     }
 
-    // Delete the post (cascades to likes and comments)
-    await prisma.post.delete({ where: { id } });
-
-    // Decrement the creator's post count
-    await prisma.user.update({
-      where: { id: post.creatorId },
-      data: { postCount: { decrement: 1 } },
-    });
+    // Delete the post (cascades to likes and comments) and decrement count atomically
+    await prisma.$transaction([
+      prisma.post.delete({ where: { id } }),
+      prisma.$executeRaw`UPDATE "users" SET "postCount" = GREATEST("postCount" - 1, 0), "updatedAt" = NOW() WHERE "id" = ${post.creatorId}`,
+    ]);
 
     // Invalidate caches
     await invalidateCache(

@@ -11,13 +11,21 @@ export function useNearbyCreators(radius = 50) {
   const { location } = useLocation();
 
   const query = useQuery<NearbyCreatorsResponse>({
-    queryKey: ['creators', 'nearby', location?.latitude, location?.longitude, radius],
-    queryFn: () =>
-      apiService.get<NearbyCreatorsResponse>('/creators/nearby', {
-        lat: location!.latitude,
-        lng: location!.longitude,
+    queryKey: [
+      'creators',
+      'nearby',
+      location ? Math.round(location.latitude * 100) / 100 : null,
+      location ? Math.round(location.longitude * 100) / 100 : null,
+      radius,
+    ],
+    queryFn: () => {
+      if (!location) throw new Error('Location not available');
+      return apiService.get<NearbyCreatorsResponse>('/creators/nearby', {
+        lat: location.latitude,
+        lng: location.longitude,
         radius,
-      }),
+      });
+    },
     enabled: !!location,
     staleTime: 2 * 60 * 1000, // 2 minutes, matches API cache TTL
   });

@@ -47,7 +47,11 @@ export default function LoginScreen() {
 
   // In Expo Go, add a "Preview Mode" button to skip login
   const handlePreview = useCallback(() => {
-    router.replace('/(tabs)/home');
+    Alert.alert(
+      'Preview Mode',
+      'You are browsing without signing in. Some features may be limited.',
+      [{ text: 'Continue', onPress: () => router.replace('/(tabs)/home') }]
+    );
   }, [router]);
 
   return (

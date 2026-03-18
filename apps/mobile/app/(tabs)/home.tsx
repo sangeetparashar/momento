@@ -120,6 +120,7 @@ export default function HomeScreen() {
           />
         }
         showsVerticalScrollIndicator={false}
+        estimatedItemSize={400}
       />
     </SafeAreaView>
   );

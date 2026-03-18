@@ -34,7 +34,7 @@ export async function GET(
         },
       });
 
-      if (!user) return null;
+      if (!user || user.role !== 'CREATOR') return null;
 
       return {
         id: user.id,

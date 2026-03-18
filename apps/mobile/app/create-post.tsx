@@ -86,16 +86,24 @@ export default function CreatePostScreen() {
 
       const postType = uploadedMediaUrl ? PostType.IMAGE : PostType.TEXT;
 
-      createPostMutation.mutate({
-        caption: caption.trim(),
-        postType,
-        mediaUrl: uploadedMediaUrl,
-      });
-
-      router.back();
+      createPostMutation.mutate(
+        {
+          caption: caption.trim(),
+          postType,
+          mediaUrl: uploadedMediaUrl,
+        },
+        {
+          onSuccess: () => {
+            router.back();
+          },
+          onError: () => {
+            Alert.alert('Error', 'Failed to create post. Please try again.');
+            setIsSubmitting(false);
+          },
+        }
+      );
     } catch (error) {
       Alert.alert('Error', 'Failed to create post. Please try again.');
-    } finally {
       setIsSubmitting(false);
     }
   }, [caption, mediaUri, createPostMutation, uploadFromUri, router]);

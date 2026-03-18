@@ -56,14 +56,8 @@ export async function POST(
           prisma.follow.delete({
             where: { id: existingFollow.id },
           }),
-          prisma.user.update({
-            where: { id: followingId },
-            data: { followerCount: { decrement: 1 } },
-          }),
-          prisma.user.update({
-            where: { id: user.id },
-            data: { followingCount: { decrement: 1 } },
-          }),
+          prisma.$executeRaw`UPDATE "users" SET "followerCount" = GREATEST("followerCount" - 1, 0), "updatedAt" = NOW() WHERE "id" = ${followingId}`,
+          prisma.$executeRaw`UPDATE "users" SET "followingCount" = GREATEST("followingCount" - 1, 0), "updatedAt" = NOW() WHERE "id" = ${user.id}`,
         ]);
 
         const updatedUser = await prisma.user.findUnique({

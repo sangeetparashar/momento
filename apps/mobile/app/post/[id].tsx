@@ -7,8 +7,8 @@ import {
   TextInput,
   KeyboardAvoidingView,
   Platform,
-  Dimensions,
   ActivityIndicator,
+  useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
@@ -23,8 +23,6 @@ import { useQuery } from '@tanstack/react-query';
 import { useFeed, useComments } from '@/hooks';
 import { apiService } from '@/services/api';
 import type { PostWithCreator } from '@momento/shared';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function PostScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -159,14 +157,18 @@ export default function PostScreen() {
           </Pressable>
 
           {/* Post Image */}
-          {post.mediaUrl && (
+          {post.mediaUrl ? (
             <Image
               source={{ uri: post.mediaUrl }}
               style={styles.postImage}
               contentFit="cover"
               transition={200}
             />
-          )}
+          ) : post.content ? (
+            <View style={styles.textContentContainer}>
+              <Text style={styles.textContent}>{post.content}</Text>
+            </View>
+          ) : null}
 
           {/* Caption */}
           {post.caption && (
@@ -424,5 +426,16 @@ const styles = StyleSheet.create({
     color: COLORS.textTertiary,
     textAlign: 'center',
     marginVertical: SPACING.md,
+  },
+  textContentContainer: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.lg,
+    minHeight: 120,
+    justifyContent: 'center',
+  },
+  textContent: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textPrimary,
+    lineHeight: 24,
   },
 });

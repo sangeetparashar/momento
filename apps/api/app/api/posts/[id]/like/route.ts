@@ -48,10 +48,7 @@ export async function POST(
           prisma.like.delete({
             where: { id: existingLike.id },
           }),
-          prisma.post.update({
-            where: { id: postId },
-            data: { likeCount: { decrement: 1 } },
-          }),
+          prisma.$executeRaw`UPDATE "posts" SET "likeCount" = GREATEST("likeCount" - 1, 0), "updatedAt" = NOW() WHERE "id" = ${postId}`,
         ]);
 
         const updatedPost = await prisma.post.findUnique({

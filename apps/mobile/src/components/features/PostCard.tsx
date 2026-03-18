@@ -74,7 +74,7 @@ export function PostCard({ post }: PostCardProps) {
       </Pressable>
 
       {/* Post Media */}
-      {post.mediaUrl && (
+      {post.mediaUrl ? (
         <AnimatedPressable onPress={handleImagePress} scaleValue={0.98}>
           <Image
             source={{ uri: post.mediaUrl }}
@@ -84,7 +84,11 @@ export function PostCard({ post }: PostCardProps) {
             placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
           />
         </AnimatedPressable>
-      )}
+      ) : post.content ? (
+        <View style={styles.textContentContainer}>
+          <Text style={styles.textContent}>{post.content}</Text>
+        </View>
+      ) : null}
 
       {/* Actions Row */}
       <View style={styles.actionsRow}>
@@ -197,5 +201,16 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.bodySmall,
     color: COLORS.textPrimary,
     flex: 1,
+  },
+  textContentContainer: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.lg,
+    minHeight: 120,
+    justifyContent: 'center',
+  },
+  textContent: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textPrimary,
+    lineHeight: 24,
   },
 });

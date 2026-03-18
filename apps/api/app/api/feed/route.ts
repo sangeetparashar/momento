@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const radiusKm = parseInt(searchParams.get('radius') || String(DEFAULT_RADIUS_KM), 10);
     const cursor = searchParams.get('cursor') || undefined;
 
-    if (!lat && !lng) {
+    if (!searchParams.has('lat') || !searchParams.has('lng') || isNaN(lat) || isNaN(lng)) {
       return NextResponse.json(
         { success: false, error: 'Latitude and longitude are required' },
         { status: 400 }
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
       const params: any[] = [lng, lat, radiusMeters, PAGE_SIZE + 1];
       let paramIndex = params.length; // next param index (1-based: paramIndex + 1)
 
-      let likesSelect = 'FALSE as "isLiked"';
+      let likesSelect = 'false::boolean as "isLiked"';
       let likesJoin = '';
 
       if (userId) {
@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
         createdAt: p.createdAt,
         updatedAt: p.updatedAt,
         distanceMeters: Math.round(p.distanceMeters),
-        isLiked: Boolean(p.isLiked),
+        isLiked: p.isLiked === true,
         creator: {
           id: p.creator_id,
           username: p.creator_username,

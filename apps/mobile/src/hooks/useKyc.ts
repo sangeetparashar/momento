@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import * as WebBrowser from 'expo-web-browser';
 import type { User } from '@momento/shared';
 import { KycStatus } from '@momento/shared';
 import { apiService } from '@/services/api';
@@ -68,6 +69,12 @@ export function useKyc() {
 
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['userProfile'] });
+    },
+
+    onSuccess: async (data) => {
+      if (data.verificationUrl) {
+        await WebBrowser.openBrowserAsync(data.verificationUrl);
+      }
     },
   });
 }

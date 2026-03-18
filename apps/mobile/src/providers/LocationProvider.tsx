@@ -31,13 +31,7 @@ interface LocationContextValue {
   refresh: () => Promise<void>;
 }
 
-const LocationContext = createContext<LocationContextValue>({
-  location: null,
-  isLoading: true,
-  error: null,
-  hasPermission: false,
-  refresh: async () => {},
-});
+const LocationContext = createContext<LocationContextValue | null>(null);
 
 interface LocationProviderProps {
   children: React.ReactNode;
@@ -176,7 +170,7 @@ export function LocationProvider({ children }: LocationProviderProps) {
  */
 export function useLocation(): LocationContextValue {
   const ctx = useContext(LocationContext);
-  if (!ctx) {
+  if (ctx === null) {
     throw new Error('useLocation must be used within a LocationProvider');
   }
   return ctx;

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { getOrSetCache, invalidateCache, cacheKeys, cacheTTL } from '@/lib/redis';
@@ -150,6 +151,12 @@ export async function PATCH(request: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return NextResponse.json(
+        { success: false, error: 'Username already taken' },
+        { status: 409 }
+      );
+    }
     if (error instanceof Response) {
       return error;
     }

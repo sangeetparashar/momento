@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const cursorParam = searchParams.get('cursor');
     const cursor = cursorParam ? parseFloat(cursorParam) : null;
 
-    if (!lat && !lng) {
+    if (!searchParams.has('lat') || !searchParams.has('lng') || isNaN(lat) || isNaN(lng)) {
       return NextResponse.json(
         { success: false, error: 'Latitude and longitude are required' },
         { status: 400 }

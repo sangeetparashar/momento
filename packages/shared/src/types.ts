@@ -63,8 +63,10 @@ export interface PublicCreator {
   tokenSymbol?: string;
   socialLinks?: SocialLinks;
   followerCount: number;
+  followingCount?: number;
   postCount: number;
-  distanceMeters?: number;
+  role?: string;
+  createdAt?: string;
 }
 
 // Post types
@@ -75,7 +77,7 @@ export interface Post {
   content?: string;
   caption?: string;
   mediaUrl?: string;
-  mediaUrls?: string[];
+  mediaUrls?: string[] | null;
   latitude: number;
   longitude: number;
   likeCount: number;
@@ -87,6 +89,7 @@ export interface Post {
 export interface PostWithCreator extends Post {
   creator: PublicCreator;
   isLiked?: boolean;
+  distanceMeters?: number;
 }
 
 // Comment types
@@ -134,6 +137,8 @@ export interface FeedResponse {
 
 export interface NearbyCreatorsResponse {
   creators: PublicCreator[];
+  nextCursor?: string;
+  hasMore: boolean;
 }
 
 export interface FollowResponse {
@@ -144,4 +149,29 @@ export interface FollowResponse {
 export interface LikeResponse {
   liked: boolean;
   likeCount: number;
+}
+
+export interface CommentsResponse {
+  comments: Comment[];
+  nextCursor?: string;
+  hasMore: boolean;
+}
+
+export interface UploadPresignResponse {
+  uploadUrl: string;
+  publicUrl: string;
+  path: string;
+}
+
+export interface KycApplicationResponse {
+  status: string;
+  verificationUrl?: string;
+  sessionId?: string;
+  message?: string;
+  user?: {
+    id: string;
+    role: string;
+    kycStatus: string;
+    isAdminApproved: boolean;
+  };
 }

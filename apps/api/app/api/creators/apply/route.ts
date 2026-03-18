@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     const updated = await prisma.user.updateMany({
       where: {
         id: user.id,
-        kycStatus: 'NONE',
+        kycStatus: { in: ['NONE', 'REJECTED'] },
       },
       data: { kycStatus: 'PENDING' },
     });

@@ -33,11 +33,12 @@ export function useFeed(options: UseFeedOptions = {}) {
   const query = useInfiniteQuery<FeedResponse>({
     queryKey: [
       'feed',
-      location?.latitude,
-      location?.longitude,
+      location ? Math.round(location.latitude * 100) / 100 : null,
+      location ? Math.round(location.longitude * 100) / 100 : null,
       radiusKm,
     ],
     queryFn: async ({ pageParam }) => {
+      if (!location) throw new Error('Location not available');
       const cursor = pageParam as string | undefined;
 
       // Determine radius: use override or try auto-expanding
