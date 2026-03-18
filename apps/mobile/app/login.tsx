@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect } from 'react';
+import React, { useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
@@ -13,29 +13,20 @@ export default function LoginScreen() {
   const auth = useAuth();
   const { isPrivyAvailable } = usePrivyGuard();
 
-  useEffect(() => {
-    console.log('[LoginScreen] Mounted. isPrivyAvailable:', isPrivyAvailable, 'auth.isReady:', auth.isReady, 'login type:', typeof auth.login);
-  }, [isPrivyAvailable, auth.isReady, auth.login]);
-
   const handleSignUp = useCallback(async () => {
-    console.log('[LoginScreen] SIGN UP tapped');
     try {
       if (!isPrivyAvailable) {
         Alert.alert('Dev Build Required', 'Privy auth requires a development build.');
         return;
       }
-      console.log('[LoginScreen] Calling login...');
       await auth.login();
-      console.log('[LoginScreen] Login succeeded, navigating...');
       router.replace('/(tabs)/home');
     } catch (error: any) {
-      console.log('[LoginScreen] Login error:', error?.message || error);
       Alert.alert('Login Error', error?.message || String(error));
     }
   }, [auth, router, isPrivyAvailable]);
 
   const handleLogin = useCallback(async () => {
-    console.log('[LoginScreen] LOGIN tapped');
     try {
       if (!isPrivyAvailable) {
         Alert.alert('Dev Build Required', 'Privy auth requires a development build.');
@@ -44,7 +35,6 @@ export default function LoginScreen() {
       await auth.login();
       router.replace('/(tabs)/home');
     } catch (error: any) {
-      console.log('[LoginScreen] Login error:', error?.message || error);
       Alert.alert('Login Error', error?.message || String(error));
     }
   }, [auth, router, isPrivyAvailable]);

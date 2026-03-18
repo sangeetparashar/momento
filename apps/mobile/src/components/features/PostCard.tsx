@@ -5,11 +5,11 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar, AnimatedPressable } from '@/components/primitives';
 import { LikeButton } from './LikeButton';
-import { COLORS, SPACING, RADII } from '@/styles/theme';
+import { BookmarkButton } from './BookmarkButton';
+import { COLORS, SPACING } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo, formatNumber } from '@/utils/formatters';
 import type { PostWithCreator } from '@momento/shared';
-import { apiService } from '@/services/api';
 
 interface PostCardProps {
   post: PostWithCreator;
@@ -123,18 +123,7 @@ export function PostCard({ post }: PostCardProps) {
             color={COLORS.textSecondary}
           />
         </Pressable>
-        <Pressable
-          style={styles.bookmarkButton}
-          onPress={() => {
-            apiService.post('/users/me/saved', { postId: post.id }).catch(() => {});
-          }}
-        >
-          <Ionicons
-            name="bookmark-outline"
-            size={22}
-            color={COLORS.textSecondary}
-          />
-        </Pressable>
+        <BookmarkButton postId={post.id} initialSaved={post.isSaved} />
       </View>
 
       {/* Caption */}
@@ -204,10 +193,6 @@ const styles = StyleSheet.create({
   },
   shareButton: {
     marginLeft: 'auto',
-  },
-  bookmarkButton: {
-    padding: SPACING.xs,
-    marginLeft: SPACING.sm,
   },
   captionContainer: {
     flexDirection: 'row',

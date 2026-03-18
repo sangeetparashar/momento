@@ -18,7 +18,8 @@ import { Text, Avatar } from '@/components/primitives';
 import { useUserProfile, useKyc, useUpload } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
-import { KycStatus, SOCIAL_PLATFORMS } from '@momento/shared';
+import { KycStatus, UserRole, SOCIAL_PLATFORMS } from '@momento/shared';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface SocialInput {
   platform: string;
@@ -30,8 +31,10 @@ interface SocialInput {
 
 export default function EditProfileScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user, updateProfile, isUpdating } = useUserProfile();
   const kycMutation = useKyc();
+  const isCreator = user?.role === UserRole.CREATOR;
   const { pickAndUpload, isUploading } = useUpload();
 
   const [displayName, setDisplayName] = useState('');
@@ -93,15 +96,22 @@ export default function EditProfileScreen() {
       }
     });
 
+    const payload: Record<string, unknown> = {
+      displayName: displayName.trim(),
+      bio: bio.trim(),
+      socialLinks,
+      avatarUrl: avatarUri,
+    };
+
+    if (isCreator) {
+      payload.tokenSymbol = tokenSymbol.trim();
+    }
+
     updateProfile(
-      {
-        displayName: displayName.trim(),
-        bio: bio.trim(),
-        socialLinks,
-        avatarUrl: avatarUri,
-      },
+      payload as any,
       {
         onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['userProfile'] });
           router.back();
         },
       }
@@ -111,7 +121,10 @@ export default function EditProfileScreen() {
     bio,
     avatarUri,
     socialInputs,
+    tokenSymbol,
+    isCreator,
     updateProfile,
+    queryClient,
     router,
   ]);
 
@@ -265,20 +278,22 @@ export default function EditProfileScreen() {
             />
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Token Symbol</Text>
-            <TextInput
-              style={styles.textInput}
-              value={tokenSymbol}
-              onChangeText={(text) =>
-                setTokenSymbol(text.toUpperCase().slice(0, 5))
-              }
-              placeholder="e.g. DEEL"
-              placeholderTextColor={COLORS.textTertiary}
-              autoCapitalize="characters"
-              maxLength={5}
-            />
-          </View>
+          {isCreator && (
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Token Symbol</Text>
+              <TextInput
+                style={styles.textInput}
+                value={tokenSymbol}
+                onChangeText={(text) =>
+                  setTokenSymbol(text.toUpperCase().slice(0, 5))
+                }
+                placeholder="e.g. DEEL"
+                placeholderTextColor={COLORS.textTertiary}
+                autoCapitalize="characters"
+                maxLength={5}
+              />
+            </View>
+          )}
 
           <View style={styles.inputGroup}>
             <Text style={styles.inputLabel}>Bio</Text>

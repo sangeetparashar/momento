@@ -10,3 +10,4 @@ export { useComments } from './useComments';
 export { useNearbyCreators } from './useNearbyCreators';
 export { useDeleteAccount } from './useDeleteAccount';
 export { useSavedPosts } from './useSavedPosts';
+export { usePublicProfile } from './usePublicProfile';

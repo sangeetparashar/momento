@@ -11,7 +11,11 @@ export { usePrivyGuard };
  * determined at module level by whether PrivyGuard rendered the real PrivyProvider.
  * The branching happens in PrivyGuard (component tree), not here.
  */
-let _privyHooks: { usePrivy: any; useLoginWithOAuth: any } | false | null = null;
+let _privyHooks: {
+  usePrivy: any;
+  useLoginWithOAuth: any;
+  useCreateWallet: any;
+} | false | null = null;
 
 function getPrivyHooks() {
   if (_privyHooks === null) {
@@ -20,6 +24,7 @@ function getPrivyHooks() {
       _privyHooks = {
         usePrivy: privy.usePrivy,
         useLoginWithOAuth: privy.useLoginWithOAuth,
+        useCreateWallet: privy.useCreateWallet,
       };
     } catch {
       _privyHooks = false;
@@ -57,12 +62,27 @@ export function useAuth() {
   const privy = hooks.usePrivy();
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const { login: oauthLogin } = hooks.useLoginWithOAuth();
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const { createWallet } = hooks.useCreateWallet();
 
   return {
     isReady: privy.isReady,
     user: privy.user,
     login: async () => {
       await oauthLogin({ provider: 'google' });
+
+      // Attempt to create an embedded Solana wallet if the user doesn't have one
+      try {
+        const hasWallet = privy.user?.linkedAccounts?.some(
+          (account: any) => account.type === 'wallet' && account.walletClientType === 'privy',
+        );
+        if (!hasWallet) {
+          await createWallet();
+        }
+      } catch (walletError: any) {
+        // Don't block login if wallet creation fails (e.g. wallets not enabled in Privy dashboard)
+        console.warn('[useAuth] Embedded wallet creation failed:', walletError?.message || walletError);
+      }
     },
     logout: privy.logout,
     getAccessToken: async () => null, // handled by AuthBridge

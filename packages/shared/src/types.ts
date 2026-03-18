@@ -89,6 +89,7 @@ export interface Post {
 export interface PostWithCreator extends Post {
   creator: PublicCreator;
   isLiked?: boolean;
+  isSaved?: boolean;
   distanceMeters?: number;
 }
 

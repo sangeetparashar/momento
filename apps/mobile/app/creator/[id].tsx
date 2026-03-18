@@ -22,16 +22,16 @@ import { TYPOGRAPHY } from '@/styles/typography';
 import { formatNumber } from '@/utils/formatters';
 import { SOCIAL_PLATFORMS } from '@momento/shared';
 
-type CreatorTab = 'PROFILE' | 'POSTS' | 'TOKEN';
-
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BANNER_HEIGHT = 180;
+const GRID_GAP = 2;
+const GRID_COLUMNS = 3;
+const GRID_ITEM_SIZE = (SCREEN_WIDTH - GRID_GAP * (GRID_COLUMNS + 1)) / GRID_COLUMNS;
 
 export default function CreatorScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { profile, isLoading, isFollowing, toggleFollow } = useCreatorProfile(id);
-  const [activeTab, setActiveTab] = useState<CreatorTab>('PROFILE');
   const [showComingSoon, setShowComingSoon] = useState(false);
 
   const postsQuery = useInfiniteQuery({
@@ -67,6 +67,12 @@ export default function CreatorScreen() {
     []
   );
 
+  const handleEndReached = useCallback(() => {
+    if (postsQuery.hasNextPage && !postsQuery.isFetchingNextPage) {
+      postsQuery.fetchNextPage();
+    }
+  }, [postsQuery]);
+
   const renderSocialLinks = () => {
     if (!profile?.socialLinks) return null;
 
@@ -99,109 +105,43 @@ export default function CreatorScreen() {
     );
   };
 
-  const renderProfileTab = () => (
-    <View style={styles.profileContent}>
-      {/* Banner */}
-      <View style={styles.bannerContainer}>
-        {profile?.bannerUrl ? (
-          <Image
-            source={{ uri: profile.bannerUrl }}
-            style={styles.banner}
-            contentFit="cover"
-          />
-        ) : (
-          <View style={[styles.banner, styles.bannerPlaceholder]} />
-        )}
-      </View>
-
-      {/* Avatar + Social Links */}
-      <View style={styles.avatarSection}>
-        <Avatar
-          uri={profile?.avatarUrl}
-          name={profile?.displayName || profile?.username}
-          size="xl"
-        />
-        {renderSocialLinks()}
-      </View>
-
-      {/* Name + Info */}
-      <View style={styles.infoSection}>
-        <Text style={styles.creatorName}>
-          {profile?.displayName || profile?.username || 'Creator'}
-        </Text>
-        {profile?.tokenSymbol && (
-          <Text style={styles.tokenSymbol}>${profile.tokenSymbol}</Text>
-        )}
-        {profile?.bio && <Text style={styles.bio}>{profile.bio}</Text>}
-      </View>
-
-      {/* Stats */}
-      <View style={styles.statsRow}>
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>
-            {formatNumber(profile?.followerCount ?? 0)}
-          </Text>
-          <Text style={styles.statLabel}>Followers</Text>
-        </View>
-        <View style={styles.statDivider} />
-        <View style={styles.statItem}>
-          <Text style={styles.statNumber}>
-            {formatNumber(profile?.postCount ?? 0)}
-          </Text>
-          <Text style={styles.statLabel}>Posts</Text>
-        </View>
-      </View>
-
-      {/* Action Buttons */}
-      <View style={styles.actionButtons}>
-        <Pressable
-          onPress={toggleFollow}
-          style={[
-            styles.followButton,
-            isFollowing && styles.followingButton,
-          ]}
-        >
-          <Text
-            style={[
-              styles.followButtonText,
-              isFollowing && styles.followingButtonText,
-            ]}
-          >
-            {isFollowing ? 'FOLLOWING' : 'FOLLOW'}
-          </Text>
-        </Pressable>
-        <Pressable onPress={handleBuy} style={styles.buyButton}>
-          <Text style={styles.buyButtonText}>BUY</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-
-  const renderPostsTab = () => {
+  const renderPostsGrid = () => {
     if (postsQuery.isLoading) {
       return (
-        <View style={styles.placeholderTab}>
+        <View style={styles.emptyState}>
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
       );
     }
+
     if (creatorPosts.length === 0) {
       return (
-        <View style={styles.placeholderTab}>
+        <View style={styles.emptyState}>
           <Ionicons name="images-outline" size={48} color={COLORS.textTertiary} />
-          <Text style={styles.placeholderText}>No posts yet</Text>
+          <Text style={styles.emptyText}>No posts yet</Text>
         </View>
       );
     }
+
     return (
       <View style={styles.postsGrid}>
         {creatorPosts.map((post) => (
-          <Pressable key={post.id} onPress={() => router.push(`/post/${post.id}`)} style={styles.gridItem}>
+          <Pressable
+            key={post.id}
+            onPress={() => router.push(`/post/${post.id}`)}
+            style={styles.gridItem}
+          >
             {post.mediaUrl ? (
-              <Image source={{ uri: post.mediaUrl }} style={styles.gridImage} contentFit="cover" />
+              <Image
+                source={{ uri: post.mediaUrl }}
+                style={styles.gridImage}
+                contentFit="cover"
+              />
             ) : (
               <View style={styles.gridTextItem}>
-                <Text style={styles.gridText} numberOfLines={4}>{post.content || post.caption}</Text>
+                <Text style={styles.gridText} numberOfLines={4}>
+                  {post.content || post.caption}
+                </Text>
               </View>
             )}
           </Pressable>
@@ -210,55 +150,16 @@ export default function CreatorScreen() {
     );
   };
 
-  const renderTokenTab = () => (
-    <View style={styles.placeholderTab}>
-      <Ionicons
-        name="trending-up-outline"
-        size={48}
-        color={COLORS.textTertiary}
-      />
-      <Text style={styles.placeholderText}>
-        Token chart coming in Phase 2
-      </Text>
-    </View>
-  );
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Navigation */}
       <View style={styles.navBar}>
         <Pressable onPress={handleBack} style={styles.backButton} hitSlop={8}>
-          <Ionicons
-            name="chevron-back"
-            size={28}
-            color={COLORS.textPrimary}
-          />
+          <Ionicons name="chevron-back" size={28} color={COLORS.textPrimary} />
         </Pressable>
-
-        {/* Tab Selector */}
-        <View style={styles.tabsContainer}>
-          {(['PROFILE', 'POSTS', 'TOKEN'] as CreatorTab[]).map((tab) => (
-            <Pressable
-              key={tab}
-              onPress={() => setActiveTab(tab)}
-              style={[
-                styles.tabButton,
-                activeTab === tab && styles.tabButtonActive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === tab && styles.tabTextActive,
-                ]}
-              >
-                {tab}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-
-        {/* Spacer for symmetry */}
+        <Text style={styles.navTitle} numberOfLines={1}>
+          {profile?.displayName || profile?.username || 'Creator'}
+        </Text>
         <View style={styles.navSpacer} />
       </View>
 
@@ -266,10 +167,104 @@ export default function CreatorScreen() {
       {isLoading ? (
         <CreatorProfileSkeleton />
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {activeTab === 'PROFILE' && renderProfileTab()}
-          {activeTab === 'POSTS' && renderPostsTab()}
-          {activeTab === 'TOKEN' && renderTokenTab()}
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          onScroll={({ nativeEvent }) => {
+            const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+            const isCloseToBottom =
+              layoutMeasurement.height + contentOffset.y >= contentSize.height - 400;
+            if (isCloseToBottom) handleEndReached();
+          }}
+          scrollEventThrottle={400}
+        >
+          {/* Banner */}
+          <View style={styles.bannerContainer}>
+            {profile?.bannerUrl ? (
+              <Image
+                source={{ uri: profile.bannerUrl }}
+                style={styles.banner}
+                contentFit="cover"
+              />
+            ) : (
+              <View style={[styles.banner, styles.bannerPlaceholder]} />
+            )}
+            <View style={styles.bannerGradient} />
+          </View>
+
+          {/* Avatar + Social Links */}
+          <View style={styles.avatarSection}>
+            <Avatar
+              uri={profile?.avatarUrl}
+              name={profile?.displayName || profile?.username}
+              size="xl"
+              borderColor={COLORS.background}
+            />
+            {renderSocialLinks()}
+          </View>
+
+          {/* Name + Token + Bio */}
+          <View style={styles.infoSection}>
+            <Text style={styles.creatorName}>
+              {profile?.displayName || profile?.username || 'Creator'}
+            </Text>
+            {profile?.tokenSymbol && (
+              <Text style={styles.tokenSymbol}>${profile.tokenSymbol}</Text>
+            )}
+            {profile?.bio && <Text style={styles.bio}>{profile.bio}</Text>}
+          </View>
+
+          {/* Stats Row */}
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>
+                {formatNumber(profile?.followerCount ?? 0)}
+              </Text>
+              <Text style={styles.statLabel}>Followers</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statNumber}>
+                {formatNumber(profile?.postCount ?? 0)}
+              </Text>
+              <Text style={styles.statLabel}>Posts</Text>
+            </View>
+          </View>
+
+          {/* Action Buttons */}
+          <View style={styles.actionButtons}>
+            <Pressable
+              onPress={toggleFollow}
+              style={[
+                styles.followButton,
+                isFollowing && styles.followingButton,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.followButtonText,
+                  isFollowing && styles.followingButtonText,
+                ]}
+              >
+                {isFollowing ? 'FOLLOWING' : 'FOLLOW'}
+              </Text>
+            </Pressable>
+            <Pressable onPress={handleBuy} style={styles.buyButton}>
+              <Text style={styles.buyButtonText}>BUY</Text>
+            </Pressable>
+          </View>
+
+          {/* Posts Grid */}
+          <View style={styles.postsSection}>
+            <Text style={styles.postsSectionTitle}>Posts</Text>
+            {renderPostsGrid()}
+          </View>
+
+          {/* Loading more indicator */}
+          {postsQuery.isFetchingNextPage && (
+            <View style={styles.loadingMore}>
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            </View>
+          )}
         </ScrollView>
       )}
 
@@ -297,42 +292,22 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: SPACING.xs,
+    width: 36,
   },
-  tabsContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    backgroundColor: COLORS.surface,
-    borderRadius: RADII.lg,
-    padding: 3,
-    marginHorizontal: SPACING.sm,
-  },
-  tabButton: {
-    flex: 1,
-    paddingVertical: SPACING.xs + 2,
-    borderRadius: RADII.lg - 3,
-    alignItems: 'center',
-  },
-  tabButtonActive: {
-    backgroundColor: COLORS.backgroundTertiary,
-  },
-  tabText: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.textTertiary,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  tabTextActive: {
+  navTitle: {
+    ...TYPOGRAPHY.body,
     color: COLORS.textPrimary,
+    fontWeight: '700',
+    flex: 1,
+    textAlign: 'center',
   },
   navSpacer: {
     width: 36,
   },
-  profileContent: {
-    paddingBottom: SPACING.xl,
-  },
   bannerContainer: {
     height: BANNER_HEIGHT,
     overflow: 'hidden',
+    position: 'relative',
   },
   banner: {
     width: SCREEN_WIDTH,
@@ -340,6 +315,15 @@ const styles = StyleSheet.create({
   },
   bannerPlaceholder: {
     backgroundColor: COLORS.backgroundTertiary,
+  },
+  bannerGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 80,
+    backgroundColor: COLORS.background,
+    opacity: 0.6,
   },
   avatarSection: {
     flexDirection: 'row',
@@ -445,26 +429,25 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 1,
   },
-  placeholderTab: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: SPACING.xl * 4,
-    gap: SPACING.md,
+  postsSection: {
+    marginTop: SPACING.xl,
+    paddingBottom: SPACING.xl,
   },
-  placeholderText: {
-    ...TYPOGRAPHY.body,
+  postsSectionTitle: {
+    ...TYPOGRAPHY.label,
     color: COLORS.textTertiary,
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   postsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    paddingHorizontal: SPACING.xs,
+    paddingHorizontal: GRID_GAP,
   },
   gridItem: {
-    width: '33.33%',
-    aspectRatio: 1,
-    padding: SPACING.xs / 2,
+    width: GRID_ITEM_SIZE,
+    height: GRID_ITEM_SIZE,
+    margin: GRID_GAP / 2,
   },
   gridImage: {
     width: '100%',
@@ -482,5 +465,19 @@ const styles = StyleSheet.create({
   gridText: {
     ...TYPOGRAPHY.caption,
     color: COLORS.textSecondary,
+  },
+  emptyState: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: SPACING.xl * 3,
+    gap: SPACING.md,
+  },
+  emptyText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textTertiary,
+  },
+  loadingMore: {
+    paddingVertical: SPACING.lg,
+    alignItems: 'center',
   },
 });

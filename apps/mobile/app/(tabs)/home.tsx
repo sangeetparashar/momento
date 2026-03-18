@@ -1,48 +1,149 @@
-import React, { useCallback, useMemo, useEffect, useRef } from 'react';
-import { View, StyleSheet, RefreshControl, Animated } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  Dimensions,
+  Pressable,
+  Share,
+  ActivityIndicator,
+} from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { TickerBanner, PostCard, FeedSkeleton } from '@/components/features';
-import { Text } from '@/components/primitives';
+import { Ionicons } from '@expo/vector-icons';
+import { Text, Avatar } from '@/components/primitives';
+import { LikeButton, FeedSkeleton } from '@/components/features';
 import { useFeed } from '@/hooks';
-import { COLORS, SPACING } from '@/styles/theme';
+import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
-import { DUMMY_TRENDING_TOKENS, DUMMY_CREATORS_TO_WATCH } from '@momento/shared';
+import { formatTimeAgo, formatNumber } from '@/utils/formatters';
+import { apiService } from '@/services/api';
 import type { PostWithCreator } from '@momento/shared';
 
-// Map shared constants to TickerBanner's expected {symbol, change} format
-const TRENDING_ITEMS = DUMMY_TRENDING_TOKENS.map((t) => ({
-  symbol: t.symbol,
-  change: t.change,
-}));
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+// Reserve space for header + tab bar
+const HEADER_HEIGHT = 44;
+const TAB_BAR_HEIGHT = 80;
+const PAGE_HEIGHT = SCREEN_HEIGHT - HEADER_HEIGHT - TAB_BAR_HEIGHT;
 
-const CREATORS_ITEMS = DUMMY_CREATORS_TO_WATCH.map((t) => ({
-  symbol: t.symbol,
-  change: t.change,
-}));
+function FeedPage({ post }: { post: PostWithCreator }) {
+  const router = useRouter();
+
+  const handleCreatorPress = useCallback(() => {
+    router.push(`/creator/${post.creatorId}`);
+  }, [post.creatorId, router]);
+
+  const handlePostPress = useCallback(() => {
+    router.push(`/post/${post.id}`);
+  }, [post.id, router]);
+
+  const handleShare = useCallback(() => {
+    Share.share({
+      message: post.caption || post.content || 'Check out this post on Momento',
+    }).catch(() => {});
+  }, [post.caption, post.content]);
+
+  const handleBookmark = useCallback(() => {
+    apiService.post('/users/me/saved', { postId: post.id }).catch(() => {});
+  }, [post.id]);
+
+  return (
+    <View style={[styles.page, { width: SCREEN_WIDTH }]}>
+      {/* Full-screen media */}
+      <Pressable onPress={handlePostPress} style={styles.mediaContainer}>
+        {post.mediaUrl ? (
+          <Image
+            source={{ uri: post.mediaUrl }}
+            style={styles.fullImage}
+            contentFit="cover"
+            transition={200}
+            placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
+          />
+        ) : (
+          <View style={styles.textPostContainer}>
+            <Text style={styles.textPostContent} numberOfLines={12}>
+              {post.content}
+            </Text>
+          </View>
+        )}
+      </Pressable>
+
+      {/* Right-side action buttons (TikTok-style) */}
+      <View style={styles.actionsColumn}>
+        <View style={styles.actionItem}>
+          <LikeButton
+            postId={post.id}
+            initialLiked={post.isLiked}
+            initialCount={post.likeCount}
+          />
+        </View>
+
+        <Pressable onPress={handlePostPress} style={styles.actionItem}>
+          <Ionicons name="chatbubble" size={26} color={COLORS.textPrimary} />
+          {post.commentCount > 0 && (
+            <Text style={styles.actionCount}>
+              {formatNumber(post.commentCount)}
+            </Text>
+          )}
+        </Pressable>
+
+        <Pressable onPress={handleShare} style={styles.actionItem}>
+          <Ionicons name="paper-plane" size={26} color={COLORS.textPrimary} />
+        </Pressable>
+
+        <Pressable onPress={handleBookmark} style={styles.actionItem}>
+          <Ionicons name="bookmark" size={26} color={COLORS.textPrimary} />
+        </Pressable>
+      </View>
+
+      {/* Bottom overlay: creator info + caption */}
+      <View style={styles.bottomOverlay}>
+        <Pressable onPress={handleCreatorPress} style={styles.creatorRow}>
+          <Avatar
+            uri={post.creator.avatarUrl}
+            name={post.creator.displayName || post.creator.username || '?'}
+            size="sm"
+          />
+          <View style={styles.creatorInfo}>
+            <Text style={styles.creatorName} numberOfLines={1}>
+              {post.creator.displayName || post.creator.username || 'Creator'}
+            </Text>
+            {post.creator.tokenSymbol && (
+              <Text style={styles.tokenSymbol}>${post.creator.tokenSymbol}</Text>
+            )}
+          </View>
+          <Text style={styles.timeAgo}>{formatTimeAgo(post.createdAt)}</Text>
+        </Pressable>
+
+        {post.caption ? (
+          <Text style={styles.caption} numberOfLines={3}>
+            {post.caption}
+          </Text>
+        ) : null}
+
+        {post.distanceMeters != null && (
+          <Text style={styles.distance}>
+            {post.distanceMeters < 1000
+              ? `${Math.round(post.distanceMeters)}m away`
+              : `${(post.distanceMeters / 1000).toFixed(1)}km away`}
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+}
 
 export default function HomeScreen() {
   const router = useRouter();
   const feedQuery = useFeed();
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 600,
-      useNativeDriver: true,
-    }).start();
-  }, [fadeAnim]);
+  const flatListRef = useRef<FlatList>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
   const posts = useMemo(() => {
     if (!feedQuery.data?.pages) return [];
     return feedQuery.data.pages.flatMap((page) => page.posts);
   }, [feedQuery.data]);
-
-  const handleTickerPress = useCallback(() => {
-    router.push('/market');
-  }, [router]);
 
   const handleEndReached = useCallback(() => {
     if (feedQuery.hasNextPage && !feedQuery.isFetchingNextPage) {
@@ -54,8 +155,20 @@ export default function HomeScreen() {
     feedQuery.refetch();
   }, [feedQuery]);
 
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: Array<{ index: number | null }> }) => {
+      if (viewableItems.length > 0 && viewableItems[0].index != null) {
+        setCurrentIndex(viewableItems[0].index);
+      }
+    }
+  ).current;
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 50,
+  }).current;
+
   const renderItem = useCallback(
-    ({ item }: { item: PostWithCreator }) => <PostCard post={item} />,
+    ({ item }: { item: PostWithCreator }) => <FeedPage post={item} />,
     []
   );
 
@@ -64,63 +177,70 @@ export default function HomeScreen() {
     []
   );
 
-  const ListHeader = useCallback(
-    () => (
-      <View style={styles.headerContainer}>
-        <Animated.View style={[styles.logoRow, { opacity: fadeAnim }]}>
+  if (feedQuery.isLoading) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <View style={styles.header}>
           <Text style={styles.logo}>M O M E N T O</Text>
-        </Animated.View>
-        <TickerBanner
-          title="TRENDING"
-          items={TRENDING_ITEMS}
-          onPress={handleTickerPress}
-        />
-        <TickerBanner
-          title="CREATORS TO WATCH"
-          items={CREATORS_ITEMS}
-          onPress={handleTickerPress}
-        />
-        <View style={styles.divider} />
-      </View>
-    ),
-    [handleTickerPress, fadeAnim]
-  );
-
-  const ListEmpty = useCallback(
-    () =>
-      feedQuery.isLoading ? (
+        </View>
         <FeedSkeleton />
-      ) : (
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Compact header */}
+      <View style={styles.header}>
+        <Text style={styles.logo}>M O M E N T O</Text>
+        <Pressable onPress={handleRefresh} style={styles.refreshButton} hitSlop={8}>
+          {feedQuery.isRefetching ? (
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          ) : (
+            <Ionicons name="refresh" size={20} color={COLORS.textSecondary} />
+          )}
+        </Pressable>
+      </View>
+
+      {posts.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyText}>No posts yet</Text>
           <Text style={styles.emptySubtext}>
             Follow creators to see their posts here
           </Text>
         </View>
-      ),
-    [feedQuery.isLoading]
-  );
-
-  return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      <FlashList
-        data={posts}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        ListHeaderComponent={ListHeader}
-        ListEmptyComponent={ListEmpty}
-        onEndReached={handleEndReached}
-        onEndReachedThreshold={0.5}
-        refreshControl={
-          <RefreshControl
-            refreshing={feedQuery.isRefetching}
-            onRefresh={handleRefresh}
-            tintColor={COLORS.primary}
-            colors={[COLORS.primary]}
+      ) : (
+        <>
+          <FlatList
+            ref={flatListRef}
+            data={posts}
+            renderItem={renderItem}
+            keyExtractor={keyExtractor}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onEndReached={handleEndReached}
+            onEndReachedThreshold={0.5}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={viewabilityConfig}
+            getItemLayout={(_, index) => ({
+              length: SCREEN_WIDTH,
+              offset: SCREEN_WIDTH * index,
+              index,
+            })}
+            initialNumToRender={2}
+            maxToRenderPerBatch={3}
+            windowSize={5}
           />
-        }
-        showsVerticalScrollIndicator={false}
-      />
+
+          {/* Page indicator dots */}
+          <View style={styles.pageIndicator}>
+            <Text style={styles.pageText}>
+              {currentIndex + 1} / {posts.length}
+            </Text>
+          </View>
+        </>
+      )}
     </SafeAreaView>
   );
 }
@@ -130,28 +250,152 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  headerContainer: {
-    paddingBottom: SPACING.sm,
-  },
-  logoRow: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+  header: {
+    height: HEADER_HEIGHT,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.md,
   },
   logo: {
-    ...TYPOGRAPHY.h3,
+    ...TYPOGRAPHY.body,
     color: COLORS.textPrimary,
-    letterSpacing: 6,
+    letterSpacing: 4,
     fontWeight: '800',
+    fontSize: 14,
   },
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.border,
-    marginHorizontal: SPACING.md,
-    marginTop: SPACING.sm,
+  refreshButton: {
+    position: 'absolute',
+    right: SPACING.md,
+    padding: SPACING.xs,
   },
+
+  // Feed page
+  page: {
+    height: PAGE_HEIGHT,
+    position: 'relative',
+    backgroundColor: COLORS.background,
+  },
+  mediaContainer: {
+    flex: 1,
+  },
+  fullImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: COLORS.surface,
+  },
+  textPostContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.xl,
+    backgroundColor: COLORS.surface,
+  },
+  textPostContent: {
+    ...TYPOGRAPHY.h2,
+    color: COLORS.textPrimary,
+    lineHeight: 34,
+  },
+
+  // Right-side actions (TikTok style)
+  actionsColumn: {
+    position: 'absolute',
+    right: SPACING.md,
+    bottom: 160,
+    alignItems: 'center',
+    gap: SPACING.lg + 4,
+  },
+  actionItem: {
+    alignItems: 'center',
+    gap: 2,
+  },
+  actionCount: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textPrimary,
+    fontWeight: '600',
+    fontSize: 11,
+  },
+
+  // Bottom overlay
+  bottomOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 70, // leave room for action buttons
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.md,
+    paddingTop: SPACING.xl,
+    // gradient-like darkening at bottom
+    backgroundColor: 'transparent',
+  },
+  creatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+  },
+  creatorInfo: {
+    flex: 1,
+    marginLeft: SPACING.sm,
+  },
+  creatorName: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textPrimary,
+    fontWeight: '700',
+    fontSize: 15,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  tokenSymbol: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.primary,
+    fontWeight: '700',
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  timeAgo: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  caption: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textPrimary,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+    marginBottom: SPACING.xs,
+  },
+  distance: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+
+  // Page indicator
+  pageIndicator: {
+    position: 'absolute',
+    top: HEADER_HEIGHT + SPACING.sm,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADII.full,
+  },
+  pageText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textPrimary,
+    fontWeight: '600',
+  },
+
+  // Empty state
   emptyState: {
-    paddingVertical: SPACING.xl * 3,
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
   },
   emptyText: {
