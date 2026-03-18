@@ -10,11 +10,18 @@ export async function GET(request: NextRequest) {
     if (rateLimitResponse) return rateLimitResponse;
     const user = await requireAuth(request);
 
-    if (!user.walletAddress) {
-      return NextResponse.json(
-        { success: false, error: 'No wallet address linked to this account' },
-        { status: 400 }
-      );
+    if (!user.walletAddress || user.walletAddress.startsWith('pending-')) {
+      // Return empty balance for users without a real wallet
+      return NextResponse.json({
+        success: true,
+        data: {
+          solBalance: 0,
+          tokens: [],
+          totalValueUsd: 0,
+          change24h: 0,
+          earningsToDate: 0,
+        },
+      });
     }
 
     const cacheKey = cacheKeys.walletBalance(user.walletAddress);

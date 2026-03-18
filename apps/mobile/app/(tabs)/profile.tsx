@@ -91,30 +91,39 @@ export default function ProfileScreen() {
           <ProfileSkeleton />
         ) : (
           <>
-            {/* Creator Tabs */}
-            {isCreator && (
-              <View style={styles.tabsContainer}>
-                {(['EDIT PROFILE', 'NEW POST', 'ACCOUNT'] as ProfileTab[]).map(
-                  (tab) => (
-                    <Pressable
-                      key={tab}
-                      onPress={() => handleTabPress(tab)}
-                      style={[
-                        styles.tabButton,
-                        activeTab === tab && styles.tabButtonActive,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.tabText,
-                          activeTab === tab && styles.tabTextActive,
-                        ]}
-                      >
-                        {tab}
-                      </Text>
-                    </Pressable>
-                  )
+            {/* Action Buttons */}
+            <View style={styles.tabsContainer}>
+              <Pressable
+                onPress={() => router.push('/edit-profile')}
+                style={[styles.tabButton, styles.tabButtonActive]}
+              >
+                <Text style={[styles.tabText, styles.tabTextActive]}>EDIT PROFILE</Text>
+              </Pressable>
+              {isCreator && (
+                <Pressable
+                  onPress={() => router.push('/create-post')}
+                  style={styles.tabButton}
+                >
+                  <Text style={styles.tabText}>NEW POST</Text>
+                </Pressable>
+              )}
+            </View>
+
+            {/* User Info */}
+            {user && (
+              <View style={styles.userInfoSection}>
+                {user.email && (
+                  <Text style={styles.emailText}>{user.email}</Text>
                 )}
+                {user.bio && (
+                  <Text style={styles.bioText}>{user.bio}</Text>
+                )}
+                <View style={styles.followRow}>
+                  <Text style={styles.followCount}>{user.followingCount ?? 0} <Text style={styles.followLabel}>Following</Text></Text>
+                  {isCreator && (
+                    <Text style={styles.followCount}>{user.followerCount ?? 0} <Text style={styles.followLabel}>Followers</Text></Text>
+                  )}
+                </View>
               </View>
             )}
 
@@ -266,5 +275,35 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: SPACING.xl,
+  },
+  userInfoSection: {
+    paddingHorizontal: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  emailText: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textTertiary,
+    marginBottom: SPACING.xs,
+  },
+  bioText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
+    lineHeight: 22,
+  },
+  followRow: {
+    flexDirection: 'row',
+    gap: SPACING.lg,
+    marginTop: SPACING.xs,
+  },
+  followCount: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textPrimary,
+    fontWeight: '700',
+  },
+  followLabel: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textTertiary,
+    fontWeight: '400',
   },
 });
