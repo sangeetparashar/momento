@@ -5,12 +5,13 @@ import {
   Pressable,
   FlatList,
   Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from '@/components/primitives';
-import { useFeed } from '@/hooks';
+import { useFeed, useNearbyCreators } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import type { PostWithCreator, PublicCreator } from '@momento/shared';
@@ -36,6 +37,7 @@ export default function ExploreScreen() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<ExploreTab>('CREATORS');
   const feedQuery = useFeed();
+  const { creators: nearbyCreators, isLoading: creatorsLoading } = useNearbyCreators();
 
   const posts = useMemo(() => {
     if (!feedQuery.data?.pages) return [];
@@ -55,15 +57,7 @@ export default function ExploreScreen() {
       }));
     }
 
-    // Derive unique creators from posts
-    const creatorsMap = new Map<string, PublicCreator>();
-    posts.forEach((post: PostWithCreator) => {
-      if (!creatorsMap.has(post.creator.id)) {
-        creatorsMap.set(post.creator.id, post.creator);
-      }
-    });
-
-    return Array.from(creatorsMap.values()).map(
+    return nearbyCreators.map(
       (creator: PublicCreator, index: number) => ({
         id: creator.id,
         type: 'creator' as const,
@@ -76,7 +70,7 @@ export default function ExploreScreen() {
         creatorId: creator.id,
       })
     );
-  }, [activeTab, posts]);
+  }, [activeTab, posts, nearbyCreators]);
 
   // Split items into two columns for masonry effect
   const { leftColumn, rightColumn } = useMemo(() => {
@@ -188,26 +182,36 @@ export default function ExploreScreen() {
       </View>
 
       {/* Masonry Grid */}
-      <FlatList
-        data={[{ key: 'masonry' }]}
-        renderItem={() => (
-          <View style={styles.masonryContainer}>
-            <View style={styles.column}>
-              {leftColumn.map(renderGridItem)}
+      {activeTab === 'CREATORS' && creatorsLoading ? (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color={COLORS.textTertiary} />
+        </View>
+      ) : (
+        <FlatList
+          data={[{ key: 'masonry' }]}
+          renderItem={() => (
+            <View style={styles.masonryContainer}>
+              <View style={styles.column}>
+                {leftColumn.map(renderGridItem)}
+              </View>
+              <View style={styles.column}>
+                {rightColumn.map(renderGridItem)}
+              </View>
             </View>
-            <View style={styles.column}>
-              {rightColumn.map(renderGridItem)}
+          )}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyText}>
+                {activeTab === 'CREATORS'
+                  ? 'No creators nearby'
+                  : 'Nothing to explore yet'}
+              </Text>
             </View>
-          </View>
-        )}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContent}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyText}>Nothing to explore yet</Text>
-          </View>
-        }
-      />
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }

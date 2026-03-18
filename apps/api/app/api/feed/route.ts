@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 
     const cacheKey = cacheKeys.feed(lat, lng, radiusKm, cursor);
 
-    const feedData = await getOrSetCache(cacheKey, cacheTTL.feed, async () => {
+    let feedData = await getOrSetCache(cacheKey, cacheTTL.feed, async () => {
       // Build cursor condition
       let cursorCondition = '';
       const params: any[] = [lng, lat, radiusMeters, PAGE_SIZE + 1];
@@ -122,6 +122,9 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // Clone posts to avoid mutating the cached object
+    feedData = { ...feedData, posts: feedData.posts.map((p: any) => ({ ...p })) };
+
     // If authenticated, check which posts the user has liked
     if (authUser && feedData.posts.length > 0) {
       const postIds = feedData.posts.map((p: any) => p.id);
@@ -137,6 +140,12 @@ export async function GET(request: NextRequest) {
       feedData.posts = feedData.posts.map((p: any) => ({
         ...p,
         isLiked: likedPostIds.has(p.id),
+      }));
+    } else {
+      // Default isLiked to false for unauthenticated users
+      feedData.posts = feedData.posts.map((p: any) => ({
+        ...p,
+        isLiked: false,
       }));
     }
 

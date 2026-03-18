@@ -1,13 +1,13 @@
 # Momento — Comprehensive Gap Audit & Next-Agent Playbook
 
-> Generated 2026-03-06 after Phase 4 completion (7 commits on main).
+> Generated 2026-03-06 after Phase 4 completion. Updated 2026-03-13.
 > This document is the single source of truth for what's broken, what's missing, and exactly how to fix it.
 
 ---
 
 ## Table of Contents
 
-1. [Critical Gaps (7) — Blocks Core Functionality](#critical)
+1. [Critical Gaps (7) — FIXED](#critical)
 2. [Major Gaps (10) — Significant Feature Holes](#major)
 3. [Minor Gaps (16) — Polish & Quality](#minor)
 4. [Nice-to-Have (10) — Future Improvements](#nice-to-have)
@@ -17,13 +17,14 @@
 ---
 
 <a id="critical"></a>
-## 🔴 CRITICAL GAPS — Blocks Core Functionality
+## ~~CRITICAL GAPS~~ — ALL FIXED (C1-C7)
 
-These 7 issues mean the mobile app cannot communicate correctly with the API. **Fix these before anything else.**
+> **Status: All 7 critical API contract bugs have been fixed as of 2026-03-13.**
+> The mobile app now communicates correctly with the API. The fixes below are preserved for historical reference.
 
 ---
 
-### C1. API Response Envelope Not Unwrapped
+### ~~C1. API Response Envelope Not Unwrapped~~ FIXED
 
 **Impact:** Every hook receives `{ success: true, data: {...} }` instead of the actual data. The entire app's data layer is broken.
 
@@ -63,7 +64,7 @@ This is worse because it spreads the concern across 8+ hooks. Option A centraliz
 
 ---
 
-### C2. Upload Presigned URL Field Name Mismatch
+### ~~C2. Upload Presigned URL Field Name Mismatch~~ FIXED
 
 **Impact:** File uploads (avatar, banner, post media) silently fail. The mobile client tries to PUT to `undefined` URL.
 
@@ -112,7 +113,7 @@ const { uploadUrl, publicUrl } = await this.post<{...}>('/uploads/presign', { fi
 
 ---
 
-### C3. Push Token Registration — Wrong Path & Payload
+### ~~C3. Push Token Registration — Wrong Path & Payload~~ FIXED
 
 **Impact:** Push notifications never register. The mobile client POSTs to a path that doesn't exist with the wrong field name.
 
@@ -142,7 +143,7 @@ await apiService.post('/users/me/push-token', { pushToken: token });
 
 ---
 
-### C4. KYC Route Does Not Exist
+### ~~C4. KYC Route Does Not Exist~~ FIXED
 
 **Impact:** Creator application flow is completely broken. Hook calls a non-existent endpoint.
 
@@ -179,7 +180,7 @@ interface KycApplicationPayload {
 
 ---
 
-### C5. Follow/Unfollow HTTP Method Mismatch
+### ~~C5. Follow/Unfollow HTTP Method Mismatch~~ FIXED
 
 **Impact:** Unfollowing a creator causes a 405 Method Not Allowed error.
 
@@ -207,7 +208,7 @@ Export a `DELETE` function from the route that only unfollows. This is more REST
 
 ---
 
-### C6. Like/Unlike HTTP Method Mismatch
+### ~~C6. Like/Unlike HTTP Method Mismatch~~ FIXED
 
 **Impact:** Unliking a post causes a 405 Method Not Allowed error. Same pattern as C5.
 
@@ -232,7 +233,7 @@ The API toggles internally. The optimistic update still works.
 
 ---
 
-### C7. Post Detail Has No Direct API Fetch
+### ~~C7. Post Detail Has No Direct API Fetch~~ FIXED
 
 **Impact:** If a user navigates to a post via deep link, notification tap, or shared URL, the screen shows "Post not found" because it only reads from the in-memory feed cache.
 
@@ -280,9 +281,9 @@ Also the "Post not found" state should show a loading skeleton first, not immedi
 
 ---
 
-### M1. Explore Screen Uses Feed Data for CREATORS Tab
+### ~~M1. Explore Screen Uses Feed Data for CREATORS Tab~~ — FIXED
 
-**What:** The CREATORS tab on explore.tsx derives unique creators by deduplicating feed posts (lines 58-78). It should call `GET /creators/nearby` which already exists.
+**What:** ~~The CREATORS tab on explore.tsx derives unique creators by deduplicating feed posts (lines 58-78). It should call `GET /creators/nearby` which already exists.~~ ✅ FIXED — Created `useNearbyCreators` hook, wired into explore.tsx CREATORS tab.
 
 **Current Code:**
 ```typescript
@@ -332,9 +333,9 @@ Wire into explore.tsx's CREATORS tab.
 
 ---
 
-### M3. No Comment Creation
+### ~~M3. No Comment Creation~~ — FIXED
 
-**What:** `post/[id].tsx` has a TextInput and send button but `handleSendComment` (line 96) just clears the input. No API call.
+**What:** ~~`post/[id].tsx` has a TextInput and send button but `handleSendComment` (line 96) just clears the input. No API call.~~ ✅ FIXED — Created `useComments` hook with fetch + create, wired into post/[id].tsx. DUMMY_COMMENTS removed.
 
 **Current Code:**
 ```typescript
@@ -359,11 +360,9 @@ const handleSendComment = useCallback(() => {
 
 ---
 
-### M5. User Location Never Synced to Server
+### ~~M5. User Location Never Synced to Server~~ — FIXED
 
-**What:** `LocationProvider` captures GPS locally but never calls `PATCH /users/me/location` to sync location to the database. The API route exists and updates the PostGIS geography column.
-
-**Fix:** Add a `useEffect` in LocationProvider that calls the API when location changes significantly (>500m or first capture).
+**What:** ~~`LocationProvider` captures GPS locally but never calls `POST /users/me/location` to sync location to the database.~~ ✅ FIXED — Added `useEffect` in LocationProvider that syncs to server when location changes by >500m. Fire-and-forget pattern.
 
 **Files:** `apps/mobile/src/providers/LocationProvider.tsx`
 
@@ -452,7 +451,7 @@ const compressed = await manipulateAsync(uri, [{ resize: { width: 1200 } }], {
 | m13 | PortfolioChart uses hardcoded dummy data | `PortfolioChart.tsx` | Wire to real wallet history API |
 | m14 | SwapModal is UI-only — no swap execution | `SwapModal.tsx` | Integrate Jupiter aggregator |
 | m15 | Market screen uses dummy data — no API for token rankings | `market.tsx` | Build market data API route |
-| m16 | Post detail shows hardcoded DUMMY_COMMENTS | `post/[id].tsx` lines 27-67 | Fetch real comments from `GET /posts/[id]/comments` |
+| m16 | ~~Post detail shows hardcoded DUMMY_COMMENTS~~ | ~~`post/[id].tsx` lines 27-67~~ | ✅ FIXED — `useComments` hook fetches real comments |
 
 ---
 
@@ -477,18 +476,11 @@ const compressed = await manipulateAsync(uri, [{ resize: { width: 1200 } }], {
 <a id="fix-order"></a>
 ## Recommended Fix Order
 
-### Phase 5A: API Contract Fixes (1 agent, ~30 min)
-Fix C1 → C2 → C3 → C4 → C5 → C6 in a single pass. All are mobile-side changes in `api.ts` and hooks.
-
-**Files this agent touches:**
-- `apps/mobile/src/services/api.ts` — Unwrap envelope (C1) + fix upload field names (C2)
-- `apps/mobile/src/providers/NotificationProvider.tsx` — Fix push token path/payload (C3)
-- `apps/mobile/src/hooks/useKyc.ts` — Fix KYC endpoint path (C4)
-- `apps/mobile/src/hooks/useCreatorProfile.ts` — Change DELETE to POST for follow (C5)
-- `apps/mobile/src/hooks/useLike.ts` — Change DELETE to POST for like (C6)
+### ~~Phase 5A: API Contract Fixes~~ COMPLETE
+C1-C7 have all been fixed. The mobile app now correctly communicates with the API.
 
 ### Phase 5B: Post Detail & Comments (1 agent, ~20 min)
-Fix C7 + M3 + M4 + m16.
+Fix M3 + M4 + m16.
 
 **Files this agent touches:**
 - `apps/mobile/app/post/[id].tsx` — Add direct fetch fallback + wire comment creation
@@ -533,7 +525,7 @@ Before launching any fix agent, verify:
 1. ✅ AuthBridge is wired (done in Phase 4)
 2. ✅ Feed params are correct (done in Phase 4)
 3. ✅ ErrorBoundary is in place (done in Phase 4)
-4. ⬜ C1 (envelope unwrap) is fixed — **this must be first** because every other fix depends on the API returning the right shape
+4. ✅ C1-C7 API contract bugs are fixed (done in Phase 5A)
 
 ### Post-Fix Verification
 

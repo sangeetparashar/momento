@@ -2,10 +2,18 @@ import { PrivyClient } from '@privy-io/server-auth';
 import { NextRequest } from 'next/server';
 import prisma from './prisma';
 
-const privy = new PrivyClient(
-  process.env.NEXT_PUBLIC_PRIVY_APP_ID!,
-  process.env.PRIVY_APP_SECRET!
-);
+let _privy: PrivyClient | null = null;
+function getPrivy(): PrivyClient {
+  if (!_privy) {
+    const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+    const appSecret = process.env.PRIVY_APP_SECRET;
+    if (!appId || !appSecret) {
+      throw new Error('Missing PRIVY_APP_ID or PRIVY_APP_SECRET environment variables');
+    }
+    _privy = new PrivyClient(appId, appSecret);
+  }
+  return _privy;
+}
 
 export interface AuthUser {
   id: string;
@@ -27,7 +35,7 @@ async function verifyToken(request: NextRequest) {
 
   const token = authHeader.slice(7);
   try {
-    const claims = await privy.verifyAuthToken(token);
+    const claims = await getPrivy().verifyAuthToken(token);
     return claims;
   } catch (error) {
     console.error('Auth token verification failed:', error);
@@ -61,7 +69,7 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
 
   if (!user) {
     // Fetch Privy user to get wallet address
-    const privyUser = await privy.getUser(privyUserId);
+    const privyUser = await getPrivy().getUser(privyUserId);
     const wallet = privyUser.wallet;
     const email = privyUser.email?.address;
 

@@ -3,7 +3,7 @@
 ## Purpose
 This document gives any future AI agent full context to pick up work on this codebase without losing any knowledge from the initial build session.
 
-## Current State (as of 2026-03-07, Phase 4 complete + landing page polished)
+## Current State (as of 2026-03-13, Phase 5A complete — C1-C7 fixed)
 
 ### What Exists
 - Complete monorepo scaffold: turbo + pnpm workspaces
@@ -24,22 +24,29 @@ This document gives any future AI agent full context to pick up work on this cod
 - AuthBridge provider wiring Privy tokens into API service
 - Git: 11 commits on `main`, clean tree
 
-### What Does NOT Exist Yet / What's Broken
-- **7 critical mobile↔API contract bugs** — see [GAPS.md](./GAPS.md) section "Critical"
+### What Does NOT Exist Yet / What's Still Incomplete
+- ~~7 critical mobile↔API contract bugs (C1-C7)~~ — **ALL FIXED** as of 2026-03-13
 - No external services configured (all env vars are placeholders)
 - Prisma client not generated (need `pnpm approve-builds` then `npx prisma generate`)
 - Placeholder PNG assets (1x1 transparent PNGs)
 - No tests, no CI/CD
-- Explore screen uses feed data instead of `/creators/nearby` API
-- Comments are hardcoded dummies
-- Post detail has no direct API fetch (only reads feed cache)
+- Explore screen uses feed data instead of `/creators/nearby` API (M1)
+- Comments are hardcoded dummies — no API fetch or creation (M3, M4, m16)
 - Waitlist storage is ephemeral on Vercel (/tmp) — needs proper DB for persistence
 
-### ⚠️ CRITICAL: Fix API Contract First
-Before ANY feature work, the 7 critical bugs in GAPS.md must be resolved.
-The most important is **C1: API response envelope not unwrapped**. Every
-API route returns `{ success, data }` but the mobile client doesn't unwrap
-the `data` field. This breaks EVERY hook. Fix `api.ts` line 118 first.
+### Architecture Note: Lazy Initialization
+All API lib modules (`redis.ts`, `auth.ts`, `storage.ts`, `helius.ts`, `veriff.ts`) use lazy initialization. Service clients are not created at import time. This means:
+- The API server starts without crashing even if some env vars are missing.
+- You only need `DATABASE_URL` + Privy credentials for minimum viable local dev.
+- Errors only occur when a route tries to use a missing service.
+
+### Next Priority: Major Gaps (M1-M10)
+With C1-C7 fixed, the next work should focus on the Major Gaps in GAPS.md:
+- **M1**: Explore screen should call `/creators/nearby` API
+- **M3/M4/m16**: Comment creation and fetching
+- **M5**: User location sync to server
+- **M6**: Creator application flow (Veriff redirect)
+- **M7**: Deep linking / URL scheme
 
 ## File Zones for Agent Work
 
@@ -220,25 +227,35 @@ import { getOrSetCache, invalidateCache } from '@/lib/redis';
 
 ## Known Issues to Fix
 
-> **START HERE:** Read [GAPS.md](./GAPS.md) for the full 43-item audit with exact code, line numbers, and fix strategies.
+> Read [GAPS.md](./GAPS.md) for the full audit with exact code, line numbers, and fix strategies.
 
-### Still Broken (must fix before feature work)
-1. **7 critical API contract bugs** — C1-C7 in GAPS.md (envelope unwrap, upload fields, push token, KYC route, follow/like methods, post detail fetch)
-2. **Explore screen**: Should call `/creators/nearby` API for the CREATORS tab, currently derives creators from feed posts (M1)
-3. **Comments are hardcoded dummies**: No API fetch for comments, no comment creation (M3, M4, m16)
-4. **User location never synced to server** (M5)
-5. **Creator application flow incomplete** — Veriff redirect not handled (M6)
-6. **No deep linking / URL scheme** (M7)
+### Fixed (Phase 5A — C1-C7 API Contract)
+- ~~C1: API response envelope not unwrapped~~ FIXED
+- ~~C2: Upload presigned URL field name mismatch~~ FIXED
+- ~~C3: Push token registration wrong path and payload~~ FIXED
+- ~~C4: KYC route does not exist~~ FIXED
+- ~~C5: Follow/unfollow HTTP method mismatch~~ FIXED
+- ~~C6: Like/unlike HTTP method mismatch~~ FIXED
+- ~~C7: Post detail has no direct API fetch~~ FIXED
 
 ### Fixed (Phase 4)
-- ~~Error boundaries~~ → ErrorBoundary component wrapping Stack navigator
-- ~~Loading states~~ → FeedSkeleton + ProfileSkeleton components
-- ~~Settings sheet~~ → SettingsSheet overlay on profile (sub-screens are stubs)
+- ~~Error boundaries~~ ErrorBoundary component wrapping Stack navigator
+- ~~Loading states~~ FeedSkeleton + ProfileSkeleton components
+- ~~Settings sheet~~ SettingsSheet overlay on profile (sub-screens are stubs)
+- ~~Auth tokens not sent to API~~ AuthBridge provider
+- ~~Feed parameter name mismatch~~ useFeed uses correct `lat`/`lng`/`radius`
+
+### Still Open (Major Gaps)
+1. **Explore screen**: Should call `/creators/nearby` API for the CREATORS tab, currently derives creators from feed posts (M1)
+2. **Comments are hardcoded dummies**: No API fetch for comments, no comment creation (M3, M4, m16)
+3. **User location never synced to server** (M5)
+4. **Creator application flow incomplete** — Veriff redirect not handled (M6)
+5. **No deep linking / URL scheme** (M7)
 
 ### Other Known Issues
-7. **Privy SDK**: `@privy-io/expo` API may have changed; verify `usePrivy()` returns `{ login, user, isReady, getAccessToken }`
-8. **Asset placeholders**: notification-icon.png and adaptive-icon.png are 1x1 transparent PNGs
-9. **Image compression**: No compression before upload; should add `expo-image-manipulator`
+6. **Privy SDK**: `@privy-io/expo` API may have changed; verify `usePrivy()` returns `{ login, user, isReady, getAccessToken }`
+7. **Asset placeholders**: notification-icon.png and adaptive-icon.png are 1x1 transparent PNGs
+8. **Image compression**: No compression before upload; should add `expo-image-manipulator`
 
 ## Bugs Fixed (2026-03-06)
 
@@ -251,26 +268,31 @@ import { getOrSetCache, invalidateCache } from '@/lib/redis';
 
 ## Environment Variables Required
 
-### API (`apps/api/.env.local`)
+> See `apps/api/.env.local.example` for the template. All lib modules use lazy init, so only DATABASE_URL + Privy are strictly required for local dev.
+
+### API (`apps/api/.env.local`) — 14 variables
 ```
-DATABASE_URL=              # Supabase PostgreSQL connection string
-DIRECT_URL=                # Supabase direct connection (for migrations)
-UPSTASH_REDIS_REST_URL=    # Upstash Redis REST URL
-UPSTASH_REDIS_REST_TOKEN=  # Upstash Redis REST token
-PRIVY_APP_ID=              # Privy application ID
-PRIVY_APP_SECRET=          # Privy application secret
-HELIUS_API_KEY=            # Helius Solana RPC key
-VERIFF_API_KEY=            # Veriff KYC API key
-VERIFF_SHARED_SECRET=      # Veriff webhook secret
-SUPABASE_URL=              # Supabase project URL
-SUPABASE_SERVICE_ROLE_KEY= # Supabase service role key
-SKIP_KYC=true              # Set to true to bypass KYC in dev
+DATABASE_URL=                    # Supabase PostgreSQL (transaction mode, port 6543)
+DIRECT_URL=                      # Supabase PostgreSQL (session mode, port 5432)
+NEXT_PUBLIC_PRIVY_APP_ID=        # Privy application ID
+PRIVY_APP_SECRET=                # Privy application secret
+UPSTASH_REDIS_REST_URL=          # Upstash Redis REST URL (optional for dev)
+UPSTASH_REDIS_REST_TOKEN=        # Upstash Redis REST token (optional for dev)
+NEXT_PUBLIC_SUPABASE_URL=        # Supabase project URL (for file uploads)
+SUPABASE_SERVICE_ROLE_KEY=       # Supabase service role key (for file uploads)
+HELIUS_API_KEY=                  # Helius Solana RPC key (optional for dev)
+VERIFF_API_KEY=                  # Veriff KYC API key (optional — use SKIP_KYC)
+VERIFF_SHARED_SECRET=            # Veriff webhook HMAC secret (optional — use SKIP_KYC)
+NEXT_PUBLIC_API_URL=             # API URL for Veriff webhook callback
+SKIP_KYC=true                    # Set to true to bypass KYC in dev
 ```
 
-### Mobile (`apps/mobile/.env` or EXPO_PUBLIC_*)
+### Mobile (`apps/mobile/.env`) — 4 variables
 ```
-EXPO_PUBLIC_API_URL=       # API base URL (e.g., http://localhost:3000/api)
-EXPO_PUBLIC_PRIVY_APP_ID=  # Same Privy app ID
+EXPO_PUBLIC_API_URL=             # API base URL with /api suffix (e.g., http://192.168.1.100:3000/api)
+EXPO_PUBLIC_PRIVY_APP_ID=        # Same Privy app ID as API
+EXPO_PUBLIC_SOLANA_RPC_URL=      # Solana RPC endpoint (default: https://api.devnet.solana.com)
+EXPO_PUBLIC_SOLANA_NETWORK=      # devnet or mainnet-beta (default: devnet)
 ```
 
 ## Phase 2 Roadmap (Not Yet Started)
@@ -281,6 +303,5 @@ EXPO_PUBLIC_PRIVY_APP_ID=  # Same Privy app ID
 5. Admin dashboard (or keep using Supabase Dashboard)
 6. Advanced analytics (post reach, engagement)
 7. Auth sync cron job (sync Privy users periodically)
-8. Image compression before upload
-9. Offline support via React Query persistence
-10. Loading skeletons and error boundaries
+8. Image compression before upload (M9 in GAPS.md)
+9. Offline support via React Query persistence (M8 in GAPS.md)

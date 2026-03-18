@@ -1,9 +1,17 @@
 import { Redis } from '@upstash/redis';
 
-export const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-});
+let _redis: Redis | null = null;
+function getRedis(): Redis {
+  if (!_redis) {
+    const url = process.env.UPSTASH_REDIS_REST_URL;
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+    if (!url || !token) {
+      throw new Error('Missing UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN environment variables');
+    }
+    _redis = new Redis({ url, token });
+  }
+  return _redis;
+}
 
 // ─── Cache Key Generators ───────────────────────────────────────────────────
 
@@ -50,7 +58,7 @@ export async function getOrSetCache<T>(
   fetcher: () => Promise<T>
 ): Promise<T> {
   try {
-    const cached = await redis.get<T>(key);
+    const cached = await getRedis().get<T>(key);
     if (cached !== null && cached !== undefined) {
       return cached;
     }
@@ -61,7 +69,7 @@ export async function getOrSetCache<T>(
   const data = await fetcher();
 
   try {
-    await redis.set(key, JSON.stringify(data), { ex: ttlSeconds });
+    await getRedis().set(key, JSON.stringify(data), { ex: ttlSeconds });
   } catch (error) {
     console.error('Redis SET error:', error);
   }
@@ -76,15 +84,15 @@ export async function invalidateCache(...patterns: string[]): Promise<void> {
       if (pattern.includes('*')) {
         let cursor = 0;
         do {
-          const result = await redis.scan(cursor, { match: pattern, count: 100 });
+          const result = await getRedis().scan(cursor, { match: pattern, count: 100 });
           cursor = result[0];
           const keys = result[1];
           if (keys.length > 0) {
-            await redis.del(...keys);
+            await getRedis().del(...keys);
           }
         } while (cursor !== 0);
       } else {
-        await redis.del(pattern);
+        await getRedis().del(pattern);
       }
     }
   } catch (error) {

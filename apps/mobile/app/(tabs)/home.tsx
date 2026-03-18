@@ -1,9 +1,8 @@
-import React, { useCallback, useMemo } from 'react';
-import { View, StyleSheet, RefreshControl } from 'react-native';
+import React, { useCallback, useMemo, useEffect, useRef } from 'react';
+import { View, StyleSheet, RefreshControl, Animated } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, { FadeIn } from 'react-native-reanimated';
 import { TickerBanner, PostCard, FeedSkeleton } from '@/components/features';
 import { Text } from '@/components/primitives';
 import { useFeed } from '@/hooks';
@@ -26,6 +25,15 @@ const CREATORS_ITEMS = DUMMY_CREATORS_TO_WATCH.map((t) => ({
 export default function HomeScreen() {
   const router = useRouter();
   const feedQuery = useFeed();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 600,
+      useNativeDriver: true,
+    }).start();
+  }, [fadeAnim]);
 
   const posts = useMemo(() => {
     if (!feedQuery.data?.pages) return [];
@@ -59,7 +67,7 @@ export default function HomeScreen() {
   const ListHeader = useCallback(
     () => (
       <View style={styles.headerContainer}>
-        <Animated.View entering={FadeIn.duration(600)} style={styles.logoRow}>
+        <Animated.View style={[styles.logoRow, { opacity: fadeAnim }]}>
           <Text style={styles.logo}>M O M E N T O</Text>
         </Animated.View>
         <TickerBanner
@@ -75,7 +83,7 @@ export default function HomeScreen() {
         <View style={styles.divider} />
       </View>
     ),
-    [handleTickerPress]
+    [handleTickerPress, fadeAnim]
   );
 
   const ListEmpty = useCallback(
@@ -99,7 +107,6 @@ export default function HomeScreen() {
         data={posts}
         renderItem={renderItem}
         keyExtractor={keyExtractor}
-        estimatedItemSize={500}
         ListHeaderComponent={ListHeader}
         ListEmptyComponent={ListEmpty}
         onEndReached={handleEndReached}

@@ -7,6 +7,7 @@ import React, {
   useState,
 } from 'react';
 import * as Location from 'expo-location';
+import { apiService } from '@/services/api';
 
 /** How often to refresh the user's location (5 minutes). */
 const LOCATION_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -93,6 +94,33 @@ export function LocationProvider({ children }: LocationProviderProps) {
       await fetchLocation();
     }
   }, [hasPermission, requestPermissionAndFetch, fetchLocation]);
+
+  // Sync location to server when it changes significantly
+  const lastSyncedLocation = useRef<{ latitude: number; longitude: number } | null>(null);
+
+  useEffect(() => {
+    if (!location) return;
+
+    // Only sync if location changed significantly (>500m) or first sync
+    const prev = lastSyncedLocation.current;
+    if (prev) {
+      const dlat = location.latitude - prev.latitude;
+      const dlng = location.longitude - prev.longitude;
+      // Rough distance check (~500m at equator)
+      const dist = Math.sqrt(dlat * dlat + dlng * dlng);
+      if (dist < 0.005) return; // ~500m threshold
+    }
+
+    lastSyncedLocation.current = { latitude: location.latitude, longitude: location.longitude };
+
+    // Fire and forget — don't block on this
+    apiService.post('/users/me/location', {
+      latitude: location.latitude,
+      longitude: location.longitude,
+    }).catch(() => {
+      // Silently fail — location sync is non-critical
+    });
+  }, [location]);
 
   // Request permission and start polling on mount
   useEffect(() => {

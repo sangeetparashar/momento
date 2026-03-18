@@ -1,9 +1,8 @@
-import React, { useCallback } from 'react';
-import { View, StyleSheet, Pressable, Dimensions } from 'react-native';
+import React, { useCallback, useEffect, useRef } from 'react';
+import { View, StyleSheet, Pressable, Dimensions, Animated } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Text, Avatar, AnimatedPressable } from '@/components/primitives';
 import { LikeButton } from './LikeButton';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
@@ -20,6 +19,23 @@ const IMAGE_HEIGHT = SCREEN_WIDTH;
 
 export function PostCard({ post }: PostCardProps) {
   const router = useRouter();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(20)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+      }),
+      Animated.spring(translateY, {
+        toValue: 0,
+        damping: 18,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, translateY]);
 
   const handleImagePress = useCallback(() => {
     router.push(`/post/${post.id}`);
@@ -31,8 +47,13 @@ export function PostCard({ post }: PostCardProps) {
 
   return (
     <Animated.View
-      entering={FadeInDown.duration(400).springify().damping(18)}
-      style={styles.container}
+      style={[
+        styles.container,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY }],
+        },
+      ]}
     >
       {/* Creator Info Header */}
       <Pressable onPress={handleCreatorPress} style={styles.header}>

@@ -1,32 +1,24 @@
-import React, { useCallback } from 'react';
-import { Pressable, PressableProps, StyleProp, ViewStyle } from 'react-native';
+import React, { useCallback, useRef } from 'react';
+import { Animated, Pressable, PressableProps, StyleProp, ViewStyle } from 'react-native';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
 import { COLORS } from '@/styles/theme';
-
-const AnimatedPressableBase = Animated.createAnimatedComponent(Pressable);
 
 /**
  * Animated tab bar button with subtle scale feedback on press.
- * Replaces the default tab bar button for a more premium feel.
+ * Uses React Native's built-in Animated API (no reanimated/worklets dependency).
  */
 function AnimatedTabButton(props: PressableProps & { style?: StyleProp<ViewStyle> }) {
   const { onPressIn, onPressOut, style, children, ...rest } = props;
-  const scale = useSharedValue(1);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
+  const scale = useRef(new Animated.Value(1)).current;
 
   const handlePressIn = useCallback(
     (event: any) => {
-      scale.value = withTiming(0.85, { duration: 80 });
+      Animated.timing(scale, {
+        toValue: 0.85,
+        duration: 80,
+        useNativeDriver: true,
+      }).start();
       onPressIn?.(event);
     },
     [onPressIn, scale]
@@ -34,21 +26,27 @@ function AnimatedTabButton(props: PressableProps & { style?: StyleProp<ViewStyle
 
   const handlePressOut = useCallback(
     (event: any) => {
-      scale.value = withSpring(1, { damping: 15, stiffness: 150 });
+      Animated.spring(scale, {
+        toValue: 1,
+        damping: 15,
+        stiffness: 150,
+        useNativeDriver: true,
+      }).start();
       onPressOut?.(event);
     },
     [onPressOut, scale]
   );
 
   return (
-    <AnimatedPressableBase
-      onPressIn={handlePressIn}
-      onPressOut={handlePressOut}
-      style={[animatedStyle, style]}
-      {...rest}
-    >
-      {children}
-    </AnimatedPressableBase>
+    <Animated.View style={[{ transform: [{ scale }] }, style]}>
+      <Pressable
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        {...rest}
+      >
+        {children}
+      </Pressable>
+    </Animated.View>
   );
 }
 

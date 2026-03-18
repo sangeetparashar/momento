@@ -1,8 +1,14 @@
 import { TokenHolding, WalletBalance } from '@momento/shared';
 
-const HELIUS_API_KEY = process.env.HELIUS_API_KEY!;
-const HELIUS_RPC_URL = `https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}`;
-const HELIUS_API_URL = `https://api.helius.xyz/v0`;
+function getHeliusConfig() {
+  const apiKey = process.env.HELIUS_API_KEY;
+  if (!apiKey) throw new Error('Missing HELIUS_API_KEY environment variable');
+  return {
+    apiKey,
+    rpcUrl: `https://mainnet.helius-rpc.com/?api-key=${apiKey}`,
+    apiUrl: 'https://api.helius.xyz/v0',
+  };
+}
 
 const LAMPORTS_PER_SOL = 1_000_000_000;
 
@@ -10,7 +16,8 @@ const LAMPORTS_PER_SOL = 1_000_000_000;
  * Fetches the SOL balance for a wallet address using the Helius RPC endpoint.
  */
 async function getSolBalance(walletAddress: string): Promise<number> {
-  const response = await fetch(HELIUS_RPC_URL, {
+  const { rpcUrl } = getHeliusConfig();
+  const response = await fetch(rpcUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -33,7 +40,8 @@ async function getSolBalance(walletAddress: string): Promise<number> {
  * Fetches all token balances and metadata for a wallet using the Helius DAS API.
  */
 async function getTokenBalances(walletAddress: string): Promise<TokenHolding[]> {
-  const response = await fetch(HELIUS_RPC_URL, {
+  const { rpcUrl } = getHeliusConfig();
+  const response = await fetch(rpcUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -95,8 +103,9 @@ export async function fetchWalletBalance(walletAddress: string): Promise<WalletB
   // Fetch SOL price for total value calculation
   let solPriceUsd = 0;
   try {
+    const { apiKey, apiUrl } = getHeliusConfig();
     const priceResponse = await fetch(
-      `${HELIUS_API_URL}/token-metadata?api-key=${HELIUS_API_KEY}`,
+      `${apiUrl}/token-metadata?api-key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

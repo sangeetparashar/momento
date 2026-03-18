@@ -1,6 +1,8 @@
 # Momento - External Services Setup Guide
 
 > **For humans who don't read documentation.** Every step is click-by-click. No step is assumed obvious.
+>
+> Last updated: 2026-03-13
 
 ---
 
@@ -20,17 +22,23 @@
 12. [Environment Variable Reference](#12-env-var-reference)
 13. [Verification Checklist](#13-verification-checklist)
 
+> **Note on lazy initialization:** All API lib modules (`redis.ts`, `auth.ts`, `storage.ts`, `helius.ts`, `veriff.ts`) use lazy initialization. They do not create service clients at import time, so the API server will start even if some env vars are missing. Errors only occur when a request actually needs a service whose credentials are not configured. This means you can set up services incrementally.
+
 ---
 
 ## 1. Overview
 
-Momento needs 6 services configured before the API backend works, plus 5 more for deployment and app store distribution.
+Momento uses lazy initialization for all service modules, so you can start developing with just a database and auth provider. Other services can be added incrementally.
 
-### Required for Development (must do first)
+### Minimum Viable Local Dev (must do first)
 | # | Service | Purpose | Cost | Time |
 |---|---------|---------|------|------|
 | 1 | Supabase | PostgreSQL database + file storage | Free | 10 min |
 | 2 | Privy | User login + Solana wallet creation | Free (1K users) | 10 min |
+
+### Recommended for Development (improves the experience)
+| # | Service | Purpose | Cost | Time |
+|---|---------|---------|------|------|
 | 3 | Upstash Redis | API response caching | Free (10K/day) | 5 min |
 | 4 | Helius | Solana blockchain data (wallet balances) | Free (1M credits) | 5 min |
 
@@ -931,30 +939,42 @@ After filling in all env vars, run this sequence:
 # 1. Install all dependencies
 pnpm install
 
-# 2. Generate Prisma client
+# 2. Approve Prisma build scripts (first time only — interactive prompt)
+pnpm approve-builds
+
+# 3. Generate Prisma client
 cd apps/api
 npx prisma generate
 
-# 3. Push database schema (creates tables)
+# 4. Push database schema (creates tables)
 npx prisma db push
 
-# 4. Seed sample data
+# 5. Apply PostGIS migration (for location queries)
+npx prisma migrate deploy
+
+# 6. Seed sample data (optional)
 npx prisma db seed
 
-# 5. Start the API server
+# 7. Start the API server (port 3000)
 pnpm dev
 
-# 6. In a new terminal, start the mobile app
+# 8. In a new terminal, start the mobile app
 cd apps/mobile
 pnpm start
+
+# 9. (Optional) In another terminal, start the landing page (port 3001)
+cd apps/landing
+pnpm dev
 ```
+
+> **Important:** Step 2 (`pnpm approve-builds`) is required the first time you clone the repo. pnpm blocks package build scripts by default, and Prisma needs to run its postinstall script to function. If you skip this, `npx prisma generate` will fail.
 
 ---
 
 ## Troubleshooting
 
 ### "Cannot find module '@prisma/client'"
-Run `cd apps/api && npx prisma generate` — this generates the Prisma client from your schema.
+Run `pnpm approve-builds` (first time only), then `cd apps/api && npx prisma generate`. The `approve-builds` step is needed because pnpm blocks package build scripts by default and Prisma requires its postinstall script to run.
 
 ### "Error: connect ECONNREFUSED" on database
 Your `DATABASE_URL` is wrong. Double-check:

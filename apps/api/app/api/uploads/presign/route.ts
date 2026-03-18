@@ -38,10 +38,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine upload folder
-    const uploadFolder = folder || `users/${user.id}`;
+    // Determine upload folder (sanitize to prevent path traversal)
+    const safeFolder = (folder || `users/${user.id}`).replace(/\.\.\//g, '').replace(/^\/+/, '');
 
-    const result = await createPresignedUpload(uploadFolder, fileName, contentType);
+    const result = await createPresignedUpload(safeFolder, fileName, contentType);
 
     return NextResponse.json({
       success: true,

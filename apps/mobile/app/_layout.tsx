@@ -4,22 +4,19 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { PrivyProvider } from '@privy-io/expo';
 import { QueryProvider } from '@/providers/QueryProvider';
+import { PrivyGuard } from '@/providers/PrivyGuard';
 import { LocationProvider } from '@/providers/LocationProvider';
 import { NotificationProvider } from '@/providers/NotificationProvider';
-import { AuthBridge } from '@/providers/AuthBridge';
 import { ErrorBoundary } from '@/components/primitives';
 import { COLORS } from '@/styles/theme';
-import { ENV } from '@/config/env';
 
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
         <QueryProvider>
-          <PrivyProvider appId={ENV.PRIVY_APP_ID}>
-            <AuthBridge>
+          <PrivyGuard>
             <LocationProvider>
               <NotificationProvider>
                 <StatusBar style="light" />
@@ -64,8 +61,7 @@ export default function RootLayout() {
                 </ErrorBoundary>
               </NotificationProvider>
             </LocationProvider>
-            </AuthBridge>
-          </PrivyProvider>
+          </PrivyGuard>
         </QueryProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -20,54 +20,11 @@ import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo } from '@/utils/formatters';
 import { useQuery } from '@tanstack/react-query';
-import { useFeed } from '@/hooks';
+import { useFeed, useComments } from '@/hooks';
 import { apiService } from '@/services/api';
-import type { Comment, PostWithCreator } from '@momento/shared';
+import type { PostWithCreator } from '@momento/shared';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-// Dummy comments for display
-const DUMMY_COMMENTS: Comment[] = [
-  {
-    id: '1',
-    postId: '',
-    userId: 'u1',
-    content: 'This is amazing! Love the vibe',
-    createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-    user: {
-      id: 'u1',
-      displayName: 'Alex Rivera',
-      username: 'alexr',
-      avatarUrl: undefined,
-    },
-  },
-  {
-    id: '2',
-    postId: '',
-    userId: 'u2',
-    content: 'Incredible work, keep it up!',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-    user: {
-      id: 'u2',
-      displayName: 'Jordan Kim',
-      username: 'jordank',
-      avatarUrl: undefined,
-    },
-  },
-  {
-    id: '3',
-    postId: '',
-    userId: 'u3',
-    content: 'Just bought some tokens. To the moon!',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(),
-    user: {
-      id: 'u3',
-      displayName: 'Sam Chen',
-      username: 'samc',
-      avatarUrl: undefined,
-    },
-  },
-];
 
 export default function PostScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -75,6 +32,7 @@ export default function PostScreen() {
   const feedQuery = useFeed();
   const [commentText, setCommentText] = useState('');
   const inputRef = useRef<TextInput>(null);
+  const { comments, isLoading: commentsLoading, createComment, isCreating } = useComments(id);
 
   // Find the post from feed data
   const cachedPost = useMemo(() => {
@@ -107,11 +65,11 @@ export default function PostScreen() {
   }, [post?.creatorId, router]);
 
   const handleSendComment = useCallback(() => {
-    if (!commentText.trim()) return;
-    // In production this would call an API
+    if (!commentText.trim() || !id) return;
+    createComment({ content: commentText.trim() });
     setCommentText('');
     inputRef.current?.blur();
-  }, [commentText]);
+  }, [commentText, id, createComment]);
 
   if (isPostLoading) {
     return (
@@ -233,26 +191,32 @@ export default function PostScreen() {
           {/* Comments Section */}
           <View style={styles.commentsSection}>
             <Text style={styles.commentsTitle}>Comments</Text>
-            {DUMMY_COMMENTS.map((comment) => (
-              <View key={comment.id} style={styles.commentItem}>
-                <Avatar
-                  uri={comment.user.avatarUrl}
-                  name={comment.user.displayName || comment.user.username}
-                  size="sm"
-                />
-                <View style={styles.commentContent}>
-                  <View style={styles.commentHeader}>
-                    <Text style={styles.commentName}>
-                      {comment.user.displayName || comment.user.username}
-                    </Text>
-                    <Text style={styles.commentTime}>
-                      {formatTimeAgo(comment.createdAt)}
-                    </Text>
+            {commentsLoading ? (
+              <ActivityIndicator size="small" color={COLORS.primary} style={{ marginVertical: SPACING.md }} />
+            ) : comments.length === 0 ? (
+              <Text style={styles.emptyComments}>No comments yet. Be the first!</Text>
+            ) : (
+              comments.map((comment) => (
+                <View key={comment.id} style={styles.commentItem}>
+                  <Avatar
+                    uri={comment.user.avatarUrl}
+                    name={comment.user.displayName || comment.user.username}
+                    size="sm"
+                  />
+                  <View style={styles.commentContent}>
+                    <View style={styles.commentHeader}>
+                      <Text style={styles.commentName}>
+                        {comment.user.displayName || comment.user.username}
+                      </Text>
+                      <Text style={styles.commentTime}>
+                        {formatTimeAgo(comment.createdAt)}
+                      </Text>
+                    </View>
+                    <Text style={styles.commentText}>{comment.content}</Text>
                   </View>
-                  <Text style={styles.commentText}>{comment.content}</Text>
                 </View>
-              </View>
-            ))}
+              ))
+            )}
           </View>
         </ScrollView>
 
@@ -273,17 +237,21 @@ export default function PostScreen() {
             onPress={handleSendComment}
             style={[
               styles.sendButton,
-              !commentText.trim() && styles.sendButtonDisabled,
+              (!commentText.trim() || isCreating) && styles.sendButtonDisabled,
             ]}
-            disabled={!commentText.trim()}
+            disabled={!commentText.trim() || isCreating}
           >
-            <Ionicons
-              name="send"
-              size={20}
-              color={
-                commentText.trim() ? COLORS.primary : COLORS.textTertiary
-              }
-            />
+            {isCreating ? (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            ) : (
+              <Ionicons
+                name="send"
+                size={20}
+                color={
+                  commentText.trim() ? COLORS.primary : COLORS.textTertiary
+                }
+              />
+            )}
           </Pressable>
         </View>
       </KeyboardAvoidingView>
@@ -450,5 +418,11 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.5,
+  },
+  emptyComments: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textTertiary,
+    textAlign: 'center',
+    marginVertical: SPACING.md,
   },
 });

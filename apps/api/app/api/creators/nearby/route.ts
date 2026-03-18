@@ -10,6 +10,7 @@ export async function GET(request: NextRequest) {
     const lat = parseFloat(searchParams.get('lat') || '0');
     const lng = parseFloat(searchParams.get('lng') || '0');
     const radiusKm = parseInt(searchParams.get('radius') || String(DEFAULT_RADIUS_KM), 10);
+    const limit = Math.min(parseInt(searchParams.get('limit') || '50', 10), 100);
 
     if (!lat && !lng) {
       return NextResponse.json(
@@ -49,11 +50,12 @@ export async function GET(request: NextRequest) {
             $3
           )
         ORDER BY "distanceMeters" ASC
-        LIMIT 50
+        LIMIT $4
         `,
         lng,
         lat,
-        radiusMeters
+        radiusMeters,
+        limit
       );
 
       return results.map((c: any) => ({

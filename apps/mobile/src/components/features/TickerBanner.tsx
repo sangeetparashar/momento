@@ -1,12 +1,5 @@
-import React, { useEffect } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  Easing,
-} from 'react-native-reanimated';
+import React, { useEffect, useRef } from 'react';
+import { View, StyleSheet, Pressable, Animated, Easing } from 'react-native';
 import { Text } from '@/components/primitives';
 import { COLORS, SPACING } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -26,26 +19,24 @@ const ITEM_WIDTH = 120;
 const SCROLL_SPEED = 30000;
 
 export function TickerBanner({ title, items, onPress }: TickerBannerProps) {
-  const translateX = useSharedValue(0);
+  const translateX = useRef(new Animated.Value(0)).current;
 
   const duplicatedItems = [...items, ...items, ...items];
   const totalWidth = items.length * ITEM_WIDTH;
 
   useEffect(() => {
-    translateX.value = 0;
-    translateX.value = withRepeat(
-      withTiming(-totalWidth, {
+    translateX.setValue(0);
+    const animation = Animated.loop(
+      Animated.timing(translateX, {
+        toValue: -totalWidth,
         duration: SCROLL_SPEED,
         easing: Easing.linear,
-      }),
-      -1,
-      false
+        useNativeDriver: true,
+      })
     );
+    animation.start();
+    return () => animation.stop();
   }, [items, totalWidth, translateX]);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-  }));
 
   return (
     <Pressable onPress={onPress} style={styles.container}>
@@ -54,7 +45,7 @@ export function TickerBanner({ title, items, onPress }: TickerBannerProps) {
         <Text style={styles.arrow}>{'>'}</Text>
       </View>
       <View style={styles.tickerContainer}>
-        <Animated.View style={[styles.tickerRow, animatedStyle]}>
+        <Animated.View style={[styles.tickerRow, { transform: [{ translateX }] }]}>
           {duplicatedItems.map((item, index) => (
             <View key={`${item.symbol}-${index}`} style={styles.tickerItem}>
               <Text style={styles.symbol}>{item.symbol}</Text>

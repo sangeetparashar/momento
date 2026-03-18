@@ -1,6 +1,5 @@
-import React, { useCallback } from 'react';
-import { View, StyleSheet, Modal, Pressable } from 'react-native';
-import Animated, { FadeIn, SlideInDown } from 'react-native-reanimated';
+import React, { useCallback, useEffect, useRef } from 'react';
+import { View, StyleSheet, Modal, Pressable, Animated, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/primitives';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
@@ -30,6 +29,8 @@ const MENU_ITEMS: SettingsMenuItem[] = [
   },
 ];
 
+const SCREEN_HEIGHT = Dimensions.get('window').height;
+
 interface SettingsSheetProps {
   visible: boolean;
   onClose: () => void;
@@ -41,6 +42,39 @@ export function SettingsSheet({
   onClose,
   onNavigate,
 }: SettingsSheetProps) {
+  const backdropOpacity = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.parallel([
+        Animated.timing(backdropOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.spring(slideAnim, {
+          toValue: 0,
+          damping: 20,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      Animated.parallel([
+        Animated.timing(backdropOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.timing(slideAnim, {
+          toValue: SCREEN_HEIGHT,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [visible, backdropOpacity, slideAnim]);
+
   const handleItemPress = useCallback(
     (route: string) => {
       onNavigate?.(route);
@@ -57,14 +91,16 @@ export function SettingsSheet({
     >
       <View style={styles.container}>
         {/* Backdrop */}
-        <Animated.View entering={FadeIn.duration(200)} style={styles.backdrop}>
+        <Animated.View style={[styles.backdrop, { opacity: backdropOpacity }]}>
           <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         </Animated.View>
 
         {/* Sheet */}
         <Animated.View
-          entering={SlideInDown.duration(300).springify().damping(20)}
-          style={styles.sheet}
+          style={[
+            styles.sheet,
+            { transform: [{ translateY: slideAnim }] },
+          ]}
         >
           {/* Handle */}
           <View style={styles.handleContainer}>

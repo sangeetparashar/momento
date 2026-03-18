@@ -1,9 +1,12 @@
 import crypto from 'crypto';
 import { KycStatus } from '@momento/shared';
 
-const VERIFF_API_KEY = process.env.VERIFF_API_KEY!;
-const VERIFF_SHARED_SECRET = process.env.VERIFF_SHARED_SECRET!;
-const VERIFF_BASE_URL = 'https://stationapi.veriff.com/v1';
+function getVeriffConfig() {
+  const apiKey = process.env.VERIFF_API_KEY;
+  const sharedSecret = process.env.VERIFF_SHARED_SECRET;
+  if (!apiKey || !sharedSecret) throw new Error('Missing VERIFF_API_KEY or VERIFF_SHARED_SECRET environment variables');
+  return { apiKey, sharedSecret, baseUrl: 'https://stationapi.veriff.com/v1' };
+}
 
 interface VeriffSession {
   id: string;
@@ -37,11 +40,12 @@ export async function createVeriffSession(
     },
   };
 
-  const response = await fetch(`${VERIFF_BASE_URL}/sessions`, {
+  const { apiKey, baseUrl } = getVeriffConfig();
+  const response = await fetch(`${baseUrl}/sessions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-AUTH-CLIENT': VERIFF_API_KEY,
+      'X-AUTH-CLIENT': apiKey,
     },
     body: JSON.stringify(payload),
   });
@@ -63,8 +67,9 @@ export function verifyWebhookSignature(
   payload: string,
   signature: string
 ): boolean {
+  const { sharedSecret } = getVeriffConfig();
   const expectedSignature = crypto
-    .createHmac('sha256', VERIFF_SHARED_SECRET)
+    .createHmac('sha256', sharedSecret)
     .update(Buffer.from(payload, 'utf8'))
     .digest('hex')
     .toLowerCase();

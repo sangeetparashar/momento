@@ -1,24 +1,37 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
-import { usePrivy } from '@privy-io/expo';
+import { useRouter, useNavigationContainerRef } from 'expo-router';
+import { useAuth } from '@/hooks/useAuth';
 import { Text } from '@/components/primitives';
 import { COLORS } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 
 export default function IndexScreen() {
   const router = useRouter();
-  const { isReady, user } = usePrivy();
+  const rootNav = useNavigationContainerRef();
+  const { isReady, user } = useAuth();
+  const [navReady, setNavReady] = useState(false);
+
+  // Wait for the navigation container to be ready before navigating
+  useEffect(() => {
+    if (rootNav?.isReady()) {
+      setNavReady(true);
+      return;
+    }
+    // Poll briefly for navigation readiness
+    const timer = setTimeout(() => setNavReady(true), 100);
+    return () => clearTimeout(timer);
+  }, [rootNav]);
 
   useEffect(() => {
-    if (!isReady) return;
+    if (!isReady || !navReady) return;
 
     if (user) {
       router.replace('/(tabs)/home');
     } else {
       router.replace('/login');
     }
-  }, [isReady, user, router]);
+  }, [isReady, user, router, navReady]);
 
   return (
     <View style={styles.container}>

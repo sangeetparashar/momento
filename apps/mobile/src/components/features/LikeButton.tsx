@@ -1,13 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { Pressable, StyleSheet } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withSequence,
-  withTiming,
-  interpolateColor,
-} from 'react-native-reanimated';
+import React, { useState, useCallback, useRef } from 'react';
+import { Pressable, StyleSheet, Animated } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/primitives';
@@ -23,9 +15,6 @@ interface LikeButtonProps {
   size?: number;
 }
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-const AnimatedIonicons = Animated.createAnimatedComponent(Ionicons);
-
 export function LikeButton({
   postId,
   initialLiked = false,
@@ -36,24 +25,8 @@ export function LikeButton({
   const [likeCount, setLikeCount] = useState(initialCount);
   const likeMutation = useLike();
 
-  const scale = useSharedValue(1);
-  const rotation = useSharedValue(0);
-  const colorFlash = useSharedValue(0);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: scale.value },
-      { rotateZ: `${rotation.value}deg` },
-    ],
-  }));
-
-  const animatedIconStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(
-      colorFlash.value,
-      [0, 1],
-      [COLORS.error, COLORS.primary]
-    ),
-  }));
+  const scale = useRef(new Animated.Value(1)).current;
+  const rotation = useRef(new Animated.Value(0)).current;
 
   const handlePress = useCallback(() => {
     const newLiked = !isLiked;
@@ -61,52 +34,87 @@ export function LikeButton({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     // Scale: pop up to 1.3 then spring back to 1.0
-    scale.value = withSequence(
-      withSpring(1.3, { damping: 6, stiffness: 300 }),
-      withSpring(1, { damping: 8, stiffness: 200 })
-    );
+    Animated.sequence([
+      Animated.spring(scale, {
+        toValue: 1.3,
+        damping: 6,
+        stiffness: 300,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scale, {
+        toValue: 1,
+        damping: 8,
+        stiffness: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
 
     // Rotation wobble: swing +5 -> -5 -> 0
-    rotation.value = withSequence(
-      withTiming(5, { duration: 80 }),
-      withTiming(-5, { duration: 80 }),
-      withSpring(0, { damping: 10, stiffness: 200 })
-    );
-
-    // Flash green briefly on like
-    if (newLiked) {
-      colorFlash.value = withSequence(
-        withTiming(1, { duration: 100 }),
-        withTiming(0, { duration: 300 })
-      );
-    }
+    Animated.sequence([
+      Animated.timing(rotation, {
+        toValue: 5,
+        duration: 80,
+        useNativeDriver: true,
+      }),
+      Animated.timing(rotation, {
+        toValue: -5,
+        duration: 80,
+        useNativeDriver: true,
+      }),
+      Animated.spring(rotation, {
+        toValue: 0,
+        damping: 10,
+        stiffness: 200,
+        useNativeDriver: true,
+      }),
+    ]).start();
 
     setIsLiked(newLiked);
     setLikeCount((prev) => prev + (newLiked ? 1 : -1));
     likeMutation.mutate({ postId, liked: newLiked });
-  }, [isLiked, postId, likeMutation, scale, rotation, colorFlash]);
+  }, [isLiked, postId, likeMutation, scale, rotation]);
+
+  const rotateInterpolation = rotation.interpolate({
+    inputRange: [-10, 10],
+    outputRange: ['-10deg', '10deg'],
+  });
 
   return (
-    <AnimatedPressable
-      onPress={handlePress}
-      style={[styles.container, animatedStyle]}
-      hitSlop={8}
+    <Animated.View
+      style={[
+        styles.container,
+        {
+          transform: [
+            { scale },
+            { rotate: rotateInterpolation },
+          ],
+        },
+      ]}
     >
-      <AnimatedIonicons
-        name={isLiked ? 'heart' : 'heart-outline'}
-        size={size}
-        color={isLiked ? COLORS.error : COLORS.textSecondary}
-        style={isLiked ? animatedIconStyle : undefined}
-      />
-      {likeCount > 0 && (
-        <Text style={styles.count}>{formatNumber(likeCount)}</Text>
-      )}
-    </AnimatedPressable>
+      <Pressable
+        onPress={handlePress}
+        hitSlop={8}
+        style={styles.pressable}
+      >
+        <Ionicons
+          name={isLiked ? 'heart' : 'heart-outline'}
+          size={size}
+          color={isLiked ? COLORS.error : COLORS.textSecondary}
+        />
+        {likeCount > 0 && (
+          <Text style={styles.count}>{formatNumber(likeCount)}</Text>
+        )}
+      </Pressable>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  pressable: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,

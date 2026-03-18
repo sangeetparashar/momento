@@ -11,16 +11,25 @@
       "expo-router",
       [
         "expo-location",
-        { "locationAlwaysAndWhenInUsePermission": "Momento needs your location to show nearby creators and posts." }
+        {
+          "locationAlwaysAndWhenInUsePermission": "Momento needs your location to show nearby creators and posts."
+        }
       ],
       [
         "expo-image-picker",
-        { "photosPermission": "Momento needs access to your photos to create posts." }
+        {
+          "photosPermission": "Momento needs access to your photos to create posts."
+        }
       ],
       [
         "expo-notifications",
-        { "icon": "./assets/notification-icon.png", "color": "#00FF88" }
-      ]
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#00FF88"
+        }
+      ],
+      "expo-secure-store",
+      "expo-web-browser"
     ],
     "ios": {
       "supportsTablet": false,
@@ -35,7 +44,10 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0D0D0D"
       },
-      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"]
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
     }
   }
 }

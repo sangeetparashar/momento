@@ -7,27 +7,37 @@ import React, {
   useState,
 } from 'react';
 import { Platform } from 'react-native';
-import * as Notifications from 'expo-notifications';
-import * as Device from 'expo-constants';
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { apiService } from '@/services/api';
 
-/** Configure how notifications are presented when the app is foregrounded. */
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+// expo-notifications is not available in Expo Go (removed in SDK 53+).
+// We dynamically require it and no-op when unavailable.
+let Notifications: typeof import('expo-notifications') | null = null;
+const isExpoGo = Constants.appOwnership === 'expo';
+
+if (!isExpoGo) {
+  try {
+    Notifications = require('expo-notifications');
+    Notifications!.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  } catch {
+    Notifications = null;
+  }
+}
 
 interface NotificationContextValue {
   /** The Expo push token string, or null if not yet registered. */
   pushToken: string | null;
   /** The most recent notification received while the app was foregrounded. */
-  lastNotification: Notifications.Notification | null;
+  lastNotification: any | null;
 }
 
 const NotificationContext = createContext<NotificationContextValue>({
@@ -41,10 +51,9 @@ interface NotificationProviderProps {
 
 export function NotificationProvider({ children }: NotificationProviderProps) {
   const [pushToken, setPushToken] = useState<string | null>(null);
-  const [lastNotification, setLastNotification] =
-    useState<Notifications.Notification | null>(null);
-  const notificationListener = useRef<Notifications.EventSubscription | null>(null);
-  const responseListener = useRef<Notifications.EventSubscription | null>(null);
+  const [lastNotification, setLastNotification] = useState<any | null>(null);
+  const notificationListener = useRef<any>(null);
+  const responseListener = useRef<any>(null);
   const router = useRouter();
 
   // ---------------------------------------------------------------------------
@@ -52,10 +61,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   // ---------------------------------------------------------------------------
 
   const registerForPushNotifications = useCallback(async () => {
-    // Push notifications only work on physical devices
-    if (!Device.default.isDevice) {
-      return;
-    }
+    if (!Notifications) return; // Not available in Expo Go
 
     // Request permission
     const { status: existingStatus } =
@@ -73,7 +79,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
 
     // Get the Expo push token
     const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: Device.default.expoConfig?.extra?.eas?.projectId,
+      projectId: Constants.expoConfig?.extra?.eas?.projectId,
     });
     const token = tokenData.data;
     setPushToken(token);
@@ -101,8 +107,8 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   // ---------------------------------------------------------------------------
 
   const handleNotificationResponse = useCallback(
-    (response: Notifications.NotificationResponse) => {
-      const data = response.notification.request.content.data as
+    (response: any) => {
+      const data = response?.notification?.request?.content?.data as
         | Record<string, string>
         | undefined;
 
@@ -125,6 +131,8 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
+    if (!Notifications) return; // Not available in Expo Go
+
     registerForPushNotifications();
 
     // Listen for notifications received while app is foregrounded
@@ -141,12 +149,10 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
 
     return () => {
       if (notificationListener.current) {
-        Notifications.removeNotificationSubscription(
-          notificationListener.current,
-        );
+        notificationListener.current.remove();
       }
       if (responseListener.current) {
-        Notifications.removeNotificationSubscription(responseListener.current);
+        responseListener.current.remove();
       }
     };
   }, [registerForPushNotifications, handleNotificationResponse]);

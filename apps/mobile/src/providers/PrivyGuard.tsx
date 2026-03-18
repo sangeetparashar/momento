@@ -1,0 +1,54 @@
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import Constants from 'expo-constants';
+import { ENV } from '@/config/env';
+
+/**
+ * PrivyGuard wraps PrivyProvider + AuthBridge.
+ *
+ * In Expo Go, @privy-io/expo-native-extensions (ExpoCryptoAES) is not
+ * available, so PrivyProvider crashes. This guard detects that and renders
+ * children without auth — the app runs in "guest mode" so you can preview
+ * the full UI. Auth only works in a development build.
+ */
+
+interface PrivyGuardContextType {
+  isPrivyAvailable: boolean;
+}
+
+const PrivyGuardContext = createContext<PrivyGuardContextType>({ isPrivyAvailable: false });
+export const usePrivyGuard = () => useContext(PrivyGuardContext);
+
+export function PrivyGuard({ children }: { children: React.ReactNode }) {
+  const isExpoGo = Constants.appOwnership === 'expo';
+
+  if (isExpoGo) {
+    console.warn('[PrivyGuard] Running in Expo Go — Privy auth disabled (needs dev build)');
+    return (
+      <PrivyGuardContext.Provider value={{ isPrivyAvailable: false }}>
+        {children}
+      </PrivyGuardContext.Provider>
+    );
+  }
+
+  // Native module available — render the real Privy stack
+  return <PrivyWithAuth>{children}</PrivyWithAuth>;
+}
+
+/**
+ * Separated into its own component so the `import` of @privy-io/expo
+ * only executes when we know the native module exists.
+ */
+function PrivyWithAuth({ children }: { children: React.ReactNode }) {
+  const { PrivyProvider } = require('@privy-io/expo');
+  const { AuthBridge } = require('@/providers/AuthBridge');
+
+  return (
+    <PrivyGuardContext.Provider value={{ isPrivyAvailable: true }}>
+      <PrivyProvider appId={ENV.PRIVY_APP_ID}>
+        <AuthBridge>
+          {children}
+        </AuthBridge>
+      </PrivyProvider>
+    </PrivyGuardContext.Provider>
+  );
+}

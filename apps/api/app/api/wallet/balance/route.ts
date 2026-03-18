@@ -7,6 +7,13 @@ export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request);
 
+    if (!user.walletAddress) {
+      return NextResponse.json(
+        { success: false, error: 'No wallet address linked to this account' },
+        { status: 400 }
+      );
+    }
+
     const cacheKey = cacheKeys.walletBalance(user.walletAddress);
 
     const balance = await getOrSetCache(cacheKey, cacheTTL.walletBalance, async () => {
