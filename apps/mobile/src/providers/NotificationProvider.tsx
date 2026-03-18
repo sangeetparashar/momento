@@ -13,21 +13,15 @@ import { apiService } from '@/services/api';
 
 // expo-notifications is not available in Expo Go (removed in SDK 53+).
 // We dynamically require it and no-op when unavailable.
+// Note: setNotificationHandler is deferred to the provider component to
+// avoid triggering Firebase initialization at module import time (which
+// crashes if google-services.json is not configured).
 let Notifications: typeof import('expo-notifications') | null = null;
 const isExpoGo = Constants.appOwnership === 'expo';
 
 if (!isExpoGo) {
   try {
     Notifications = require('expo-notifications');
-    Notifications!.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowAlert: true,
-        shouldPlaySound: true,
-        shouldSetBadge: true,
-        shouldShowBanner: true,
-        shouldShowList: true,
-      }),
-    });
   } catch {
     Notifications = null;
   }
@@ -60,42 +54,47 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   const registerForPushNotifications = useCallback(async () => {
     if (!Notifications) return; // Not available in Expo Go
 
-    // Request permission
-    const { status: existingStatus } =
-      await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
-
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-
-    if (finalStatus !== 'granted') {
-      return;
-    }
-
-    // Get the Expo push token
-    const tokenData = await Notifications.getExpoPushTokenAsync({
-      projectId: Constants.expoConfig?.extra?.eas?.projectId,
-    });
-    const token = tokenData.data;
-    setPushToken(token);
-
-    // Register the token with our API (fire and forget)
     try {
-      await apiService.post('/users/me/push-token', { pushToken: token });
-    } catch {
-      // Silently fail — token registration is non-critical
-    }
+      // Request permission
+      const { status: existingStatus } =
+        await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
 
-    // Android-specific notification channel
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'Default',
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#00FF88',
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+
+      if (finalStatus !== 'granted') {
+        return;
+      }
+
+      // Get the Expo push token
+      const tokenData = await Notifications.getExpoPushTokenAsync({
+        projectId: Constants.expoConfig?.extra?.eas?.projectId,
       });
+      const token = tokenData.data;
+      setPushToken(token);
+
+      // Register the token with our API (fire and forget)
+      try {
+        await apiService.post('/users/me/push-token', { pushToken: token });
+      } catch {
+        // Silently fail — token registration is non-critical
+      }
+
+      // Android-specific notification channel
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'Default',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#00FF88',
+        });
+      }
+    } catch (err) {
+      // Firebase/FCM not configured — silently degrade
+      console.warn('Push notification setup failed:', err);
     }
   }, []);
 
@@ -129,6 +128,22 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
 
   useEffect(() => {
     if (!Notifications) return; // Not available in Expo Go
+
+    // Set notification handler inside useEffect (wrapped in try/catch)
+    // to avoid triggering Firebase init at module level
+    try {
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowAlert: true,
+          shouldPlaySound: true,
+          shouldSetBadge: true,
+          shouldShowBanner: true,
+          shouldShowList: true,
+        }),
+      });
+    } catch {
+      // Firebase not configured — notifications won't work but app continues
+    }
 
     registerForPushNotifications();
 

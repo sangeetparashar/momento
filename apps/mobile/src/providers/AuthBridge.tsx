@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { usePrivy } from '@privy-io/expo';
+import { getAccessToken } from '@privy-io/expo';
 import { apiService } from '@/services/api';
 
 /**
@@ -12,18 +12,19 @@ import { apiService } from '@/services/api';
  * This component renders its children transparently.
  */
 export function AuthBridge({ children }: { children: React.ReactNode }) {
-  const { getAccessToken } = usePrivy();
-
   useEffect(() => {
+    console.log('[AuthBridge] Setting token getter');
     apiService.setTokenGetter(async () => {
       try {
         const token = await getAccessToken();
+        console.log('[AuthBridge] getAccessToken returned:', token ? `token (${token.length} chars)` : 'null/undefined');
         return token;
-      } catch {
+      } catch (err) {
+        console.error('[AuthBridge] getAccessToken failed:', err);
         return null;
       }
     });
-  }, [getAccessToken]);
+  }, []);
 
   return <>{children}</>;
 }

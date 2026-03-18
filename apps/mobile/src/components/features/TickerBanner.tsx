@@ -1,5 +1,12 @@
-import React, { useEffect, useRef } from 'react';
-import { View, StyleSheet, Pressable, Animated, Easing } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, StyleSheet, Pressable, LayoutChangeEvent } from 'react-native';
+import Animated, {
+  useSharedValue,
+  withRepeat,
+  withTiming,
+  useAnimatedStyle,
+  Easing,
+} from 'react-native-reanimated';
 import { Text } from '@/components/primitives';
 import { COLORS, SPACING } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -19,24 +26,31 @@ const ITEM_WIDTH = 120;
 const SCROLL_SPEED = 30000;
 
 export function TickerBanner({ title, items, onPress }: TickerBannerProps) {
-  const translateX = useRef(new Animated.Value(0)).current;
+  const translateX = useSharedValue(0);
+  const [measured, setMeasured] = useState(false);
 
-  const duplicatedItems = [...items, ...items, ...items];
+  const duplicatedItems = [...items, ...items];
   const totalWidth = items.length * ITEM_WIDTH;
 
-  useEffect(() => {
-    translateX.setValue(0);
-    const animation = Animated.loop(
-      Animated.timing(translateX, {
-        toValue: -totalWidth,
-        duration: SCROLL_SPEED,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    );
-    animation.start();
-    return () => animation.stop();
-  }, [items, totalWidth, translateX]);
+  const onLayout = useCallback(
+    (_e: LayoutChangeEvent) => {
+      if (measured || totalWidth === 0) return;
+      setMeasured(true);
+      translateX.value = withRepeat(
+        withTiming(-totalWidth, {
+          duration: SCROLL_SPEED,
+          easing: Easing.linear,
+        }),
+        -1,
+        false,
+      );
+    },
+    [measured, totalWidth, translateX],
+  );
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
 
   return (
     <Pressable onPress={onPress} style={styles.container}>
@@ -45,7 +59,7 @@ export function TickerBanner({ title, items, onPress }: TickerBannerProps) {
         <Text style={styles.arrow}>{'>'}</Text>
       </View>
       <View style={styles.tickerContainer}>
-        <Animated.View style={[styles.tickerRow, { transform: [{ translateX }] }]}>
+        <Animated.View style={[styles.tickerRow, animatedStyle]} onLayout={onLayout}>
           {duplicatedItems.map((item, index) => (
             <View key={`${item.symbol}-${index}`} style={styles.tickerItem}>
               <Text style={styles.symbol}>{item.symbol}</Text>

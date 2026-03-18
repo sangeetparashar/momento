@@ -11,17 +11,21 @@ export { usePrivyGuard };
  * determined at module level by whether PrivyGuard rendered the real PrivyProvider.
  * The branching happens in PrivyGuard (component tree), not here.
  */
-let _usePrivy: any = null;
+let _privyHooks: { usePrivy: any; useLoginWithOAuth: any } | false | null = null;
 
-function getUsePrivy() {
-  if (_usePrivy === null) {
+function getPrivyHooks() {
+  if (_privyHooks === null) {
     try {
-      _usePrivy = require('@privy-io/expo').usePrivy;
+      const privy = require('@privy-io/expo');
+      _privyHooks = {
+        usePrivy: privy.usePrivy,
+        useLoginWithOAuth: privy.useLoginWithOAuth,
+      };
     } catch {
-      _usePrivy = false;
+      _privyHooks = false;
     }
   }
-  return _usePrivy;
+  return _privyHooks;
 }
 
 const GUEST_AUTH = {
@@ -37,7 +41,7 @@ const GUEST_AUTH = {
 /**
  * Must only be called from components inside PrivyGuard.
  * When Privy is unavailable (Expo Go), returns guest state.
- * When Privy is available (dev build), delegates to real usePrivy().
+ * When Privy is available (dev build), delegates to real Privy hooks.
  */
 export function useAuth() {
   const { isPrivyAvailable } = usePrivyGuard();
@@ -46,11 +50,21 @@ export function useAuth() {
     return GUEST_AUTH;
   }
 
-  // This branch only runs when PrivyProvider is in the tree,
-  // so calling usePrivy() is safe (it has a provider above it).
-  const usePrivy = getUsePrivy();
-  if (!usePrivy) return GUEST_AUTH;
+  const hooks = getPrivyHooks();
+  if (!hooks) return GUEST_AUTH;
 
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  return usePrivy();
+  const privy = hooks.usePrivy();
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const { login: oauthLogin } = hooks.useLoginWithOAuth();
+
+  return {
+    isReady: privy.isReady,
+    user: privy.user,
+    login: async () => {
+      await oauthLogin({ provider: 'google' });
+    },
+    logout: privy.logout,
+    getAccessToken: async () => null, // handled by AuthBridge
+  };
 }

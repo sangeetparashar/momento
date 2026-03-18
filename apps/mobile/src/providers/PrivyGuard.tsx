@@ -47,12 +47,14 @@ export function PrivyGuard({ children }: { children: React.ReactNode }) {
  * only executes when we know the native module exists.
  */
 function PrivyWithAuth({ children }: { children: React.ReactNode }) {
+  console.log('[PrivyWithAuth] Rendering...');
   const { PrivyProvider } = require('@privy-io/expo');
   const { AuthBridge } = require('@/providers/AuthBridge');
+  console.log('[PrivyWithAuth] PrivyProvider:', typeof PrivyProvider, 'AuthBridge:', typeof AuthBridge);
 
   return (
     <PrivyGuardContext.Provider value={{ isPrivyAvailable: true }}>
-      <PrivyProvider appId={ENV.PRIVY_APP_ID}>
+      <PrivyProvider appId={ENV.PRIVY_APP_ID} clientId="client-WY6UDfFofojZafsbGzmGDGYExCP86xeQuKCcUvoyGmpqZ">
         <AuthBridge>
           {children}
         </AuthBridge>

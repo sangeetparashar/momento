@@ -117,6 +117,7 @@ class ApiService {
       }
 
       if (!response.ok) {
+        console.error(`[API] ${method} ${path} → ${response.status}`, parsed);
         throw new ApiError(response.status, parsed);
       }
 

@@ -6,14 +6,17 @@ import {
   Pressable,
   Dimensions,
   Linking,
+  ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar } from '@/components/primitives';
 import { ComingSoonModal, CreatorProfileSkeleton } from '@/components/features';
 import { useCreatorProfile } from '@/hooks';
+import { apiService } from '@/services/api';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatNumber } from '@/utils/formatters';
@@ -30,6 +33,20 @@ export default function CreatorScreen() {
   const { profile, isLoading, isFollowing, toggleFollow } = useCreatorProfile(id);
   const [activeTab, setActiveTab] = useState<CreatorTab>('PROFILE');
   const [showComingSoon, setShowComingSoon] = useState(false);
+
+  const postsQuery = useInfiniteQuery({
+    queryKey: ['creator', id, 'posts'],
+    queryFn: ({ pageParam }) =>
+      apiService.get<{ posts: any[]; nextCursor?: string; hasMore: boolean }>(
+        `/creators/${id}/posts`,
+        { ...(pageParam ? { cursor: pageParam as string } : {}) }
+      ),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.hasMore ? lastPage.nextCursor : undefined,
+    enabled: !!id,
+  });
+
+  const creatorPosts = postsQuery.data?.pages.flatMap(p => p.posts) ?? [];
 
   const handleBack = useCallback(() => {
     router.back();
@@ -160,12 +177,38 @@ export default function CreatorScreen() {
     </View>
   );
 
-  const renderPostsTab = () => (
-    <View style={styles.placeholderTab}>
-      <Ionicons name="images-outline" size={48} color={COLORS.textTertiary} />
-      <Text style={styles.placeholderText}>Posts coming soon</Text>
-    </View>
-  );
+  const renderPostsTab = () => {
+    if (postsQuery.isLoading) {
+      return (
+        <View style={styles.placeholderTab}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      );
+    }
+    if (creatorPosts.length === 0) {
+      return (
+        <View style={styles.placeholderTab}>
+          <Ionicons name="images-outline" size={48} color={COLORS.textTertiary} />
+          <Text style={styles.placeholderText}>No posts yet</Text>
+        </View>
+      );
+    }
+    return (
+      <View style={styles.postsGrid}>
+        {creatorPosts.map((post) => (
+          <Pressable key={post.id} onPress={() => router.push(`/post/${post.id}`)} style={styles.gridItem}>
+            {post.mediaUrl ? (
+              <Image source={{ uri: post.mediaUrl }} style={styles.gridImage} contentFit="cover" />
+            ) : (
+              <View style={styles.gridTextItem}>
+                <Text style={styles.gridText} numberOfLines={4}>{post.content || post.caption}</Text>
+              </View>
+            )}
+          </Pressable>
+        ))}
+      </View>
+    );
+  };
 
   const renderTokenTab = () => (
     <View style={styles.placeholderTab}>
@@ -412,5 +455,32 @@ const styles = StyleSheet.create({
   placeholderText: {
     ...TYPOGRAPHY.body,
     color: COLORS.textTertiary,
+  },
+  postsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    paddingHorizontal: SPACING.xs,
+  },
+  gridItem: {
+    width: '33.33%',
+    aspectRatio: 1,
+    padding: SPACING.xs / 2,
+  },
+  gridImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: RADII.xs,
+  },
+  gridTextItem: {
+    width: '100%',
+    height: '100%',
+    borderRadius: RADII.xs,
+    backgroundColor: COLORS.surface,
+    padding: SPACING.sm,
+    justifyContent: 'center',
+  },
+  gridText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
   },
 });

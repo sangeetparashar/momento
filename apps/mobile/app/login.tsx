@@ -1,5 +1,5 @@
-import React, { useCallback } from 'react';
-import { View, StyleSheet, Pressable, Alert } from 'react-native';
+import React, { useCallback, useEffect } from 'react';
+import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
 import { usePrivyGuard } from '@/providers/PrivyGuard';
@@ -10,40 +10,44 @@ import { TYPOGRAPHY } from '@/styles/typography';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login } = useAuth();
+  const auth = useAuth();
   const { isPrivyAvailable } = usePrivyGuard();
 
+  useEffect(() => {
+    console.log('[LoginScreen] Mounted. isPrivyAvailable:', isPrivyAvailable, 'auth.isReady:', auth.isReady, 'login type:', typeof auth.login);
+  }, [isPrivyAvailable, auth.isReady, auth.login]);
+
   const handleSignUp = useCallback(async () => {
-    if (!isPrivyAvailable) {
-      Alert.alert(
-        'Development Build Required',
-        'Privy auth requires a development build. Expo Go does not support native crypto modules.\n\nRun: npx expo run:android',
-      );
-      return;
-    }
+    console.log('[LoginScreen] SIGN UP tapped');
     try {
-      await login();
+      if (!isPrivyAvailable) {
+        Alert.alert('Dev Build Required', 'Privy auth requires a development build.');
+        return;
+      }
+      console.log('[LoginScreen] Calling login...');
+      await auth.login();
+      console.log('[LoginScreen] Login succeeded, navigating...');
       router.replace('/(tabs)/home');
-    } catch (error) {
-      // Login was cancelled or failed - user stays on login screen
+    } catch (error: any) {
+      console.log('[LoginScreen] Login error:', error?.message || error);
+      Alert.alert('Login Error', error?.message || String(error));
     }
-  }, [login, router, isPrivyAvailable]);
+  }, [auth, router, isPrivyAvailable]);
 
   const handleLogin = useCallback(async () => {
-    if (!isPrivyAvailable) {
-      Alert.alert(
-        'Development Build Required',
-        'Privy auth requires a development build. Expo Go does not support native crypto modules.\n\nRun: npx expo run:android',
-      );
-      return;
-    }
+    console.log('[LoginScreen] LOGIN tapped');
     try {
-      await login();
+      if (!isPrivyAvailable) {
+        Alert.alert('Dev Build Required', 'Privy auth requires a development build.');
+        return;
+      }
+      await auth.login();
       router.replace('/(tabs)/home');
-    } catch (error) {
-      // Login was cancelled or failed
+    } catch (error: any) {
+      console.log('[LoginScreen] Login error:', error?.message || error);
+      Alert.alert('Login Error', error?.message || String(error));
     }
-  }, [login, router, isPrivyAvailable]);
+  }, [auth, router, isPrivyAvailable]);
 
   // In Expo Go, add a "Preview Mode" button to skip login
   const handlePreview = useCallback(() => {
@@ -71,18 +75,18 @@ export default function LoginScreen() {
 
         {/* Actions */}
         <View style={styles.actions}>
-          <Pressable onPress={handleSignUp} style={styles.signUpButton}>
+          <TouchableOpacity onPress={handleSignUp} style={styles.signUpButton} activeOpacity={0.7}>
             <Text style={styles.signUpText}>SIGN UP</Text>
-          </Pressable>
+          </TouchableOpacity>
 
-          <Pressable onPress={handleLogin} style={styles.loginLink}>
+          <TouchableOpacity onPress={handleLogin} style={styles.loginLink} activeOpacity={0.7}>
             <Text style={styles.loginText}>OR LOGIN</Text>
-          </Pressable>
+          </TouchableOpacity>
 
           {!isPrivyAvailable && (
-            <Pressable onPress={handlePreview} style={styles.previewLink}>
+            <TouchableOpacity onPress={handlePreview} style={styles.previewLink} activeOpacity={0.7}>
               <Text style={styles.previewText}>PREVIEW MODE (EXPO GO)</Text>
-            </Pressable>
+            </TouchableOpacity>
           )}
         </View>
       </View>

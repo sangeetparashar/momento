@@ -66,6 +66,13 @@ export default function RootLayout() {
                     }}
                   />
                   <Stack.Screen
+                    name="wallet"
+                    options={{
+                      headerShown: false,
+                      animation: 'slide_from_right',
+                    }}
+                  />
+                  <Stack.Screen
                     name="settings"
                     options={{ headerShown: false }}
                   />

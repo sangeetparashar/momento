@@ -35,6 +35,7 @@ export function QueryProvider({ children }: QueryProviderProps) {
       persistOptions={{
         persister: asyncStoragePersister,
         maxAge: 1000 * 60 * 60 * 24, // 24 hours
+        buster: 'v2',
         dehydrateOptions: {
           shouldDehydrateQuery: (query) => {
             // Only persist feed, profile, and creator queries
@@ -42,6 +43,11 @@ export function QueryProvider({ children }: QueryProviderProps) {
             return ['feed', 'userProfile', 'creator', 'creators', 'walletBalance'].includes(key);
           },
         },
+      }}
+      onError={() => {
+        // Corrupted cache causes "promise.then is not a function" during restore.
+        // Nuke the persisted cache so the next launch starts clean.
+        asyncStoragePersister.removeClient();
       }}
     >
       {children}

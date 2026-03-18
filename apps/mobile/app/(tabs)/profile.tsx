@@ -10,9 +10,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/primitives';
 import {
-  PortfolioChart,
-  TokenList,
-  SwapModal,
   ComingSoonModal,
   SettingsSheet,
   ProfileSkeleton,
@@ -21,7 +18,7 @@ import { useUserProfile, useWalletBalance } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatCurrency, formatPercentage } from '@/utils/formatters';
-import { UserRole, type TokenHolding } from '@momento/shared';
+import { UserRole } from '@momento/shared';
 
 type ProfileTab = 'EDIT PROFILE' | 'NEW POST' | 'ACCOUNT';
 
@@ -30,7 +27,6 @@ export default function ProfileScreen() {
   const { user, isLoading } = useUserProfile();
   const walletQuery = useWalletBalance();
   const balance = walletQuery.data;
-  const [showSwapModal, setShowSwapModal] = useState(false);
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [activeTab, setActiveTab] = useState<ProfileTab>('EDIT PROFILE');
@@ -49,9 +45,9 @@ export default function ProfileScreen() {
     [router]
   );
 
-  const handleBuyPress = useCallback((_token: TokenHolding) => {
-    setShowComingSoon(true);
-  }, []);
+  const handleWalletPress = useCallback(() => {
+    router.push('/wallet');
+  }, [router]);
 
   const handleSettingsPress = useCallback(() => {
     setShowSettings(true);
@@ -66,7 +62,8 @@ export default function ProfileScreen() {
     } else if (route === 'permissions') {
       router.push('/settings/permissions');
     } else {
-      setShowComingSoon(true);
+      // Delay showing ComingSoon modal so the settings sheet animation finishes first
+      setTimeout(() => setShowComingSoon(true), 300);
     }
   }, [router]);
 
@@ -123,7 +120,7 @@ export default function ProfileScreen() {
 
             {/* Wallet Button */}
             <Pressable
-              onPress={() => setShowSwapModal(true)}
+              onPress={handleWalletPress}
               style={styles.walletButton}
             >
               <Ionicons name="wallet-outline" size={20} color={COLORS.primary} />
@@ -161,31 +158,12 @@ export default function ProfileScreen() {
               </View>
             </View>
 
-            {/* Chart */}
-            <PortfolioChart />
-
-            {/* Token List */}
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Portfolio</Text>
-              <Text style={styles.totalValue}>
-                {formatCurrency(balance?.totalValueUsd ?? 0)}
-              </Text>
-            </View>
-            <TokenList
-              tokens={balance?.tokens ?? []}
-              onBuyPress={handleBuyPress}
-            />
-
             <View style={styles.bottomSpacer} />
           </>
         )}
       </ScrollView>
 
       {/* Modals */}
-      <SwapModal
-        visible={showSwapModal}
-        onClose={() => setShowSwapModal(false)}
-      />
       <ComingSoonModal
         visible={showComingSoon}
         onClose={() => setShowComingSoon(false)}
@@ -285,25 +263,6 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.h3,
     color: COLORS.textPrimary,
     fontWeight: '800',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginHorizontal: SPACING.md,
-    marginVertical: SPACING.md,
-  },
-  sectionTitle: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textPrimary,
-    fontWeight: '700',
-    fontSize: 18,
-  },
-  totalValue: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textPrimary,
-    fontWeight: '800',
-    fontSize: 18,
   },
   bottomSpacer: {
     height: SPACING.xl,
