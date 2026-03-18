@@ -68,15 +68,12 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
   });
 
   if (!user) {
-    // Fetch Privy user to get wallet address
+    // Fetch Privy user to get wallet address and email
     const privyUser = await getPrivy().getUser(privyUserId);
     const wallet = privyUser.wallet;
-    const email = privyUser.email?.address;
-
-    if (!wallet) {
-      console.error('Privy user has no wallet:', privyUserId);
-      return null;
-    }
+    const email = privyUser.email?.address || privyUser.google?.email;
+    // Use wallet address if available, otherwise generate a placeholder
+    const walletAddress = wallet?.address || `pending-${privyUserId}`;
 
     // Use upsert to avoid race condition when two concurrent first-login
     // requests both pass the findUnique check above. The second request
@@ -87,7 +84,7 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
       update: {},
       create: {
         privyUserId,
-        walletAddress: wallet.address,
+        walletAddress,
         email: email || null,
       },
       select: {
