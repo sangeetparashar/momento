@@ -13,3 +13,4 @@ android/
 coverage/
 *.tsbuildinfo
 excalidraw.log
+.vercel
