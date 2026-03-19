@@ -274,13 +274,6 @@ export default function CreatorScreen() {
         onClose={() => setShowComingSoon(false)}
         title="Trading Coming Soon!"
         message="Token trading will be available in the next update."
-        creator={profile ? {
-          id: profile.id,
-          displayName: profile.displayName,
-          username: profile.username,
-          avatarUrl: profile.avatarUrl,
-          role: 'CREATOR',
-        } : undefined}
       />
     </SafeAreaView>
   );

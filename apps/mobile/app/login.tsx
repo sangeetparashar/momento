@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { usePrivyGuard } from '@/providers/PrivyGuard';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +11,7 @@ import { TYPOGRAPHY } from '@/styles/typography';
 
 export default function LoginScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const auth = useAuth();
   const { isPrivyAvailable } = usePrivyGuard();
 
@@ -20,11 +22,12 @@ export default function LoginScreen() {
         return;
       }
       await auth.login();
+      queryClient.invalidateQueries();
       router.replace('/(tabs)/home');
     } catch (error: any) {
       Alert.alert('Login Error', error?.message || String(error));
     }
-  }, [auth, router, isPrivyAvailable]);
+  }, [auth, router, isPrivyAvailable, queryClient]);
 
   const handleLogin = useCallback(async () => {
     try {
@@ -33,11 +36,12 @@ export default function LoginScreen() {
         return;
       }
       await auth.login();
+      queryClient.invalidateQueries();
       router.replace('/(tabs)/home');
     } catch (error: any) {
       Alert.alert('Login Error', error?.message || String(error));
     }
-  }, [auth, router, isPrivyAvailable]);
+  }, [auth, router, isPrivyAvailable, queryClient]);
 
   // In Expo Go, add a "Preview Mode" button to skip login
   const handlePreview = useCallback(() => {

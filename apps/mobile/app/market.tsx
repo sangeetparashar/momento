@@ -10,7 +10,7 @@ import {
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Text } from '@/components/primitives';
+import { Text, Avatar } from '@/components/primitives';
 import { TickerBanner, ComingSoonModal } from '@/components/features';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -23,6 +23,8 @@ interface MarketToken {
   rank: number;
   symbol: string;
   name: string;
+  creatorName: string;
+  creatorAvatar?: string;
   change24h: number;
   marketCap: number;
   price: number;
@@ -39,16 +41,16 @@ const CREATORS_ITEMS = DUMMY_CREATORS_TO_WATCH.map((t) => ({
 }));
 
 const DUMMY_MARKET_TOKENS: MarketToken[] = [
-  { rank: 1, symbol: 'DEEL', name: 'Deel Token', change24h: 12.5, marketCap: 2500000, price: 4.25 },
-  { rank: 2, symbol: 'AURA', name: 'Aura Coin', change24h: 24.1, marketCap: 1800000, price: 3.12 },
-  { rank: 3, symbol: 'NAAN', name: 'Naan Token', change24h: 8.7, marketCap: 1500000, price: 2.80 },
-  { rank: 4, symbol: 'TASH', name: 'Tash Coin', change24h: 45.2, marketCap: 1200000, price: 1.95 },
-  { rank: 5, symbol: 'TEAH', name: 'Teah Token', change24h: 18.9, marketCap: 950000, price: 1.40 },
-  { rank: 6, symbol: 'TWSH', name: 'Twsh Coin', change24h: 7.3, marketCap: 800000, price: 0.98 },
-  { rank: 7, symbol: 'BELLE', name: 'Belle Token', change24h: -3.2, marketCap: 650000, price: 0.75 },
-  { rank: 8, symbol: 'SEAM', name: 'Seam Coin', change24h: -1.5, marketCap: 520000, price: 0.62 },
-  { rank: 9, symbol: 'CHCTS', name: 'Chcts Token', change24h: -2.1, marketCap: 400000, price: 0.45 },
-  { rank: 10, symbol: 'VIBE', name: 'Vibe Token', change24h: 5.8, marketCap: 350000, price: 0.38 },
+  { rank: 1, symbol: 'DEEL', name: 'Deel Token', creatorName: 'Deel', change24h: 12.5, marketCap: 2500000, price: 4.25 },
+  { rank: 2, symbol: 'AURA', name: 'Aura Coin', creatorName: 'Aura', change24h: 24.1, marketCap: 1800000, price: 3.12 },
+  { rank: 3, symbol: 'NAAN', name: 'Naan Token', creatorName: 'Naan', change24h: 8.7, marketCap: 1500000, price: 2.80 },
+  { rank: 4, symbol: 'TASH', name: 'Tash Coin', creatorName: 'Tash', change24h: 45.2, marketCap: 1200000, price: 1.95 },
+  { rank: 5, symbol: 'TEAH', name: 'Teah Token', creatorName: 'Teah', change24h: 18.9, marketCap: 950000, price: 1.40 },
+  { rank: 6, symbol: 'TWSH', name: 'Twsh Coin', creatorName: 'Twsh', change24h: 7.3, marketCap: 800000, price: 0.98 },
+  { rank: 7, symbol: 'BELLE', name: 'Belle Token', creatorName: 'Belle', change24h: -3.2, marketCap: 650000, price: 0.75 },
+  { rank: 8, symbol: 'SEAM', name: 'Seam Coin', creatorName: 'Seam', change24h: -1.5, marketCap: 520000, price: 0.62 },
+  { rank: 9, symbol: 'CHCTS', name: 'Chcts Token', creatorName: 'Chcts', change24h: -2.1, marketCap: 400000, price: 0.45 },
+  { rank: 10, symbol: 'VIBE', name: 'Vibe Token', creatorName: 'Vibe', change24h: 5.8, marketCap: 350000, price: 0.38 },
 ];
 
 export default function MarketScreen() {
@@ -57,6 +59,7 @@ export default function MarketScreen() {
   const [activeTab, setActiveTab] = useState<MarketTab>('TRENDING');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [showComingSoon, setShowComingSoon] = useState(false);
+  const [selectedToken, setSelectedToken] = useState<MarketToken | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handleRefresh = useCallback(() => {
@@ -101,7 +104,8 @@ export default function MarketScreen() {
     setExpandedRow((prev) => (prev === symbol ? null : symbol));
   }, []);
 
-  const handleBuyPress = useCallback(() => {
+  const handleBuyPress = useCallback((token: MarketToken) => {
+    setSelectedToken(token);
     setShowComingSoon(true);
   }, []);
 
@@ -247,14 +251,19 @@ export default function MarketScreen() {
               {/* Expanded Row */}
               {expandedRow === token.symbol && (
                 <View style={styles.expandedRow}>
-                  <View style={styles.expandedInfo}>
-                    <Text style={styles.expandedLabel}>Price</Text>
-                    <Text style={styles.expandedValue}>
-                      {formatCurrency(token.price)}
-                    </Text>
+                  <View style={styles.expandedCreator}>
+                    <Avatar
+                      uri={token.creatorAvatar}
+                      name={token.creatorName}
+                      size="sm"
+                    />
+                    <View style={styles.expandedCreatorInfo}>
+                      <Text style={styles.expandedCreatorName}>{token.creatorName}</Text>
+                      <Text style={styles.expandedPrice}>{formatCurrency(token.price)}</Text>
+                    </View>
                   </View>
                   <Pressable
-                    onPress={handleBuyPress}
+                    onPress={() => handleBuyPress(token)}
                     style={styles.buyButton}
                   >
                     <Text style={styles.buyButtonText}>BUY</Text>
@@ -276,9 +285,15 @@ export default function MarketScreen() {
 
       <ComingSoonModal
         visible={showComingSoon}
-        onClose={() => setShowComingSoon(false)}
+        onClose={() => { setShowComingSoon(false); setSelectedToken(null); }}
         title="Trading Coming Soon!"
         message="Token trading will be available in the next update."
+        creator={selectedToken ? {
+          id: selectedToken.symbol,
+          displayName: selectedToken.creatorName,
+          avatarUrl: selectedToken.creatorAvatar,
+          role: 'CREATOR',
+        } : undefined}
       />
     </SafeAreaView>
   );
@@ -440,19 +455,23 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: COLORS.border,
   },
-  expandedInfo: {
+  expandedCreator: {
     flexDirection: 'row',
     alignItems: 'center',
+    flex: 1,
     gap: SPACING.sm,
   },
-  expandedLabel: {
-    ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textTertiary,
+  expandedCreatorInfo: {
+    flex: 1,
   },
-  expandedValue: {
-    ...TYPOGRAPHY.body,
+  expandedCreatorName: {
+    ...TYPOGRAPHY.bodySmall,
     color: COLORS.textPrimary,
-    fontWeight: '700',
+    fontWeight: '600',
+  },
+  expandedPrice: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textTertiary,
   },
   buyButton: {
     backgroundColor: COLORS.primary,

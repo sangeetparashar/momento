@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { useRouter, useNavigationContainerRef } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { Text } from '@/components/primitives';
 import { COLORS } from '@/styles/theme';
@@ -9,6 +10,7 @@ import { TYPOGRAPHY } from '@/styles/typography';
 export default function IndexScreen() {
   const router = useRouter();
   const rootNav = useNavigationContainerRef();
+  const queryClient = useQueryClient();
   const { isReady, user } = useAuth();
   const [navReady, setNavReady] = useState(false);
 
@@ -27,11 +29,15 @@ export default function IndexScreen() {
     if (!isReady || !navReady) return;
 
     if (user) {
+      // Invalidate all stale queries so fresh data loads immediately
+      queryClient.invalidateQueries();
       router.replace('/(tabs)/home');
     } else {
+      // Clear all cached data on sign-out
+      queryClient.clear();
       router.replace('/login');
     }
-  }, [isReady, user, router, navReady]);
+  }, [isReady, user, router, navReady, queryClient]);
 
   return (
     <View style={styles.container}>

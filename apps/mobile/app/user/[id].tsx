@@ -310,13 +310,6 @@ export default function UserScreen() {
         onClose={() => setShowComingSoon(false)}
         title="Trading Coming Soon!"
         message="Token trading will be available in the next update."
-        creator={profile ? {
-          id: profile.id,
-          displayName: profile.displayName,
-          username: profile.username,
-          avatarUrl: profile.avatarUrl,
-          role: profile.role,
-        } : undefined}
       />
     </SafeAreaView>
   );
