@@ -251,17 +251,21 @@ export default function MarketScreen() {
               {/* Expanded Row */}
               {expandedRow === token.symbol && (
                 <View style={styles.expandedRow}>
-                  <View style={styles.expandedCreator}>
+                  <Pressable
+                    style={styles.expandedCreator}
+                    onPress={() => router.push(`/creator/${token.symbol}`)}
+                  >
                     <Avatar
                       uri={token.creatorAvatar}
                       name={token.creatorName}
-                      size="sm"
+                      size="md"
                     />
                     <View style={styles.expandedCreatorInfo}>
                       <Text style={styles.expandedCreatorName}>{token.creatorName}</Text>
                       <Text style={styles.expandedPrice}>{formatCurrency(token.price)}</Text>
+                      <Text style={styles.expandedViewProfile}>View Profile →</Text>
                     </View>
-                  </View>
+                  </Pressable>
                   <Pressable
                     onPress={() => handleBuyPress(token)}
                     style={styles.buyButton}
@@ -465,13 +469,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   expandedCreatorName: {
-    ...TYPOGRAPHY.bodySmall,
+    ...TYPOGRAPHY.body,
     color: COLORS.textPrimary,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   expandedPrice: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textSecondary,
+    marginTop: 1,
+  },
+  expandedViewProfile: {
     ...TYPOGRAPHY.caption,
-    color: COLORS.textTertiary,
+    color: COLORS.primary,
+    fontWeight: '600',
+    marginTop: 2,
   },
   buyButton: {
     backgroundColor: COLORS.primary,
