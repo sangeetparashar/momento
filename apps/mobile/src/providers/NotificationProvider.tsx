@@ -148,16 +148,21 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     registerForPushNotifications();
 
     // Listen for notifications received while app is foregrounded
-    notificationListener.current =
-      Notifications.addNotificationReceivedListener((notification) => {
-        setLastNotification(notification);
-      });
+    try {
+      notificationListener.current =
+        Notifications.addNotificationReceivedListener((notification) => {
+          setLastNotification(notification);
+        });
 
-    // Listen for notification taps
-    responseListener.current =
-      Notifications.addNotificationResponseReceivedListener(
-        handleNotificationResponse,
-      );
+      // Listen for notification taps
+      responseListener.current =
+        Notifications.addNotificationResponseReceivedListener(
+          handleNotificationResponse,
+        );
+    } catch {
+      // Firebase/FCM not initialized — listeners can't be registered
+      console.warn('Notification listeners could not be registered (Firebase not configured)');
+    }
 
     return () => {
       if (notificationListener.current) {

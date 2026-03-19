@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar } from '@/components/primitives';
 import { LikeButton } from '@/components/features';
@@ -30,6 +30,7 @@ export default function PostScreen() {
   const feedQuery = useFeed();
   const [commentText, setCommentText] = useState('');
   const inputRef = useRef<TextInput>(null);
+  const insets = useSafeAreaInsets();
   const { comments, isLoading: commentsLoading, createComment, isCreating } = useComments(id);
 
   // Find the post from feed data
@@ -223,7 +224,7 @@ export default function PostScreen() {
         </ScrollView>
 
         {/* Comment Input */}
-        <View style={styles.commentInputContainer}>
+        <View style={[styles.commentInputContainer, { paddingBottom: Math.max(insets.bottom, SPACING.sm) }]}>
           <TextInput
             ref={inputRef}
             style={styles.commentInput}

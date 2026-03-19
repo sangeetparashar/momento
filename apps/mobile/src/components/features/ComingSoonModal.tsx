@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { View, StyleSheet, Modal, Pressable } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Text } from '@/components/primitives';
+import { Text, Avatar } from '@/components/primitives';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 
@@ -10,6 +11,14 @@ interface ComingSoonModalProps {
   onClose: () => void;
   title?: string;
   message?: string;
+  /** Optional creator info to show beside the buy button */
+  creator?: {
+    id: string;
+    displayName?: string;
+    username?: string;
+    avatarUrl?: string;
+    role?: string;
+  };
 }
 
 export function ComingSoonModal({
@@ -17,7 +26,20 @@ export function ComingSoonModal({
   onClose,
   title = 'Coming Soon!',
   message = 'This feature is under development and will be available in a future update.',
+  creator,
 }: ComingSoonModalProps) {
+  const router = useRouter();
+
+  const handleCreatorPress = useCallback(() => {
+    if (!creator) return;
+    onClose();
+    if (creator.role === 'CREATOR') {
+      router.push(`/creator/${creator.id}`);
+    } else {
+      router.push(`/user/${creator.id}`);
+    }
+  }, [creator, onClose, router]);
+
   return (
     <Modal
       visible={visible}
@@ -32,6 +54,25 @@ export function ComingSoonModal({
           </View>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.message}>{message}</Text>
+
+          {/* Creator profile row */}
+          {creator && (
+            <Pressable style={styles.creatorRow} onPress={handleCreatorPress}>
+              <Avatar
+                uri={creator.avatarUrl}
+                name={creator.displayName || creator.username}
+                size="sm"
+              />
+              <View style={styles.creatorInfo}>
+                <Text style={styles.creatorName} numberOfLines={1}>
+                  {creator.displayName || creator.username || 'Creator'}
+                </Text>
+                <Text style={styles.viewProfile}>View Profile</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={COLORS.textTertiary} />
+            </Pressable>
+          )}
+
           <Pressable onPress={onClose} style={styles.okButton}>
             <Text style={styles.okButtonText}>OK</Text>
           </Pressable>
@@ -79,6 +120,28 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
     lineHeight: 22,
     fontSize: 15,
+  },
+  creatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.backgroundTertiary,
+    borderRadius: RADII.md,
+    padding: SPACING.sm,
+    marginBottom: SPACING.lg,
+    width: '100%',
+  },
+  creatorInfo: {
+    flex: 1,
+    marginLeft: SPACING.sm,
+  },
+  creatorName: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textPrimary,
+    fontWeight: '600',
+  },
+  viewProfile: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.primary,
   },
   okButton: {
     backgroundColor: COLORS.primary,

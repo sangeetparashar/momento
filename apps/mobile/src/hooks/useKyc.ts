@@ -1,3 +1,4 @@
+import { Alert } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as WebBrowser from 'expo-web-browser';
 import type { User } from '@momento/shared';
@@ -58,10 +59,17 @@ export function useKyc() {
       return { previous };
     },
 
-    onError: (_err, _vars, context) => {
+    onError: (err: any, _vars, context) => {
       const ctx = context as { previous?: User } | undefined;
       if (ctx?.previous) {
         queryClient.setQueryData(['userProfile'], ctx.previous);
+      }
+      // Show user-friendly error for rate limit
+      const status = err?.status ?? err?.body?.status;
+      if (status === 429) {
+        Alert.alert('Please Wait', 'You can only apply once per hour. Please try again later.');
+      } else {
+        Alert.alert('Error', err?.body?.error || 'Failed to submit application. Please try again.');
       }
     },
 

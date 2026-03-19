@@ -22,6 +22,12 @@ const MENU_ITEMS: SettingsMenuItem[] = [
   },
   { icon: 'shield-outline', label: 'Vault', route: 'vault' },
   {
+    icon: 'log-out-outline',
+    label: 'Sign Out',
+    route: 'sign-out',
+    destructive: false,
+  },
+  {
     icon: 'trash-outline',
     label: 'Delete Account',
     route: 'delete-account',

@@ -14,7 +14,7 @@ export { usePrivyGuard };
 let _privyHooks: {
   usePrivy: any;
   useLoginWithOAuth: any;
-  useCreateWallet: any;
+  useCreateWallet: any | null;
 } | false | null = null;
 
 function getPrivyHooks() {
@@ -24,7 +24,8 @@ function getPrivyHooks() {
       _privyHooks = {
         usePrivy: privy.usePrivy,
         useLoginWithOAuth: privy.useLoginWithOAuth,
-        useCreateWallet: privy.useCreateWallet,
+        // useCreateWallet may not exist in all SDK versions
+        useCreateWallet: typeof privy.useCreateWallet === 'function' ? privy.useCreateWallet : null,
       };
     } catch {
       _privyHooks = false;
@@ -62,8 +63,9 @@ export function useAuth() {
   const privy = hooks.usePrivy();
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const { login: oauthLogin } = hooks.useLoginWithOAuth();
+  // useCreateWallet may not exist in all Privy SDK versions
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  const { createWallet } = hooks.useCreateWallet();
+  const walletHook = hooks.useCreateWallet ? hooks.useCreateWallet() : null;
 
   return {
     isReady: privy.isReady,
@@ -72,16 +74,17 @@ export function useAuth() {
       await oauthLogin({ provider: 'google' });
 
       // Attempt to create an embedded Solana wallet if the user doesn't have one
-      try {
-        const hasWallet = privy.user?.linkedAccounts?.some(
-          (account: any) => account.type === 'wallet' && account.walletClientType === 'privy',
-        );
-        if (!hasWallet) {
-          await createWallet();
+      if (walletHook?.createWallet) {
+        try {
+          const hasWallet = privy.user?.linkedAccounts?.some(
+            (account: any) => account.type === 'wallet' && account.walletClientType === 'privy',
+          );
+          if (!hasWallet) {
+            await walletHook.createWallet();
+          }
+        } catch (walletError: any) {
+          console.warn('[useAuth] Embedded wallet creation failed:', walletError?.message || walletError);
         }
-      } catch (walletError: any) {
-        // Don't block login if wallet creation fails (e.g. wallets not enabled in Privy dashboard)
-        console.warn('[useAuth] Embedded wallet creation failed:', walletError?.message || walletError);
       }
     },
     logout: privy.logout,

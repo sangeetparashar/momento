@@ -13,19 +13,32 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar } from '@/components/primitives';
-import { LikeButton, FeedSkeleton } from '@/components/features';
+import { LikeButton, TickerBanner, BookmarkButton, FeedSkeleton } from '@/components/features';
 import { useFeed } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo, formatNumber } from '@/utils/formatters';
-import { apiService } from '@/services/api';
+import { DUMMY_TRENDING_TOKENS, DUMMY_CREATORS_TO_WATCH } from '@momento/shared';
 import type { PostWithCreator } from '@momento/shared';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-// Reserve space for header + tab bar
+
+// TickerBanner data
+const TRENDING_ITEMS = DUMMY_TRENDING_TOKENS.map((t) => ({
+  symbol: t.symbol,
+  change: t.change,
+}));
+
+const CREATORS_ITEMS = DUMMY_CREATORS_TO_WATCH.map((t) => ({
+  symbol: t.symbol,
+  change: t.change,
+}));
+
+// Reserve space for header + tickers + tab bar
 const HEADER_HEIGHT = 44;
+const TICKER_HEIGHT = 72; // approx height for 2 ticker banners
 const TAB_BAR_HEIGHT = 80;
-const PAGE_HEIGHT = SCREEN_HEIGHT - HEADER_HEIGHT - TAB_BAR_HEIGHT;
+const PAGE_HEIGHT = SCREEN_HEIGHT - HEADER_HEIGHT - TICKER_HEIGHT - TAB_BAR_HEIGHT;
 
 function FeedPage({ post }: { post: PostWithCreator }) {
   const router = useRouter();
@@ -44,19 +57,15 @@ function FeedPage({ post }: { post: PostWithCreator }) {
     }).catch(() => {});
   }, [post.caption, post.content]);
 
-  const handleBookmark = useCallback(() => {
-    apiService.post('/users/me/saved', { postId: post.id }).catch(() => {});
-  }, [post.id]);
-
   return (
     <View style={[styles.page, { width: SCREEN_WIDTH }]}>
-      {/* Full-screen media */}
+      {/* Full-screen media — contain to show full image */}
       <Pressable onPress={handlePostPress} style={styles.mediaContainer}>
         {post.mediaUrl ? (
           <Image
             source={{ uri: post.mediaUrl }}
             style={styles.fullImage}
-            contentFit="cover"
+            contentFit="contain"
             transition={200}
             placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
           />
@@ -92,9 +101,9 @@ function FeedPage({ post }: { post: PostWithCreator }) {
           <Ionicons name="paper-plane" size={26} color={COLORS.textPrimary} />
         </Pressable>
 
-        <Pressable onPress={handleBookmark} style={styles.actionItem}>
-          <Ionicons name="bookmark" size={26} color={COLORS.textPrimary} />
-        </Pressable>
+        <View style={styles.actionItem}>
+          <BookmarkButton postId={post.id} initialSaved={post.isSaved} size={26} />
+        </View>
       </View>
 
       {/* Bottom overlay: creator info + caption */}
@@ -155,6 +164,10 @@ export default function HomeScreen() {
     feedQuery.refetch();
   }, [feedQuery]);
 
+  const handleTickerPress = useCallback(() => {
+    router.push('/market');
+  }, [router]);
+
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: Array<{ index: number | null }> }) => {
       if (viewableItems.length > 0 && viewableItems[0].index != null) {
@@ -202,6 +215,20 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
+      {/* Ticker Banners */}
+      <View style={styles.tickerSection}>
+        <TickerBanner
+          title="TRENDING"
+          items={TRENDING_ITEMS}
+          onPress={handleTickerPress}
+        />
+        <TickerBanner
+          title="CREATORS TO WATCH"
+          items={CREATORS_ITEMS}
+          onPress={handleTickerPress}
+        />
+      </View>
+
       {posts.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyText}>No posts yet</Text>
@@ -233,7 +260,7 @@ export default function HomeScreen() {
             windowSize={5}
           />
 
-          {/* Page indicator dots */}
+          {/* Page indicator */}
           <View style={styles.pageIndicator}>
             <Text style={styles.pageText}>
               {currentIndex + 1} / {posts.length}
@@ -268,6 +295,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: SPACING.md,
     padding: SPACING.xs,
+  },
+
+  // Ticker banners
+  tickerSection: {
+    paddingBottom: SPACING.xs,
   },
 
   // Feed page
@@ -320,11 +352,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 0,
     left: 0,
-    right: 70, // leave room for action buttons
+    right: 70,
     paddingHorizontal: SPACING.md,
     paddingBottom: SPACING.md,
     paddingTop: SPACING.xl,
-    // gradient-like darkening at bottom
     backgroundColor: 'transparent',
   },
   creatorRow: {
@@ -379,7 +410,7 @@ const styles = StyleSheet.create({
   // Page indicator
   pageIndicator: {
     position: 'absolute',
-    top: HEADER_HEIGHT + SPACING.sm,
+    top: HEADER_HEIGHT + TICKER_HEIGHT + SPACING.sm,
     alignSelf: 'center',
     backgroundColor: 'rgba(0,0,0,0.5)',
     paddingHorizontal: SPACING.md,

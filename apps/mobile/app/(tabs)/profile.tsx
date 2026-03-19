@@ -19,8 +19,10 @@ import {
   ComingSoonModal,
   SettingsSheet,
   ProfileSkeleton,
+  FollowingModal,
 } from '@/components/features';
 import { useUserProfile, useSavedPosts } from '@/hooks';
+import { useAuth } from '@/hooks/useAuth';
 import { apiService } from '@/services/api';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -33,9 +35,11 @@ const GRID_ITEM_SIZE = (SCREEN_WIDTH - GRID_GAP * 2) / 3;
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const auth = useAuth();
   const { user, isLoading, refetch } = useUserProfile();
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showFollowing, setShowFollowing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const isCreator = user?.role === UserRole.CREATOR;
@@ -75,7 +79,9 @@ export default function ProfileScreen() {
   const handleSettingsNavigate = useCallback(
     (route: string) => {
       setShowSettings(false);
-      if (route === 'delete-account') {
+      if (route === 'sign-out') {
+        auth.logout().then(() => router.replace('/login')).catch(() => {});
+      } else if (route === 'delete-account') {
         router.push('/delete-account');
       } else if (route === 'favorites') {
         router.push('/settings/favorites');
@@ -85,7 +91,7 @@ export default function ProfileScreen() {
         setTimeout(() => setShowComingSoon(true), 300);
       }
     },
-    [router]
+    [router, auth]
   );
 
   const handleSocialPress = useCallback(
@@ -356,12 +362,12 @@ export default function ProfileScreen() {
                     <Text style={styles.statLabel}>Followers</Text>
                   </View>
                 )}
-                <View style={styles.statItem}>
+                <Pressable style={styles.statItem} onPress={() => setShowFollowing(true)}>
                   <Text style={styles.statNumber}>
                     {formatNumber(user?.followingCount ?? 0)}
                   </Text>
                   <Text style={styles.statLabel}>Following</Text>
-                </View>
+                </Pressable>
               </View>
             </View>
 
@@ -425,6 +431,10 @@ export default function ProfileScreen() {
         visible={showSettings}
         onClose={() => setShowSettings(false)}
         onNavigate={handleSettingsNavigate}
+      />
+      <FollowingModal
+        visible={showFollowing}
+        onClose={() => setShowFollowing(false)}
       />
     </SafeAreaView>
   );
