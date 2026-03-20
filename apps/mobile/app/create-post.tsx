@@ -31,6 +31,7 @@ export default function CreatePostScreen() {
 
   const [caption, setCaption] = useState('');
   const [mediaUri, setMediaUri] = useState<string | null>(null);
+  const [mediaMimeType, setMediaMimeType] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleClose = useCallback(() => {
@@ -53,6 +54,7 @@ export default function CreatePostScreen() {
 
       if (!result.canceled && result.assets[0]) {
         setMediaUri(result.assets[0].uri);
+        setMediaMimeType(result.assets[0].mimeType || null);
       }
     } catch (error) {
       Alert.alert('Error', 'Failed to pick media.');
@@ -61,6 +63,7 @@ export default function CreatePostScreen() {
 
   const handleRemoveMedia = useCallback(() => {
     setMediaUri(null);
+    setMediaMimeType(null);
   }, []);
 
   const handlePost = useCallback(async () => {
@@ -76,37 +79,47 @@ export default function CreatePostScreen() {
 
       if (mediaUri) {
         try {
-          uploadedMediaUrl = await uploadFromUri(mediaUri);
-        } catch {
-          Alert.alert('Upload Failed', 'Failed to upload media. Please try again.');
+          console.log('[CreatePost] uploading media:', mediaUri, 'mimeType:', mediaMimeType);
+          uploadedMediaUrl = await uploadFromUri(mediaUri, mediaMimeType || undefined);
+          console.log('[CreatePost] upload success:', uploadedMediaUrl);
+        } catch (uploadErr: any) {
+          console.error('[CreatePost] upload error:', uploadErr?.message, uploadErr);
+          Alert.alert('Upload Failed', `Failed to upload media: ${uploadErr?.message || 'Unknown error'}`);
           setIsSubmitting(false);
           return;
         }
       }
 
-      const postType = uploadedMediaUrl ? PostType.IMAGE : PostType.TEXT;
+      const isVideo = mediaMimeType?.startsWith('video/');
+      const postType = uploadedMediaUrl
+        ? (isVideo ? PostType.VIDEO : PostType.IMAGE)
+        : PostType.TEXT;
 
-      createPostMutation.mutate(
-        {
-          caption: caption.trim(),
-          postType,
-          mediaUrl: uploadedMediaUrl,
+      const payload = {
+        // For text posts, send as content (API requires content for TEXT type)
+        // For media posts, send as caption
+        ...(postType === PostType.TEXT
+          ? { content: caption.trim() }
+          : { caption: caption.trim() }),
+        postType,
+        mediaUrl: uploadedMediaUrl,
+      };
+
+      createPostMutation.mutate(payload, {
+        onSuccess: () => {
+          router.back();
         },
-        {
-          onSuccess: () => {
-            router.back();
-          },
-          onError: () => {
-            Alert.alert('Error', 'Failed to create post. Please try again.');
-            setIsSubmitting(false);
-          },
-        }
-      );
+        onError: (err) => {
+          console.error('[CreatePost] mutation error:', err?.message, err);
+          Alert.alert('Error', `Failed to create post: ${err?.message || 'Unknown error'}`);
+          setIsSubmitting(false);
+        },
+      });
     } catch (error) {
       Alert.alert('Error', 'Failed to create post. Please try again.');
       setIsSubmitting(false);
     }
-  }, [caption, mediaUri, createPostMutation, uploadFromUri, router]);
+  }, [caption, mediaUri, mediaMimeType, createPostMutation, uploadFromUri, router]);
 
   const canPost = (caption.trim().length > 0 || mediaUri) && !isSubmitting && !isUploading;
 

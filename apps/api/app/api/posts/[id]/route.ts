@@ -125,12 +125,13 @@ export async function DELETE(
       prisma.$executeRaw`UPDATE "users" SET "postCount" = GREATEST("postCount" - 1, 0), "updatedAt" = NOW() WHERE "id" = ${post.creatorId}`,
     ]);
 
-    // Invalidate caches
+    // Invalidate caches (including user profile for postCount)
     await invalidateCache(
       cacheKeys.postDetail(id),
       'feed:*',
       `creator:${post.creatorId}:posts:*`,
-      cacheKeys.creatorProfile(post.creatorId)
+      cacheKeys.creatorProfile(post.creatorId),
+      cacheKeys.userProfile(post.creatorId)
     );
 
     // Fire-and-forget: clean up storage

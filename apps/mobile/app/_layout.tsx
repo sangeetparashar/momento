@@ -56,6 +56,13 @@ export default function RootLayout() {
                     }}
                   />
                   <Stack.Screen
+                    name="setup-profile"
+                    options={{
+                      animation: 'fade',
+                      gestureEnabled: false,
+                    }}
+                  />
+                  <Stack.Screen
                     name="create-post"
                     options={{
                       presentation: 'modal',

@@ -85,44 +85,45 @@ export function LikeButton({
   });
 
   return (
-    <Animated.View
-      style={[
-        styles.container,
-        {
-          transform: [
-            { scale },
-            { rotate: rotateInterpolation },
-          ],
-        },
-      ]}
+    <Pressable
+      onPress={handlePress}
+      hitSlop={8}
+      style={styles.pressable}
     >
-      <Pressable
-        onPress={handlePress}
-        hitSlop={8}
-        style={styles.pressable}
+      <Animated.View
+        style={[
+          styles.iconWrapper,
+          { width: size, height: size },
+          {
+            transform: [
+              { scale },
+              { rotate: rotateInterpolation },
+            ],
+          },
+        ]}
       >
         <Ionicons
           name={isLiked ? 'heart' : 'heart-outline'}
           size={size}
           color={isLiked ? COLORS.error : COLORS.textSecondary}
         />
-        {likeCount > 0 && (
-          <Text style={styles.count}>{formatNumber(likeCount)}</Text>
-        )}
-      </Pressable>
-    </Animated.View>
+      </Animated.View>
+      {likeCount > 0 && (
+        <Text style={styles.count}>{formatNumber(likeCount)}</Text>
+      )}
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   pressable: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
+  },
+  iconWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   count: {
     ...TYPOGRAPHY.bodySmall,

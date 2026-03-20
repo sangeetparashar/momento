@@ -24,6 +24,8 @@ interface UseUploadReturn {
   clearError: () => void;
 }
 
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB — Supabase storage limit
+
 /**
  * Image picker + presigned upload flow.
  */
@@ -58,9 +60,9 @@ export function useUpload(): UseUploadReturn {
           }
         };
 
-        xhr.onerror = () => reject(new Error('Upload failed'));
-        xhr.ontimeout = () => reject(new Error('Upload timed out'));
-        xhr.timeout = 60000;
+        xhr.onerror = () => reject(new Error(`Upload network error (status: ${xhr.status})`));
+        xhr.ontimeout = () => reject(new Error('Upload timed out — file may be too large'));
+        xhr.timeout = 300000; // 5 minutes for large files
 
         xhr.send(blob);
       });
@@ -97,27 +99,50 @@ export function useUpload(): UseUploadReturn {
         const ext = processedMimeType.split('/')[1] || 'bin';
         const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
-        const { uploadUrl, publicUrl } = await apiService.post<{
-          uploadUrl: string;
-          publicUrl: string;
-          path: string;
-        }>('/uploads/presign', { fileName, contentType: processedMimeType });
+        let uploadUrl: string;
+        let publicUrl: string;
+        try {
+          const presignResult = await apiService.post<{
+            uploadUrl: string;
+            publicUrl: string;
+            path: string;
+          }>('/uploads/presign', { fileName, contentType: processedMimeType });
+          uploadUrl = presignResult.uploadUrl;
+          publicUrl = presignResult.publicUrl;
+        } catch (e: any) {
+          throw new Error(`Presign failed: ${e?.message || e}`);
+        }
 
         setProgress(0.2);
 
         // Step 2: Read file into blob
-        const fileResponse = await fetch(processedUri);
-        const blob = await fileResponse.blob();
+        let blob: Blob;
+        try {
+          const fileResponse = await fetch(processedUri);
+          blob = await fileResponse.blob();
+        } catch (e: any) {
+          throw new Error(`Blob read failed: ${e?.message || e}`);
+        }
+
+        // Step 2.5: Check file size
+        if (blob.size > MAX_FILE_SIZE) {
+          const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
+          throw new Error(`File is too large (${sizeMB}MB). Maximum size is 50MB. Try a shorter video or lower resolution.`);
+        }
 
         // Step 3: Upload with real progress tracking via XHR
-        await uploadWithProgress(uploadUrl, blob, processedMimeType);
+        try {
+          await uploadWithProgress(uploadUrl, blob, processedMimeType);
+        } catch (e: any) {
+          throw new Error(`PUT upload failed (${blob.size} bytes): ${e?.message || e}`);
+        }
 
         return publicUrl;
       } catch (err) {
         const message =
           err instanceof Error ? err.message : 'Upload failed';
         setError(message);
-        showErrorToast('Upload failed. Please try again.');
+        showErrorToast(message);
         throw err;
       } finally {
         setIsUploading(false);

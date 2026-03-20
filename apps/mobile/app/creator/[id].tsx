@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -24,9 +24,27 @@ import { SOCIAL_PLATFORMS } from '@momento/shared';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BANNER_HEIGHT = 180;
-const GRID_GAP = 2;
-const GRID_COLUMNS = 3;
-const GRID_ITEM_SIZE = (SCREEN_WIDTH - GRID_GAP * (GRID_COLUMNS + 1)) / GRID_COLUMNS;
+const COLUMN_GAP = SPACING.sm;
+const ITEM_WIDTH = (SCREEN_WIDTH - SPACING.md * 2 - COLUMN_GAP) / 2;
+const HEIGHT_PATTERN = [1.0, 1.35, 1.15, 1.0, 1.4, 1.0, 1.2, 1.0, 1.3, 1.1];
+
+function splitMasonryColumns(posts: any[]) {
+  const left: { post: any; height: number }[] = [];
+  const right: { post: any; height: number }[] = [];
+  let leftHeight = 0;
+  let rightHeight = 0;
+  posts.forEach((post, index) => {
+    const h = HEIGHT_PATTERN[index % HEIGHT_PATTERN.length];
+    if (leftHeight <= rightHeight) {
+      left.push({ post, height: h });
+      leftHeight += h;
+    } else {
+      right.push({ post, height: h });
+      rightHeight += h;
+    }
+  });
+  return { left, right };
+}
 
 export default function CreatorScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -105,6 +123,8 @@ export default function CreatorScreen() {
     );
   };
 
+  const postColumns = useMemo(() => splitMasonryColumns(creatorPosts), [creatorPosts]);
+
   const renderPostsGrid = () => {
     if (postsQuery.isLoading) {
       return (
@@ -124,28 +144,55 @@ export default function CreatorScreen() {
     }
 
     return (
-      <View style={styles.postsGrid}>
-        {creatorPosts.map((post) => (
-          <Pressable
-            key={post.id}
-            onPress={() => router.push(`/post/${post.id}`)}
-            style={styles.gridItem}
-          >
-            {post.mediaUrl ? (
-              <Image
-                source={{ uri: post.mediaUrl }}
-                style={styles.gridImage}
-                contentFit="cover"
-              />
-            ) : (
-              <View style={styles.gridTextItem}>
-                <Text style={styles.gridText} numberOfLines={4}>
-                  {post.content || post.caption}
-                </Text>
-              </View>
-            )}
-          </Pressable>
-        ))}
+      <View style={styles.masonryContainer}>
+        <View style={styles.masonryColumn}>
+          {postColumns.left.map(({ post, height }) => (
+            <Pressable
+              key={post.id}
+              onPress={() => router.push(`/post/${post.id}`)}
+              style={[styles.masonryItem, { height: ITEM_WIDTH * height }]}
+            >
+              {post.mediaUrl ? (
+                <Image
+                  source={{ uri: post.mediaUrl }}
+                  style={styles.masonryImage}
+                  contentFit="cover"
+                  transition={200}
+                />
+              ) : (
+                <View style={styles.masonryTextItem}>
+                  <Text style={styles.masonryText} numberOfLines={6}>
+                    {post.content || post.caption}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          ))}
+        </View>
+        <View style={styles.masonryColumn}>
+          {postColumns.right.map(({ post, height }) => (
+            <Pressable
+              key={post.id}
+              onPress={() => router.push(`/post/${post.id}`)}
+              style={[styles.masonryItem, { height: ITEM_WIDTH * height }]}
+            >
+              {post.mediaUrl ? (
+                <Image
+                  source={{ uri: post.mediaUrl }}
+                  style={styles.masonryImage}
+                  contentFit="cover"
+                  transition={200}
+                />
+              ) : (
+                <View style={styles.masonryTextItem}>
+                  <Text style={styles.masonryText} numberOfLines={6}>
+                    {post.content || post.caption}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          ))}
+        </View>
       </View>
     );
   };
@@ -460,30 +507,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     marginBottom: SPACING.sm,
   },
-  postsGrid: {
+  masonryContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: GRID_GAP,
+    gap: COLUMN_GAP,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.sm,
   },
-  gridItem: {
-    width: GRID_ITEM_SIZE,
-    height: GRID_ITEM_SIZE,
-    margin: GRID_GAP / 2,
+  masonryColumn: {
+    flex: 1,
+    gap: COLUMN_GAP,
   },
-  gridImage: {
+  masonryItem: {
+    borderRadius: RADII.lg,
+    overflow: 'hidden',
+    backgroundColor: COLORS.surface,
+  },
+  masonryImage: {
     width: '100%',
     height: '100%',
-    borderRadius: RADII.xs,
   },
-  gridTextItem: {
+  masonryTextItem: {
     width: '100%',
     height: '100%',
-    borderRadius: RADII.xs,
     backgroundColor: COLORS.surface,
     padding: SPACING.sm,
     justifyContent: 'center',
+    borderRadius: RADII.lg,
   },
-  gridText: {
+  masonryText: {
     ...TYPOGRAPHY.caption,
     color: COLORS.textSecondary,
   },

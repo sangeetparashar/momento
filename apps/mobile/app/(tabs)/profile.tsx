@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   StyleSheet,
@@ -21,7 +21,7 @@ import {
   ProfileSkeleton,
   FollowingModal,
 } from '@/components/features';
-import { useUserProfile, useSavedPosts } from '@/hooks';
+import { useUserProfile, useSavedPosts, useProfileComplete } from '@/hooks';
 import { useAuth } from '@/hooks/useAuth';
 import { apiService } from '@/services/api';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
@@ -30,8 +30,27 @@ import { formatNumber } from '@/utils/formatters';
 import { UserRole, SOCIAL_PLATFORMS } from '@momento/shared';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const GRID_GAP = 2;
-const GRID_ITEM_SIZE = (SCREEN_WIDTH - GRID_GAP * 2) / 3;
+const COLUMN_GAP = SPACING.sm;
+const ITEM_WIDTH = (SCREEN_WIDTH - SPACING.md * 2 - COLUMN_GAP) / 2;
+const HEIGHT_PATTERN = [1.0, 1.35, 1.15, 1.0, 1.4, 1.0, 1.2, 1.0, 1.3, 1.1];
+
+function splitMasonryColumns(posts: any[]) {
+  const left: { post: any; height: number }[] = [];
+  const right: { post: any; height: number }[] = [];
+  let leftHeight = 0;
+  let rightHeight = 0;
+  posts.forEach((post, index) => {
+    const h = HEIGHT_PATTERN[index % HEIGHT_PATTERN.length];
+    if (leftHeight <= rightHeight) {
+      left.push({ post, height: h });
+      leftHeight += h;
+    } else {
+      right.push({ post, height: h });
+      rightHeight += h;
+    }
+  });
+  return { left, right };
+}
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -43,6 +62,7 @@ export default function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
 
   const isCreator = user?.role === UserRole.CREATOR;
+  const { isComplete: isProfileComplete } = useProfileComplete();
 
   // Creator's own posts
   const postsQuery = useInfiniteQuery({
@@ -144,6 +164,8 @@ export default function ProfileScreen() {
     );
   };
 
+  const postColumns = useMemo(() => splitMasonryColumns(creatorPosts), [creatorPosts]);
+
   const renderPostsGrid = () => {
     if (postsQuery.isLoading) {
       return (
@@ -168,29 +190,57 @@ export default function ProfileScreen() {
       );
     }
     return (
-      <View style={styles.postsGrid}>
-        {creatorPosts.map((post) => (
-          <Pressable
-            key={post.id}
-            onPress={() => router.push(`/post/${post.id}`)}
-            style={styles.gridItem}
-          >
-            {post.mediaUrl ? (
-              <Image
-                source={{ uri: post.mediaUrl }}
-                style={styles.gridImage}
-                contentFit="cover"
-                transition={200}
-              />
-            ) : (
-              <View style={styles.gridTextItem}>
-                <Text style={styles.gridText} numberOfLines={4}>
-                  {post.content || post.caption}
-                </Text>
-              </View>
-            )}
-          </Pressable>
-        ))}
+      <>
+        <View style={styles.masonryContainer}>
+          <View style={styles.masonryColumn}>
+            {postColumns.left.map(({ post, height }) => (
+              <Pressable
+                key={post.id}
+                onPress={() => router.push(`/post/${post.id}`)}
+                style={[styles.masonryItem, { height: ITEM_WIDTH * height }]}
+              >
+                {post.mediaUrl ? (
+                  <Image
+                    source={{ uri: post.mediaUrl }}
+                    style={styles.masonryImage}
+                    contentFit="cover"
+                    transition={200}
+                  />
+                ) : (
+                  <View style={styles.masonryTextItem}>
+                    <Text style={styles.masonryText} numberOfLines={6}>
+                      {post.content || post.caption}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.masonryColumn}>
+            {postColumns.right.map(({ post, height }) => (
+              <Pressable
+                key={post.id}
+                onPress={() => router.push(`/post/${post.id}`)}
+                style={[styles.masonryItem, { height: ITEM_WIDTH * height }]}
+              >
+                {post.mediaUrl ? (
+                  <Image
+                    source={{ uri: post.mediaUrl }}
+                    style={styles.masonryImage}
+                    contentFit="cover"
+                    transition={200}
+                  />
+                ) : (
+                  <View style={styles.masonryTextItem}>
+                    <Text style={styles.masonryText} numberOfLines={6}>
+                      {post.content || post.caption}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
+            ))}
+          </View>
+        </View>
         {postsQuery.hasNextPage && (
           <Pressable
             style={styles.loadMoreRow}
@@ -203,9 +253,11 @@ export default function ProfileScreen() {
             )}
           </Pressable>
         )}
-      </View>
+      </>
     );
   };
+
+  const savedColumns = useMemo(() => splitMasonryColumns(savedPostsQuery.posts), [savedPostsQuery.posts]);
 
   const renderSavedPosts = () => {
     if (savedPostsQuery.isLoading) {
@@ -231,29 +283,55 @@ export default function ProfileScreen() {
       );
     }
     return (
-      <View style={styles.postsGrid}>
-        {savedPostsQuery.posts.map((post) => (
-          <Pressable
-            key={post.id}
-            onPress={() => router.push(`/post/${post.id}`)}
-            style={styles.gridItem}
-          >
-            {post.mediaUrl ? (
-              <Image
-                source={{ uri: post.mediaUrl }}
-                style={styles.gridImage}
-                contentFit="cover"
-                transition={200}
-              />
-            ) : (
-              <View style={styles.gridTextItem}>
-                <Text style={styles.gridText} numberOfLines={4}>
-                  {post.content || post.caption}
-                </Text>
-              </View>
-            )}
-          </Pressable>
-        ))}
+      <View style={styles.masonryContainer}>
+        <View style={styles.masonryColumn}>
+          {savedColumns.left.map(({ post, height }) => (
+            <Pressable
+              key={post.id}
+              onPress={() => router.push(`/post/${post.id}`)}
+              style={[styles.masonryItem, { height: ITEM_WIDTH * height }]}
+            >
+              {post.mediaUrl ? (
+                <Image
+                  source={{ uri: post.mediaUrl }}
+                  style={styles.masonryImage}
+                  contentFit="cover"
+                  transition={200}
+                />
+              ) : (
+                <View style={styles.masonryTextItem}>
+                  <Text style={styles.masonryText} numberOfLines={6}>
+                    {post.content || post.caption}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          ))}
+        </View>
+        <View style={styles.masonryColumn}>
+          {savedColumns.right.map(({ post, height }) => (
+            <Pressable
+              key={post.id}
+              onPress={() => router.push(`/post/${post.id}`)}
+              style={[styles.masonryItem, { height: ITEM_WIDTH * height }]}
+            >
+              {post.mediaUrl ? (
+                <Image
+                  source={{ uri: post.mediaUrl }}
+                  style={styles.masonryImage}
+                  contentFit="cover"
+                  transition={200}
+                />
+              ) : (
+                <View style={styles.masonryTextItem}>
+                  <Text style={styles.masonryText} numberOfLines={6}>
+                    {post.content || post.caption}
+                  </Text>
+                </View>
+              )}
+            </Pressable>
+          ))}
+        </View>
       </View>
     );
   };
@@ -340,6 +418,23 @@ export default function ProfileScreen() {
           <ProfileSkeleton />
         ) : (
           <>
+            {/* Profile setup prompt */}
+            {!isProfileComplete && (
+              <Pressable
+                style={styles.setupBanner}
+                onPress={() => router.push('/setup-profile')}
+              >
+                <Ionicons name="person-circle-outline" size={28} color={COLORS.primary} />
+                <View style={styles.setupBannerText}>
+                  <Text style={styles.setupBannerTitle}>Complete Your Profile</Text>
+                  <Text style={styles.setupBannerSubtitle}>
+                    Add a photo, username, and social link
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
+              </Pressable>
+            )}
+
             {/* Avatar + Stats row */}
             <View style={styles.profileRow}>
               <Avatar
@@ -581,28 +676,34 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.border,
   },
 
-  // Posts grid
-  postsGrid: {
+  // Masonry grid
+  masonryContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    gap: COLUMN_GAP,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.sm,
   },
-  gridItem: {
-    width: GRID_ITEM_SIZE,
-    height: GRID_ITEM_SIZE,
-    padding: GRID_GAP / 2,
+  masonryColumn: {
+    flex: 1,
+    gap: COLUMN_GAP,
   },
-  gridImage: {
+  masonryItem: {
+    borderRadius: RADII.lg,
+    overflow: 'hidden',
+    backgroundColor: COLORS.surface,
+  },
+  masonryImage: {
     width: '100%',
     height: '100%',
   },
-  gridTextItem: {
+  masonryTextItem: {
     width: '100%',
     height: '100%',
     backgroundColor: COLORS.surface,
     padding: SPACING.sm,
     justifyContent: 'center',
   },
-  gridText: {
+  masonryText: {
     ...TYPOGRAPHY.caption,
     color: COLORS.textSecondary,
   },
@@ -672,5 +773,31 @@ const styles = StyleSheet.create({
 
   bottomSpacer: {
     height: SPACING.xl,
+  },
+  setupBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    marginHorizontal: SPACING.md,
+    marginBottom: SPACING.md,
+    padding: SPACING.md,
+    borderRadius: RADII.lg,
+    borderWidth: 1,
+    borderColor: COLORS.primary + '30',
+    gap: SPACING.sm,
+  },
+  setupBannerText: {
+    flex: 1,
+  },
+  setupBannerTitle: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textPrimary,
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  setupBannerSubtitle: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textTertiary,
+    marginTop: 2,
   },
 });

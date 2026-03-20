@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireCreator } from '@/lib/auth';
-import { invalidateCache } from '@/lib/redis';
+import { invalidateCache, cacheKeys } from '@/lib/redis';
 import { notifyNewPost } from '@/lib/notifications';
-import { postCreateLimiter, applyRateLimit } from '@/lib/ratelimit';
+import { postCreateHourlyLimiter, postCreateDailyLimiter, applyRateLimit } from '@/lib/ratelimit';
 import { createPostSchema, validateBody } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
   try {
-    const rateLimitResponse = await applyRateLimit(request, postCreateLimiter);
-    if (rateLimitResponse) return rateLimitResponse;
+    const hourlyLimit = await applyRateLimit(request, postCreateHourlyLimiter);
+    if (hourlyLimit) return hourlyLimit;
+    const dailyLimit = await applyRateLimit(request, postCreateDailyLimiter);
+    if (dailyLimit) return dailyLimit;
     const user = await requireCreator(request);
 
     const body = await request.json();
@@ -67,11 +69,12 @@ export async function POST(request: NextRequest) {
       }),
     ]);
 
-    // Invalidate feed and creator caches
+    // Invalidate feed, creator, and user profile caches
     await invalidateCache(
       'feed:*',
       `creator:${user.id}:posts:*`,
-      `creator:${user.id}`
+      `creator:${user.id}`,
+      cacheKeys.userProfile(user.id)
     );
 
     const post = postResult as typeof postResult & { creator: { id: string; username: string | null; displayName: string | null; avatarUrl: string | null; bannerUrl: string | null; tokenSymbol: string | null; socialLinks: any; followerCount: number; postCount: number } };

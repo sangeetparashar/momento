@@ -36,9 +36,10 @@ export function useCreatePost() {
     },
 
     onSuccess: () => {
-      // Refresh the feed and the user's profile (post count)
+      // Refresh the feed, profile (post count), and creator posts grid
       queryClient.invalidateQueries({ queryKey: ['feed'] });
       queryClient.invalidateQueries({ queryKey: ['userProfile'] });
+      queryClient.invalidateQueries({ queryKey: ['creator'] });
     },
     onError: () => {
       showErrorToast('Failed to create post. Please try again.');

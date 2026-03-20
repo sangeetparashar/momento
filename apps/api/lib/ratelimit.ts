@@ -44,10 +44,11 @@ function getLimiter(name: string, tokens: number, window: Parameters<typeof Rate
 export const authLimiter = { get: () => getLimiter('auth', 5, '1 m') };
 export const readLimiter = { get: () => getLimiter('read', 60, '1 m') };
 export const writeLimiter = { get: () => getLimiter('write', 30, '1 m') };
-export const postCreateLimiter = { get: () => getLimiter('postCreate', 5, '1 h') };
+export const postCreateHourlyLimiter = { get: () => getLimiter('postCreate:hourly', 50, '1 h') };
+export const postCreateDailyLimiter = { get: () => getLimiter('postCreate:daily', 100, '1 d') };
 export const commentLimiter = { get: () => getLimiter('comment', 20, '1 m') };
 export const kycLimiter = { get: () => getLimiter('kyc', 1, '1 h') };
-export const uploadLimiter = { get: () => getLimiter('upload', 10, '1 m') };
+export const uploadLimiter = { get: () => getLimiter('upload', 100, '1 h') };
 
 // ─── Identifier Extraction ──────────────────────────────────────────────────
 

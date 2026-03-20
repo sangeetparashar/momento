@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Pressable, Animated, Share, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
+import { Video, ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar, AnimatedPressable } from '@/components/primitives';
@@ -9,6 +10,7 @@ import { BookmarkButton } from './BookmarkButton';
 import { COLORS, SPACING } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo, formatNumber } from '@/utils/formatters';
+import { PostType } from '@momento/shared';
 import type { PostWithCreator } from '@momento/shared';
 
 interface PostCardProps {
@@ -21,6 +23,8 @@ export function PostCard({ post }: PostCardProps) {
   const router = useRouter();
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;
+  const [isMuted, setIsMuted] = useState(true);
+  const isVideo = post.postType === PostType.VIDEO;
 
   useEffect(() => {
     Animated.parallel([
@@ -74,7 +78,31 @@ export function PostCard({ post }: PostCardProps) {
       </Pressable>
 
       {/* Post Media */}
-      {post.mediaUrl ? (
+      {post.mediaUrl && isVideo ? (
+        <Pressable onPress={handleImagePress} style={styles.videoContainer}>
+          <Video
+            source={{ uri: post.mediaUrl }}
+            style={styles.image}
+            resizeMode={ResizeMode.COVER}
+            isLooping
+            shouldPlay
+            isMuted={isMuted}
+            usePoster
+            posterStyle={styles.image}
+          />
+          <Pressable
+            style={styles.soundButton}
+            onPress={(e) => { e.stopPropagation(); setIsMuted((m) => !m); }}
+            hitSlop={8}
+          >
+            <Ionicons
+              name={isMuted ? 'volume-mute' : 'volume-high'}
+              size={18}
+              color="#FFFFFF"
+            />
+          </Pressable>
+        </Pressable>
+      ) : post.mediaUrl ? (
         <AnimatedPressable onPress={handleImagePress} scaleValue={0.98}>
           <Image
             source={{ uri: post.mediaUrl }}
@@ -173,6 +201,23 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 1,
     backgroundColor: COLORS.surface,
+  },
+  videoContainer: {
+    position: 'relative',
+    width: '100%',
+    aspectRatio: 1,
+    backgroundColor: '#000',
+  },
+  soundButton: {
+    position: 'absolute',
+    bottom: SPACING.sm,
+    right: SPACING.sm,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   actionsRow: {
     flexDirection: 'row',

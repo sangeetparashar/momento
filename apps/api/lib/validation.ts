@@ -6,8 +6,8 @@ export const createPostSchema = z.object({
   caption: z.string().max(2200).optional().nullable(),
   mediaUrl: z.string().url().optional().nullable(),
   mediaUrls: z.array(z.string().url()).max(10).optional().nullable(),
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
+  latitude: z.number().min(-90).max(90).default(0),
+  longitude: z.number().min(-180).max(180).default(0),
 });
 
 export const createCommentSchema = z.object({

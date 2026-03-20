@@ -8,10 +8,12 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
   useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
+import { Video, ResizeMode } from 'expo-av';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar } from '@/components/primitives';
@@ -19,19 +21,40 @@ import { LikeButton } from '@/components/features';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo, formatDistance } from '@/utils/formatters';
-import { useQuery } from '@tanstack/react-query';
-import { useFeed, useComments } from '@/hooks';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useFeed, useComments, useUserProfile } from '@/hooks';
 import { apiService } from '@/services/api';
+import { PostType } from '@momento/shared';
 import type { PostWithCreator } from '@momento/shared';
 
 export default function PostScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const feedQuery = useFeed();
+  const { user } = useUserProfile();
   const [commentText, setCommentText] = useState('');
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const videoRef = useRef<Video>(null);
   const inputRef = useRef<TextInput>(null);
   const insets = useSafeAreaInsets();
   const { comments, isLoading: commentsLoading, createComment, isCreating } = useComments(id);
+
+  const deleteMutation = useMutation({
+    mutationFn: () => apiService.delete(`/posts/${id}`),
+    onSuccess: async () => {
+      // Remove the deleted post's own query cache
+      queryClient.removeQueries({ queryKey: ['post', id] });
+      // Refetch feed and profile so stale data is gone before navigating back
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ['feed'] }),
+        queryClient.invalidateQueries({ queryKey: ['userProfile'] }),
+        queryClient.invalidateQueries({ queryKey: ['creator'] }),
+      ]);
+      router.back();
+    },
+  });
 
   // Find the post from feed data
   const cachedPost = useMemo(() => {
@@ -69,6 +92,16 @@ export default function PostScreen() {
     setCommentText('');
     inputRef.current?.blur();
   }, [commentText, id, createComment]);
+
+  const handleDelete = useCallback(() => {
+    Alert.alert('Delete Post', 'Are you sure you want to delete this post?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteMutation.mutate() },
+    ]);
+  }, [deleteMutation]);
+
+  const isOwner = user?.id === post?.creatorId;
+  const isVideo = post?.postType === PostType.VIDEO;
 
   if (isPostLoading) {
     return (
@@ -125,7 +158,17 @@ export default function PostScreen() {
             />
           </Pressable>
           <Text style={styles.navTitle}>Post</Text>
-          <View style={styles.navSpacer} />
+          {isOwner ? (
+            <Pressable onPress={handleDelete} style={styles.backButton} hitSlop={8} disabled={deleteMutation.isPending}>
+              {deleteMutation.isPending ? (
+                <ActivityIndicator size="small" color={COLORS.error} />
+              ) : (
+                <Ionicons name="trash-outline" size={22} color={COLORS.error} />
+              )}
+            </Pressable>
+          ) : (
+            <View style={styles.navSpacer} />
+          )}
         </View>
 
         <ScrollView
@@ -166,8 +209,42 @@ export default function PostScreen() {
             </View>
           </Pressable>
 
-          {/* Post Image */}
-          {post.mediaUrl ? (
+          {/* Post Media */}
+          {post.mediaUrl && isVideo ? (
+            <View style={styles.videoContainer}>
+              <Video
+                ref={videoRef}
+                source={{ uri: post.mediaUrl }}
+                style={styles.postImage}
+                resizeMode={ResizeMode.CONTAIN}
+                isLooping
+                shouldPlay={isPlaying}
+                isMuted={isMuted}
+              />
+              {/* Play/Pause overlay */}
+              <Pressable
+                style={styles.videoOverlay}
+                onPress={() => setIsPlaying((p) => !p)}
+              >
+                {!isPlaying && (
+                  <View style={styles.playButton}>
+                    <Ionicons name="play" size={40} color="#FFFFFF" />
+                  </View>
+                )}
+              </Pressable>
+              {/* Sound toggle */}
+              <Pressable
+                style={styles.soundButton}
+                onPress={() => setIsMuted((m) => !m)}
+              >
+                <Ionicons
+                  name={isMuted ? 'volume-mute' : 'volume-high'}
+                  size={20}
+                  color="#FFFFFF"
+                />
+              </Pressable>
+            </View>
+          ) : post.mediaUrl ? (
             <Image
               source={{ uri: post.mediaUrl }}
               style={styles.postImage}
@@ -351,6 +428,37 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 1,
     backgroundColor: COLORS.surface,
+  },
+  videoContainer: {
+    position: 'relative',
+    width: '100%',
+    aspectRatio: 1,
+    backgroundColor: '#000',
+  },
+  videoOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  playButton: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingLeft: 4,
+  },
+  soundButton: {
+    position: 'absolute',
+    bottom: SPACING.md,
+    right: SPACING.md,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   captionContainer: {
     paddingHorizontal: SPACING.md,
