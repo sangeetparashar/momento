@@ -123,10 +123,16 @@ export interface TokenHolding {
 
 export interface WalletBalance {
   solBalance: number;
+  solPriceUsd?: number;
   tokens: TokenHolding[];
   totalValueUsd?: number;
   change24h?: number;
   earningsToDate?: number;
+}
+
+export interface PricePoint {
+  t: number; // timestamp ms
+  p: number; // price usd
 }
 
 // API Response types

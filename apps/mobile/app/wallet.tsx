@@ -14,7 +14,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/primitives';
 import {
   PortfolioChart,
-  TokenList,
   SwapModal,
   ComingSoonModal,
 } from '@/components/features';
@@ -166,47 +165,93 @@ export default function WalletScreen() {
           </View>
         </View>
 
-        {/* SOL Balance Highlight */}
+        {/* Asset Cards */}
         {balance && (
-          <View style={styles.solCard}>
-            <View style={styles.solLeft}>
-              <View style={styles.solIcon}>
-                <Text style={styles.solIconText}>◎</Text>
+          <View style={styles.assetsSection}>
+            {/* SOL Card */}
+            <View style={styles.assetCard}>
+              <View style={styles.assetLeft}>
+                <View style={[styles.assetIcon, { backgroundColor: '#9945FF' }]}>
+                  <Text style={styles.assetIconText}>◎</Text>
+                </View>
+                <View>
+                  <Text style={styles.assetSymbol}>SOL</Text>
+                  <Text style={styles.assetName}>Solana</Text>
+                </View>
               </View>
-              <View>
-                <Text style={styles.solSymbol}>SOL</Text>
-                <Text style={styles.solName}>Solana</Text>
+              <View style={styles.assetRight}>
+                <Text style={styles.assetAmount}>
+                  {balance.solBalance.toFixed(4)}
+                </Text>
+                <Text style={styles.assetValue}>
+                  {formatCurrency(balance.solBalance * (balance.solPriceUsd ?? 0))}
+                </Text>
               </View>
             </View>
-            <View style={styles.solRight}>
-              <Text style={styles.solAmount}>
-                {balance.solBalance.toFixed(4)}
-              </Text>
-              <Text style={styles.solValue}>
-                {formatCurrency(balance.totalValueUsd ?? 0)}
-              </Text>
-            </View>
+
+            {/* USDC Card — show from token list or as zero */}
+            {(() => {
+              const usdc = balance.tokens.find(t => t.symbol === 'USDC' || t.symbol === 'usdc');
+              return (
+                <View style={styles.assetCard}>
+                  <View style={styles.assetLeft}>
+                    <View style={[styles.assetIcon, { backgroundColor: '#2775CA' }]}>
+                      <Text style={styles.assetIconText}>$</Text>
+                    </View>
+                    <View>
+                      <Text style={styles.assetSymbol}>USDC</Text>
+                      <Text style={styles.assetName}>USD Coin</Text>
+                    </View>
+                  </View>
+                  <View style={styles.assetRight}>
+                    <Text style={styles.assetAmount}>
+                      {(usdc?.amount ?? 0).toFixed(2)}
+                    </Text>
+                    <Text style={styles.assetValue}>
+                      {formatCurrency(usdc?.valueUsd ?? usdc?.amount ?? 0)}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })()}
+
+            {/* Other tokens */}
+            {balance.tokens
+              .filter(t => t.symbol !== 'USDC' && t.symbol !== 'usdc')
+              .map(token => (
+                <Pressable
+                  key={token.mint}
+                  style={styles.assetCard}
+                  onPress={() => handleBuyPress(token)}
+                >
+                  <View style={styles.assetLeft}>
+                    <View style={[styles.assetIcon, { backgroundColor: COLORS.surface }]}>
+                      <Text style={styles.assetIconText}>
+                        {token.symbol?.charAt(0) ?? '?'}
+                      </Text>
+                    </View>
+                    <View>
+                      <Text style={styles.assetSymbol}>{token.symbol}</Text>
+                      <Text style={styles.assetName}>{token.name}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.assetRight}>
+                    <Text style={styles.assetAmount}>
+                      {token.amount < 1 ? token.amount.toFixed(6) : token.amount.toFixed(2)}
+                    </Text>
+                    {token.valueUsd != null && (
+                      <Text style={styles.assetValue}>
+                        {formatCurrency(token.valueUsd)}
+                      </Text>
+                    )}
+                  </View>
+                </Pressable>
+              ))}
           </View>
         )}
 
-        {/* Portfolio Chart */}
-        <PortfolioChart />
-
-        {/* Token List */}
-        {(balance?.tokens?.length ?? 0) > 0 && (
-          <>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Tokens</Text>
-              <Text style={styles.totalValue}>
-                {formatCurrency(balance?.totalValueUsd ?? 0)}
-              </Text>
-            </View>
-            <TokenList
-              tokens={balance?.tokens ?? []}
-              onBuyPress={handleBuyPress}
-            />
-          </>
-        )}
+        {/* Portfolio Chart — Real SOL price history */}
+        <PortfolioChart solBalance={balance?.solBalance} />
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
@@ -354,10 +399,13 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.body,
     fontWeight: '600',
   },
-  // SOL Card
-  solCard: {
+  // Asset Cards
+  assetsSection: {
     marginHorizontal: SPACING.md,
-    marginBottom: SPACING.md,
+    gap: SPACING.xs,
+    marginBottom: SPACING.sm,
+  },
+  assetCard: {
     backgroundColor: COLORS.surface,
     borderRadius: RADII.lg,
     padding: SPACING.md,
@@ -367,66 +415,45 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  solLeft: {
+  assetLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.sm,
   },
-  solIcon: {
+  assetIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#9945FF',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  solIconText: {
-    fontSize: 20,
+  assetIconText: {
+    fontSize: 18,
     color: '#FFFFFF',
     fontWeight: '700',
   },
-  solSymbol: {
+  assetSymbol: {
     ...TYPOGRAPHY.body,
     color: COLORS.textPrimary,
     fontWeight: '700',
   },
-  solName: {
+  assetName: {
     ...TYPOGRAPHY.caption,
     color: COLORS.textTertiary,
   },
-  solRight: {
+  assetRight: {
     alignItems: 'flex-end',
   },
-  solAmount: {
+  assetAmount: {
     ...TYPOGRAPHY.mono,
     color: COLORS.textPrimary,
     fontWeight: '700',
     fontSize: 16,
   },
-  solValue: {
+  assetValue: {
     ...TYPOGRAPHY.caption,
     color: COLORS.textSecondary,
     marginTop: 2,
-  },
-  // Sections
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginHorizontal: SPACING.md,
-    marginVertical: SPACING.md,
-  },
-  sectionTitle: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textPrimary,
-    fontWeight: '700',
-    fontSize: 18,
-  },
-  totalValue: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textPrimary,
-    fontWeight: '800',
-    fontSize: 18,
   },
   bottomSpacer: {
     height: SPACING.xl,

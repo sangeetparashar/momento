@@ -1,90 +1,88 @@
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
-import Svg, { Path, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { View, StyleSheet, Pressable, useWindowDimensions, ActivityIndicator } from 'react-native';
+import Svg, { Path, Defs, LinearGradient, Stop, Circle, Line, Text as SvgText } from 'react-native-svg';
 import { Text } from '@/components/primitives';
+import { usePriceHistory } from '@/hooks/usePriceHistory';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
+import type { PricePoint } from '@momento/shared';
 
 type TimeRange = '24H' | '7D' | '1M' | '3M' | '1Y';
 
 const TIME_RANGES: TimeRange[] = ['24H', '7D', '1M', '3M', '1Y'];
+const CHART_HEIGHT = 180;
+const Y_PADDING = 20;
 
-const POINTS_MAP: Record<TimeRange, number> = {
-  '24H': 24,
-  '7D': 7 * 24,
-  '1M': 30,
-  '3M': 90,
-  '1Y': 365,
-};
-
-const CHART_HEIGHT = 160;
-
-function generateChartData(points: number, seed: number = 42): number[] {
-  const data: number[] = [];
-  let value = 100 + (seed % 50);
-  for (let i = 0; i < points; i++) {
-    const change = (Math.sin(i * 0.3 + seed) * 5) + (Math.cos(i * 0.7 + seed * 0.5) * 3);
-    value = Math.max(10, value + change);
-    data.push(value);
+function createSmoothPath(data: PricePoint[], width: number, height: number): {
+  linePath: string;
+  gradientPath: string;
+  min: number;
+  max: number;
+  first: number;
+  last: number;
+} {
+  if (data.length < 2) {
+    return { linePath: '', gradientPath: '', min: 0, max: 0, first: 0, last: 0 };
   }
-  return data;
-}
 
-function createPath(data: number[], width: number, height: number): string {
-  if (data.length < 2) return '';
-
-  const min = Math.min(...data);
-  const max = Math.max(...data);
+  const prices = data.map(d => d.p);
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
   const range = max - min || 1;
-  const padding = 4;
-  const effectiveHeight = height - padding * 2;
+  const effectiveHeight = height - Y_PADDING * 2;
 
   const stepX = width / (data.length - 1);
 
-  const points = data.map((val, i) => ({
+  const points = data.map((d, i) => ({
     x: i * stepX,
-    y: padding + effectiveHeight - ((val - min) / range) * effectiveHeight,
+    y: Y_PADDING + effectiveHeight - ((d.p - min) / range) * effectiveHeight,
   }));
 
-  let path = `M ${points[0].x} ${points[0].y}`;
+  // Catmull-Rom to cubic bezier for smoother curves
+  let linePath = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
   for (let i = 1; i < points.length; i++) {
     const prev = points[i - 1];
     const curr = points[i];
-    const cpX1 = prev.x + stepX * 0.4;
-    const cpX2 = curr.x - stepX * 0.4;
-    path += ` C ${cpX1} ${prev.y}, ${cpX2} ${curr.y}, ${curr.x} ${curr.y}`;
+    const cpX1 = prev.x + stepX * 0.35;
+    const cpX2 = curr.x - stepX * 0.35;
+    linePath += ` C ${cpX1.toFixed(1)} ${prev.y.toFixed(1)}, ${cpX2.toFixed(1)} ${curr.y.toFixed(1)}, ${curr.x.toFixed(1)} ${curr.y.toFixed(1)}`;
   }
 
-  return path;
+  const gradientPath = `${linePath} L ${width} ${height} L 0 ${height} Z`;
+
+  return {
+    linePath,
+    gradientPath,
+    min,
+    max,
+    first: prices[0],
+    last: prices[prices.length - 1],
+  };
 }
 
-function createGradientPath(linePath: string, width: number, height: number): string {
-  return `${linePath} L ${width} ${height} L 0 ${height} Z`;
+function formatPrice(price: number): string {
+  return `$${price.toFixed(2)}`;
 }
 
-export function PortfolioChart() {
+interface PortfolioChartProps {
+  solBalance?: number;
+}
+
+export function PortfolioChart({ solBalance }: PortfolioChartProps) {
   const { width: SCREEN_WIDTH } = useWindowDimensions();
   const CHART_WIDTH = SCREEN_WIDTH - SPACING.md * 4;
   const [selectedRange, setSelectedRange] = useState<TimeRange>('1M');
 
-  const chartData = useMemo(() => {
-    const points = POINTS_MAP[selectedRange];
-    const seed = TIME_RANGES.indexOf(selectedRange) * 17 + 7;
-    return generateChartData(Math.min(points, 120), seed);
-  }, [selectedRange]);
+  const { data: priceData, isLoading } = usePriceHistory(selectedRange);
 
-  const isPositive = chartData.length >= 2 && chartData[chartData.length - 1] >= chartData[0];
+  const chart = useMemo(() => {
+    if (!priceData || priceData.length < 2) return null;
+    return createSmoothPath(priceData, CHART_WIDTH, CHART_HEIGHT);
+  }, [priceData, CHART_WIDTH]);
+
+  const isPositive = chart ? chart.last >= chart.first : true;
   const lineColor = isPositive ? COLORS.success : COLORS.error;
-
-  const linePath = useMemo(
-    () => createPath(chartData, CHART_WIDTH, CHART_HEIGHT),
-    [chartData]
-  );
-
-  const gradientPath = useMemo(
-    () => createGradientPath(linePath, CHART_WIDTH, CHART_HEIGHT),
-    [linePath]
-  );
+  const changePercent = chart ? ((chart.last - chart.first) / chart.first * 100) : 0;
 
   const handleRangeSelect = useCallback((range: TimeRange) => {
     setSelectedRange(range);
@@ -92,29 +90,75 @@ export function PortfolioChart() {
 
   return (
     <View style={styles.container}>
+      {/* Price header */}
+      {chart && (
+        <View style={styles.priceHeader}>
+          <Text style={styles.currentPrice}>SOL {formatPrice(chart.last)}</Text>
+          <Text style={[styles.priceChange, { color: lineColor }]}>
+            {changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%
+          </Text>
+        </View>
+      )}
+
       {/* Chart */}
       <View style={styles.chartContainer}>
-        <Svg width={CHART_WIDTH} height={CHART_HEIGHT}>
-          <Defs>
-            <LinearGradient id="gradient" x1="0" y1="0" x2="0" y2="1">
-              <Stop offset="0%" stopColor={lineColor} stopOpacity={0.3} />
-              <Stop offset="100%" stopColor={lineColor} stopOpacity={0} />
-            </LinearGradient>
-          </Defs>
-          {gradientPath && (
-            <Path d={gradientPath} fill="url(#gradient)" />
-          )}
-          {linePath && (
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          </View>
+        ) : chart?.linePath ? (
+          <Svg width={CHART_WIDTH} height={CHART_HEIGHT}>
+            <Defs>
+              <LinearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0%" stopColor={lineColor} stopOpacity={0.2} />
+                <Stop offset="100%" stopColor={lineColor} stopOpacity={0} />
+              </LinearGradient>
+            </Defs>
+            {/* Gradient fill */}
+            <Path d={chart.gradientPath} fill="url(#chartGradient)" />
+            {/* Price line */}
             <Path
-              d={linePath}
+              d={chart.linePath}
               fill="none"
               stroke={lineColor}
               strokeWidth={2}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
-          )}
-        </Svg>
+            {/* Min/Max labels */}
+            <SvgText
+              x={CHART_WIDTH - 4}
+              y={Y_PADDING - 4}
+              textAnchor="end"
+              fill={COLORS.textTertiary}
+              fontSize={10}
+              fontFamily="monospace"
+            >
+              {formatPrice(chart.max)}
+            </SvgText>
+            <SvgText
+              x={CHART_WIDTH - 4}
+              y={CHART_HEIGHT - Y_PADDING + 14}
+              textAnchor="end"
+              fill={COLORS.textTertiary}
+              fontSize={10}
+              fontFamily="monospace"
+            >
+              {formatPrice(chart.min)}
+            </SvgText>
+            {/* Current price dot */}
+            <Circle
+              cx={CHART_WIDTH}
+              cy={Y_PADDING + (CHART_HEIGHT - Y_PADDING * 2) - ((chart.last - chart.min) / (chart.max - chart.min || 1)) * (CHART_HEIGHT - Y_PADDING * 2)}
+              r={4}
+              fill={lineColor}
+            />
+          </Svg>
+        ) : (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.noDataText}>No price data available</Text>
+          </View>
+        )}
       </View>
 
       {/* Time Range Selector */}
@@ -148,9 +192,36 @@ const styles = StyleSheet.create({
     marginHorizontal: SPACING.md,
     marginVertical: SPACING.sm,
   },
+  priceHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.xs,
+    paddingHorizontal: SPACING.xs,
+  },
+  currentPrice: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textSecondary,
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  priceChange: {
+    ...TYPOGRAPHY.mono,
+    fontWeight: '700',
+    fontSize: 14,
+  },
   chartContainer: {
     alignItems: 'center',
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.xs,
+  },
+  loadingContainer: {
+    height: CHART_HEIGHT,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noDataText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textTertiary,
   },
   rangeSelector: {
     flexDirection: 'row',

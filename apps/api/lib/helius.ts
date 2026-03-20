@@ -126,6 +126,7 @@ export async function fetchWalletBalance(walletAddress: string): Promise<WalletB
 
   return {
     solBalance,
+    solPriceUsd: solPriceUsd || undefined,
     tokens,
     totalValueUsd: totalValueUsd || undefined,
   };
