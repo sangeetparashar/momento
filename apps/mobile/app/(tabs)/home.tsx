@@ -13,8 +13,9 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar } from '@/components/primitives';
-import { LikeButton, TickerBanner, BookmarkButton, FeedSkeleton } from '@/components/features';
+import { LikeButton, TickerBanner, BookmarkButton, FeedSkeleton, FeedAlgorithmModal } from '@/components/features';
 import { useFeed } from '@/hooks';
+import type { FeedSortMode } from '@/hooks/useFeed';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo, formatNumber } from '@/utils/formatters';
@@ -39,6 +40,14 @@ const HEADER_HEIGHT = 44;
 const TICKER_HEIGHT = 72; // approx height for 2 ticker banners
 const TAB_BAR_HEIGHT = 80;
 const PAGE_HEIGHT = SCREEN_HEIGHT - HEADER_HEIGHT - TICKER_HEIGHT - TAB_BAR_HEIGHT;
+
+const SORT_ICONS: Record<FeedSortMode, keyof typeof Ionicons.glyphMap> = {
+  smart: 'sparkles',
+  recent: 'time-outline',
+  popular: 'flame-outline',
+  nearby: 'location-outline',
+  following: 'people-outline',
+};
 
 function FeedPage({ post }: { post: PostWithCreator }) {
   const router = useRouter();
@@ -145,7 +154,9 @@ function FeedPage({ post }: { post: PostWithCreator }) {
 
 export default function HomeScreen() {
   const router = useRouter();
-  const feedQuery = useFeed();
+  const [feedSort, setFeedSort] = useState<FeedSortMode>('smart');
+  const [showAlgoModal, setShowAlgoModal] = useState(false);
+  const feedQuery = useFeed({ sort: feedSort });
   const flatListRef = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -167,6 +178,13 @@ export default function HomeScreen() {
   const handleTickerPress = useCallback(() => {
     router.push('/market');
   }, [router]);
+
+  const handleSortChange = useCallback((sort: FeedSortMode) => {
+    setFeedSort(sort);
+    // Scroll back to start when sort changes
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    setCurrentIndex(0);
+  }, []);
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: Array<{ index: number | null }> }) => {
@@ -205,7 +223,21 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Compact header */}
       <View style={styles.header}>
+        {/* Algorithm button — left side */}
+        <Pressable
+          onPress={() => setShowAlgoModal(true)}
+          style={styles.algoButton}
+          hitSlop={8}
+        >
+          <Ionicons
+            name={SORT_ICONS[feedSort]}
+            size={18}
+            color={COLORS.primary}
+          />
+        </Pressable>
+
         <Text style={styles.logo}>M O M E N T O</Text>
+
         <Pressable onPress={handleRefresh} style={styles.refreshButton} hitSlop={8}>
           {feedQuery.isRefetching ? (
             <ActivityIndicator size="small" color={COLORS.primary} />
@@ -268,6 +300,14 @@ export default function HomeScreen() {
           </View>
         </>
       )}
+
+      {/* Feed Algorithm Modal */}
+      <FeedAlgorithmModal
+        visible={showAlgoModal}
+        onClose={() => setShowAlgoModal(false)}
+        currentSort={feedSort}
+        onSortChange={handleSortChange}
+      />
     </SafeAreaView>
   );
 }
@@ -290,6 +330,16 @@ const styles = StyleSheet.create({
     letterSpacing: 4,
     fontWeight: '800',
     fontSize: 14,
+  },
+  algoButton: {
+    position: 'absolute',
+    left: SPACING.md,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.primaryMuted,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   refreshButton: {
     position: 'absolute',

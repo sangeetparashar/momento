@@ -12,16 +12,20 @@ import { useLocation } from '@/providers/LocationProvider';
 const RADIUS_TIERS_KM = [5, 10, 25, 50, 100] as const;
 const MIN_POSTS = 3;
 
+export type FeedSortMode = 'smart' | 'recent' | 'popular' | 'nearby' | 'following';
+
 interface UseFeedOptions {
   /** Override the default radius tier progression. */
   radiusKm?: number;
+  /** Feed sort/ranking mode. Defaults to 'smart'. */
+  sort?: FeedSortMode;
   /** Whether to enable the query. Defaults to true. */
   enabled?: boolean;
 }
 
 export function useFeed(options: UseFeedOptions = {}) {
   const { location } = useLocation();
-  const { radiusKm, enabled = true } = options;
+  const { radiusKm, sort = 'smart', enabled = true } = options;
 
   /**
    * Cache the last radius tier that returned enough posts so subsequent
@@ -36,6 +40,7 @@ export function useFeed(options: UseFeedOptions = {}) {
       location ? Math.round(location.latitude * 100) / 100 : null,
       location ? Math.round(location.longitude * 100) / 100 : null,
       radiusKm,
+      sort,
     ],
     queryFn: async ({ pageParam }) => {
       if (!location) throw new Error('Location not available');
@@ -51,6 +56,7 @@ export function useFeed(options: UseFeedOptions = {}) {
           lat: location?.latitude,
           lng: location?.longitude,
           radius: currentRadius,
+          sort,
           cursor,
         });
       } else {
@@ -67,6 +73,7 @@ export function useFeed(options: UseFeedOptions = {}) {
             lat: location?.latitude,
             lng: location?.longitude,
             radius: tier,
+            sort,
             cursor,
           });
 

@@ -16,8 +16,8 @@ function getRedis(): Redis {
 // ─── Cache Key Generators ───────────────────────────────────────────────────
 
 export const cacheKeys = {
-  feed: (lat: number, lng: number, radiusKm: number, cursor?: string) =>
-    `feed:${lat.toFixed(2)}:${lng.toFixed(2)}:${radiusKm}:${cursor || 'first'}`,
+  feed: (lat: number, lng: number, radiusKm: number, sort: string, cursor?: string) =>
+    `feed:${lat.toFixed(2)}:${lng.toFixed(2)}:${radiusKm}:${sort}:${cursor || 'first'}`,
 
   nearbyCreators: (lat: number, lng: number, radiusKm: number) =>
     `creators:nearby:${lat.toFixed(2)}:${lng.toFixed(2)}:${radiusKm}`,

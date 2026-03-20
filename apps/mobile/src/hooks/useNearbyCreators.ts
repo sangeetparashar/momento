@@ -1,16 +1,19 @@
-import { useQuery } from '@tanstack/react-query';
+import { useCallback } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { apiService } from '@/services/api';
 import { useLocation } from '@/providers/LocationProvider';
 import type { PublicCreator } from '@momento/shared';
 
-interface NearbyCreatorsResponse {
+interface NearbyCreatorsPage {
   creators: PublicCreator[];
+  nextCursor: string | null;
+  hasMore: boolean;
 }
 
 export function useNearbyCreators(radius = 50) {
   const { location } = useLocation();
 
-  const query = useQuery<NearbyCreatorsResponse>({
+  const query = useInfiniteQuery<NearbyCreatorsPage>({
     queryKey: [
       'creators',
       'nearby',
@@ -18,22 +21,39 @@ export function useNearbyCreators(radius = 50) {
       location ? Math.round(location.longitude * 100) / 100 : null,
       radius,
     ],
-    queryFn: () => {
+    queryFn: ({ pageParam }) => {
       if (!location) throw new Error('Location not available');
-      return apiService.get<NearbyCreatorsResponse>('/creators/nearby', {
+      const params: Record<string, any> = {
         lat: location.latitude,
         lng: location.longitude,
         radius,
-      });
+      };
+      if (pageParam) {
+        params.cursor = pageParam;
+      }
+      return apiService.get<NearbyCreatorsPage>('/creators/nearby', params);
     },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore ? lastPage.nextCursor : undefined,
     enabled: !!location,
-    staleTime: 2 * 60 * 1000, // 2 minutes, matches API cache TTL
+    staleTime: 2 * 60 * 1000,
   });
 
+  const creators = query.data?.pages.flatMap((p) => p.creators) ?? [];
+
+  const refreshCreators = useCallback(async () => {
+    await query.refetch();
+  }, [query]);
+
   return {
-    creators: query.data?.creators ?? [],
+    creators,
     isLoading: query.isLoading,
     error: query.error,
     refetch: query.refetch,
+    refreshCreators,
+    fetchNextPage: query.fetchNextPage,
+    hasNextPage: query.hasNextPage,
+    isFetchingNextPage: query.isFetchingNextPage,
   };
 }

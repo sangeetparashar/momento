@@ -12,3 +12,4 @@ export { CreatorProfileSkeleton } from './CreatorProfileSkeleton';
 export { ProfileSkeleton } from './ProfileSkeleton';
 export { BookmarkButton } from './BookmarkButton';
 export { FollowingModal } from './FollowingModal';
+export { FeedAlgorithmModal } from './FeedAlgorithmModal';

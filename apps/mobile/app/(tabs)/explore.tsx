@@ -227,7 +227,7 @@ export default function ExploreScreen() {
   const [searchFocused, setSearchFocused] = useState(false);
   const inputRef = useRef<TextInput>(null);
   const feedQuery = useFeed();
-  const { creators: nearbyCreators, isLoading: creatorsLoading, refetch: refetchCreators } = useNearbyCreators();
+  const creatorsQuery = useNearbyCreators();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const searchType = activeTab === 'CREATORS' ? 'creators' : 'posts';
@@ -237,14 +237,14 @@ export default function ExploreScreen() {
     setIsRefreshing(true);
     try {
       if (activeTab === 'CREATORS') {
-        await refetchCreators();
+        await creatorsQuery.refetch();
       } else {
         await feedQuery.refreshFeed();
       }
     } finally {
       setIsRefreshing(false);
     }
-  }, [activeTab, refetchCreators, feedQuery]);
+  }, [activeTab, creatorsQuery, feedQuery]);
 
   const posts = useMemo(() => {
     if (!feedQuery.data?.pages) return [];
@@ -268,7 +268,7 @@ export default function ExploreScreen() {
       }));
     }
 
-    return nearbyCreators.map(
+    return creatorsQuery.creators.map(
       (creator: PublicCreator, index: number) => ({
         id: creator.id,
         type: 'creator' as const,
@@ -284,7 +284,7 @@ export default function ExploreScreen() {
         postCount: creator.postCount,
       })
     );
-  }, [activeTab, posts, nearbyCreators]);
+  }, [activeTab, posts, creatorsQuery.creators]);
 
   // Split items into two columns for masonry effect
   const { leftColumn, rightColumn } = useMemo(() => {
@@ -319,6 +319,21 @@ export default function ExploreScreen() {
     setSearchText('');
     inputRef.current?.blur();
   }, []);
+
+  const handleEndReached = useCallback(() => {
+    if (activeTab === 'POSTS') {
+      if (feedQuery.hasNextPage && !feedQuery.isFetchingNextPage) {
+        feedQuery.fetchNextPage();
+      }
+    } else {
+      if (creatorsQuery.hasNextPage && !creatorsQuery.isFetchingNextPage) {
+        creatorsQuery.fetchNextPage();
+      }
+    }
+  }, [activeTab, feedQuery, creatorsQuery]);
+
+  const isFetchingMore =
+    activeTab === 'POSTS' ? feedQuery.isFetchingNextPage : creatorsQuery.isFetchingNextPage;
 
   const showSearchResults = isSearchActive && searchText.length >= 2;
 
@@ -430,7 +445,7 @@ export default function ExploreScreen() {
         />
       ) : (
         /* Masonry Grid (default browse mode) */
-        ((activeTab === 'CREATORS' && creatorsLoading) || (activeTab === 'POSTS' && feedQuery.isLoading)) ? (
+        ((activeTab === 'CREATORS' && creatorsQuery.isLoading) || (activeTab === 'POSTS' && feedQuery.isLoading)) ? (
           <ExploreSkeleton />
         ) : (
           <FlatList
@@ -464,12 +479,22 @@ export default function ExploreScreen() {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContent}
             keyboardShouldPersistTaps="handled"
+            onEndReached={handleEndReached}
+            onEndReachedThreshold={0.5}
             refreshControl={
               <RefreshControl
                 refreshing={isRefreshing}
                 onRefresh={handleRefresh}
                 tintColor={COLORS.textTertiary}
               />
+            }
+            ListFooterComponent={
+              isFetchingMore ? (
+                <View style={styles.loadingMore}>
+                  <ActivityIndicator size="small" color={COLORS.primary} />
+                  <Text style={styles.loadingMoreText}>Loading more...</Text>
+                </View>
+              ) : null
             }
             ListEmptyComponent={
               <View style={styles.emptyState}>
@@ -606,6 +631,7 @@ const styles = StyleSheet.create({
   // Grid
   listContent: {
     paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.xl,
   },
   masonryContainer: {
     flexDirection: 'row',
@@ -679,6 +705,18 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.caption,
     color: COLORS.textSecondary,
     fontSize: 10,
+  },
+  // Loading more
+  loadingMore: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  loadingMoreText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textTertiary,
   },
   emptyState: {
     paddingVertical: SPACING.xl * 3,
