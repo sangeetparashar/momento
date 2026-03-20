@@ -11,6 +11,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar } from '@/components/primitives';
+import { FollowingListSkeleton } from './FollowingListSkeleton';
 import { apiService } from '@/services/api';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -147,9 +148,7 @@ export function FollowingModal({ visible, onClose }: FollowingModalProps) {
 
           {/* Content */}
           {loading ? (
-            <View style={styles.centered}>
-              <ActivityIndicator size="large" color={COLORS.primary} />
-            </View>
+            <FollowingListSkeleton />
           ) : users.length === 0 ? (
             <View style={styles.centered}>
               <Ionicons

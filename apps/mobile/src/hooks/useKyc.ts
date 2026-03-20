@@ -1,36 +1,13 @@
 import { Alert } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as WebBrowser from 'expo-web-browser';
-import type { User } from '@momento/shared';
+import type { User, KycApplicationResponse } from '@momento/shared';
 import { KycStatus } from '@momento/shared';
 import { apiService } from '@/services/api';
 
 interface KycApplicationPayload {
-  /** Optional first name for Veriff KYC verification. */
   firstName?: string;
-  /** Optional last name for Veriff KYC verification. */
   lastName?: string;
-  /** Creator's desired token symbol (3-5 chars). */
-  tokenSymbol?: string;
-  /** Brief pitch or reason for applying as a creator. */
-  applicationText?: string;
-  /** Optional social proof links. */
-  socialLinks?: {
-    youtube?: string;
-    instagram?: string;
-    twitter?: string;
-    spotify?: string;
-    soundcloud?: string;
-    tiktok?: string;
-    website?: string;
-  };
-}
-
-interface KycApplicationResponse {
-  status: string;
-  verificationUrl?: string;
-  sessionId?: string;
-  message?: string;
 }
 
 /**

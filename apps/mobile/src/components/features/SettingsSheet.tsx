@@ -54,6 +54,9 @@ export function SettingsSheet({
   useEffect(() => {
     if (visible) {
       setInternalVisible(true);
+      // Reset animation values before starting open animation
+      slideAnim.setValue(SCREEN_HEIGHT);
+      backdropOpacity.setValue(0);
       Animated.parallel([
         Animated.timing(backdropOpacity, {
           toValue: 1,
@@ -82,7 +85,7 @@ export function SettingsSheet({
         setInternalVisible(false);
       });
     }
-  }, [visible]);
+  }, [visible, SCREEN_HEIGHT]);
 
   const handleItemPress = useCallback(
     (route: string) => {

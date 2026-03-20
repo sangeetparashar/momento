@@ -4,7 +4,7 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  Dimensions,
+  useWindowDimensions,
   Linking,
   ActivityIndicator,
 } from 'react-native';
@@ -22,10 +22,8 @@ import { TYPOGRAPHY } from '@/styles/typography';
 import { formatNumber, formatDistance } from '@/utils/formatters';
 import { SOCIAL_PLATFORMS } from '@momento/shared';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const BANNER_HEIGHT = 180;
 const COLUMN_GAP = SPACING.sm;
-const ITEM_WIDTH = (SCREEN_WIDTH - SPACING.md * 2 - COLUMN_GAP) / 2;
 const HEIGHT_PATTERN = [1.0, 1.35, 1.15, 1.0, 1.4, 1.0, 1.2, 1.0, 1.3, 1.1];
 
 function splitMasonryColumns(posts: any[]) {
@@ -49,6 +47,8 @@ function splitMasonryColumns(posts: any[]) {
 export default function CreatorScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const ITEM_WIDTH = useMemo(() => (SCREEN_WIDTH - SPACING.md * 2 - COLUMN_GAP) / 2, [SCREEN_WIDTH]);
   const { profile, isLoading, isFollowing, toggleFollow } = useCreatorProfile(id);
   const [showComingSoon, setShowComingSoon] = useState(false);
 
@@ -368,7 +368,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   banner: {
-    width: SCREEN_WIDTH,
+    width: '100%',
     height: BANNER_HEIGHT,
   },
   bannerPlaceholder: {

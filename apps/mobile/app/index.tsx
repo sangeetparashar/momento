@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useRouter, useNavigationContainerRef } from 'expo-router';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { apiService } from '@/services/api';
-import { Text } from '@/components/primitives';
-import { COLORS } from '@/styles/theme';
+import { Text, MomentoLogo } from '@/components/primitives';
+import { COLORS, SPACING } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import type { User } from '@momento/shared';
 
@@ -69,12 +69,8 @@ export default function IndexScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.logo}>M O M E N T O</Text>
-      <ActivityIndicator
-        size="large"
-        color={COLORS.primary}
-        style={styles.spinner}
-      />
+      <MomentoLogo size={64} showText />
+      <Text style={styles.loadingMessage}>Loading your experience...</Text>
     </View>
   );
 }
@@ -86,13 +82,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  logo: {
-    ...TYPOGRAPHY.h1,
-    color: COLORS.textPrimary,
-    letterSpacing: 8,
-    fontWeight: '800',
-  },
-  spinner: {
-    marginTop: 32,
+  loadingMessage: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xl,
   },
 });

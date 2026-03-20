@@ -116,7 +116,7 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       } else if (data.type === 'creator' && data.creatorId) {
         router.push(`/creator/${data.creatorId}`);
       } else if (data.type === 'wallet') {
-        router.push('/(tabs)/profile');
+        router.push('/wallet');
       }
     },
     [router],

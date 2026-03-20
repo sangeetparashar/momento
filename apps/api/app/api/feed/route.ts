@@ -163,7 +163,7 @@ export async function GET(request: NextRequest) {
         content: p.content,
         caption: p.caption,
         mediaUrl: p.mediaUrl,
-        mediaUrls: p.mediaUrls,
+        mediaUrls: Array.isArray(p.mediaUrls) ? p.mediaUrls : null,
         latitude: p.latitude,
         longitude: p.longitude,
         likeCount: p.likeCount,

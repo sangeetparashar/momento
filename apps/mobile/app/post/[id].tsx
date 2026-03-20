@@ -17,7 +17,7 @@ import { Video, ResizeMode } from 'expo-av';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar } from '@/components/primitives';
-import { LikeButton } from '@/components/features';
+import { LikeButton, PostDetailSkeleton } from '@/components/features';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo, formatDistance } from '@/utils/formatters';
@@ -115,9 +115,7 @@ export default function PostScreen() {
             />
           </Pressable>
         </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-        </View>
+        <PostDetailSkeleton />
       </SafeAreaView>
     );
   }

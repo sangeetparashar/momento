@@ -4,7 +4,7 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  Dimensions,
+  useWindowDimensions,
   Linking,
   ActivityIndicator,
   RefreshControl,
@@ -20,6 +20,7 @@ import {
   SettingsSheet,
   ProfileSkeleton,
   FollowingModal,
+  FavoritesSkeleton,
 } from '@/components/features';
 import { useUserProfile, useSavedPosts, useProfileComplete } from '@/hooks';
 import { useAuth } from '@/hooks/useAuth';
@@ -29,9 +30,7 @@ import { TYPOGRAPHY } from '@/styles/typography';
 import { formatNumber } from '@/utils/formatters';
 import { UserRole, SOCIAL_PLATFORMS } from '@momento/shared';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COLUMN_GAP = SPACING.sm;
-const ITEM_WIDTH = (SCREEN_WIDTH - SPACING.md * 2 - COLUMN_GAP) / 2;
 const HEIGHT_PATTERN = [1.0, 1.35, 1.15, 1.0, 1.4, 1.0, 1.2, 1.0, 1.3, 1.1];
 
 function splitMasonryColumns(posts: any[]) {
@@ -54,6 +53,8 @@ function splitMasonryColumns(posts: any[]) {
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const ITEM_WIDTH = useMemo(() => (SCREEN_WIDTH - SPACING.md * 2 - COLUMN_GAP) / 2, [SCREEN_WIDTH]);
   const auth = useAuth();
   const { user, isLoading, refetch } = useUserProfile();
   const [showComingSoon, setShowComingSoon] = useState(false);
@@ -168,11 +169,7 @@ export default function ProfileScreen() {
 
   const renderPostsGrid = () => {
     if (postsQuery.isLoading) {
-      return (
-        <View style={styles.centeredSection}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-        </View>
-      );
+      return <FavoritesSkeleton />;
     }
     if (creatorPosts.length === 0) {
       return (
@@ -261,11 +258,7 @@ export default function ProfileScreen() {
 
   const renderSavedPosts = () => {
     if (savedPostsQuery.isLoading) {
-      return (
-        <View style={styles.centeredSection}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-        </View>
-      );
+      return <FavoritesSkeleton />;
     }
     if (savedPostsQuery.posts.length === 0) {
       return (

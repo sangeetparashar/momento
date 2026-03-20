@@ -1,13 +1,7 @@
 import { useInfiniteQuery, useMutation, useQueryClient, InfiniteData } from '@tanstack/react-query';
 import { apiService } from '@/services/api';
-import type { Comment, FeedResponse } from '@momento/shared';
+import type { Comment, FeedResponse, CommentsResponse } from '@momento/shared';
 import { showErrorToast } from '@/utils/toast';
-
-interface CommentsResponse {
-  comments: Comment[];
-  nextCursor?: string;
-  hasMore: boolean;
-}
 
 export function useComments(postId: string | undefined) {
   const queryClient = useQueryClient();

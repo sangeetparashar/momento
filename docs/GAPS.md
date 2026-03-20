@@ -318,18 +318,11 @@ Wire into explore.tsx's CREATORS tab.
 
 ---
 
-### M2. Settings Sub-Screens All Show ComingSoonModal
+### ~~M2. Settings Sub-Screens All Show ComingSoonModal~~ — PARTIALLY FIXED
 
-**What:** The SettingsSheet has 5 menu items (Favorites, Account Privacy, Device Permissions, Vault, Delete Account) but all just trigger ComingSoonModal.
+**What:** ~~The SettingsSheet has 5 menu items (Favorites, Account Privacy, Device Permissions, Vault, Delete Account) but all just trigger ComingSoonModal.~~ Delete Account now has a dedicated screen (`app/delete-account.tsx`). Favorites and Permissions have stub screens under `app/settings/`. Vault and Account Privacy still show ComingSoonModal.
 
-**Priority Screens to Implement:**
-1. **Delete Account** — most important for App Store compliance
-2. **Account Privacy** — visibility settings
-3. **Vault** — wallet connect/import flow
-4. **Favorites** — saved posts/creators
-5. **Device Permissions** — links to OS settings
-
-**Files:** `apps/mobile/app/(tabs)/profile.tsx` (handleSettingsNavigate callback)
+**Files:** `apps/mobile/app/(tabs)/profile.tsx`, `apps/mobile/app/delete-account.tsx`, `apps/mobile/app/settings/`
 
 ---
 
@@ -479,58 +472,24 @@ const compressed = await manipulateAsync(uri, [{ resize: { width: 1200 } }], {
 ### ~~Phase 5A: API Contract Fixes~~ COMPLETE
 C1-C7 have all been fixed. The mobile app now correctly communicates with the API.
 
-### Phase 5B: Post Detail & Comments (1 agent, ~20 min)
-Fix M3 + M4 + m16.
+### ~~Phase 5B: Post Detail & Comments~~ COMPLETE
+M3, M4, m16 all fixed. `useComments` hook created and wired.
 
-**Files this agent touches:**
-- `apps/mobile/app/post/[id].tsx` — Add direct fetch fallback + wire comment creation
-- `apps/mobile/src/hooks/useCreateComment.ts` — New hook
-- `apps/mobile/src/hooks/useComments.ts` — New hook to fetch real comments
-- `apps/mobile/src/hooks/index.ts` — Update barrel exports
+### ~~Phase 5C: Explore & Location~~ COMPLETE
+M1, M5 fixed. `useNearbyCreators` hook created, explore.tsx wired, LocationProvider syncs to server.
 
-### Phase 5C: Explore & Location (1 agent, ~20 min)
-Fix M1 + M5.
-
-**Files this agent touches:**
-- `apps/mobile/src/hooks/useNearbyCreators.ts` — New hook
-- `apps/mobile/app/(tabs)/explore.tsx` — Wire CREATORS tab to nearby API
-- `apps/mobile/src/providers/LocationProvider.tsx` — Sync location to server
-
-### Phase 5D: Creator Flow & Deep Links (1 agent, ~15 min)
-Fix M6 + M7.
-
-**Files this agent touches:**
-- `apps/mobile/src/hooks/useKyc.ts` — Open Veriff URL in browser after apply
-- `apps/mobile/app.json` — Add URL scheme + linking config
+### Phase 5D: Creator Flow & Deep Links — PARTIAL
+M6 endpoint fixed. M7 (Veriff redirect URL) and deep linking still need work.
 
 ---
 
 <a id="agent-strategy"></a>
-## Agent Assignment Strategy
+## 2026-03-20 Status Update
 
-### Agent Isolation Zones (no file conflicts)
-
-| Agent | Zone | Files |
-|-------|------|-------|
-| **5A: API Contract** | `src/services/`, `src/hooks/use{Kyc,CreatorProfile,Like}.ts`, `src/providers/NotificationProvider.tsx` | 5 files |
-| **5B: Post & Comments** | `app/post/[id].tsx`, `src/hooks/use{Comments,CreateComment}.ts` | 3 files (+2 new) |
-| **5C: Explore & Location** | `app/(tabs)/explore.tsx`, `src/hooks/useNearbyCreators.ts`, `src/providers/LocationProvider.tsx` | 2 files (+1 new) |
-| **5D: Creator & Links** | `app.json`, `src/hooks/useKyc.ts` (caution: shared with 5A) | 2 files |
-
-**⚠️ Conflict Risk:** 5A and 5D both touch `useKyc.ts`. Run 5A first, then 5D, OR have 5A handle the endpoint fix and 5D handle the Veriff redirect logic in a separate function.
-
-### Pre-Agent Checklist
-
-Before launching any fix agent, verify:
-1. ✅ AuthBridge is wired (done in Phase 4)
-2. ✅ Feed params are correct (done in Phase 4)
-3. ✅ ErrorBoundary is in place (done in Phase 4)
-4. ✅ C1-C7 API contract bugs are fixed (done in Phase 5A)
-
-### Post-Fix Verification
-
-After each agent completes, verify:
-1. TypeScript compiles: `pnpm tsc --noEmit` in `apps/mobile`
-2. No import errors: all barrel exports (`index.ts`) are updated
-3. No circular dependencies: AuthBridge → api.ts → no hooks
-4. Hooks return expected shapes: check each `useQuery` returns the right type after envelope unwrap
+> After the `a816ff2` ("fixes") commit, **53 of 56 bugs from the CURRENT_STATE_AUDIT are resolved.**
+> All P0 and P1 bugs are fixed. Remaining work is type mismatches (T1-T14) and UI polish.
+>
+> **Next priorities:**
+> 1. Fix type contract mismatches (T1-T14) in `packages/shared/src/types.ts`
+> 2. Fix remaining UI polish (M18: Veriff redirect, M19: deep linking, M20: share, M23: KeyboardAvoidingView)
+> 3. Integration testing & deployment

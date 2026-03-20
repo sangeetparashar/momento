@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { apiService } from '@/services/api';
 import { showErrorToast } from '@/utils/toast';
+import type { UploadPresignResponse } from '@momento/shared';
 
 interface UploadResult {
   uri: string;
@@ -102,11 +103,8 @@ export function useUpload(): UseUploadReturn {
         let uploadUrl: string;
         let publicUrl: string;
         try {
-          const presignResult = await apiService.post<{
-            uploadUrl: string;
-            publicUrl: string;
-            path: string;
-          }>('/uploads/presign', { fileName, contentType: processedMimeType });
+          const presignResult = await apiService.post<UploadPresignResponse>(
+            '/uploads/presign', { fileName, contentType: processedMimeType });
           uploadUrl = presignResult.uploadUrl;
           publicUrl = presignResult.publicUrl;
         } catch (e: any) {

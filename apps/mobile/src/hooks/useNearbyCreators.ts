@@ -2,18 +2,12 @@ import { useCallback } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { apiService } from '@/services/api';
 import { useLocation } from '@/providers/LocationProvider';
-import type { PublicCreator } from '@momento/shared';
-
-interface NearbyCreatorsPage {
-  creators: PublicCreator[];
-  nextCursor: string | null;
-  hasMore: boolean;
-}
+import type { PublicCreator, NearbyCreatorsResponse } from '@momento/shared';
 
 export function useNearbyCreators(radius = 50) {
   const { location } = useLocation();
 
-  const query = useInfiniteQuery<NearbyCreatorsPage>({
+  const query = useInfiniteQuery<NearbyCreatorsResponse>({
     queryKey: [
       'creators',
       'nearby',
@@ -31,7 +25,7 @@ export function useNearbyCreators(radius = 50) {
       if (pageParam) {
         params.cursor = pageParam;
       }
-      return apiService.get<NearbyCreatorsPage>('/creators/nearby', params);
+      return apiService.get<NearbyCreatorsResponse>('/creators/nearby', params);
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) =>

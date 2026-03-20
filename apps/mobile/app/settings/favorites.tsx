@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/primitives';
-import { PostCard } from '@/components/features';
+import { PostCard, FavoritesSkeleton } from '@/components/features';
 import { useSavedPosts } from '@/hooks';
 import { COLORS, SPACING } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -25,11 +25,7 @@ export default function FavoritesScreen() {
       </View>
 
       {isLoading ? (
-        <ActivityIndicator
-          size="large"
-          color={COLORS.primary}
-          style={{ marginTop: SPACING.xl }}
-        />
+        <FavoritesSkeleton />
       ) : posts.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="heart-outline" size={48} color={COLORS.textTertiary} />

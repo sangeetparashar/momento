@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { View, StyleSheet, Pressable, useWindowDimensions, ActivityIndicator } from 'react-native';
 import Svg, { Path, Defs, LinearGradient, Stop, Circle, Text as SvgText } from 'react-native-svg';
-import { Text } from '@/components/primitives';
+import { Text, Skeleton } from '@/components/primitives';
 import { usePriceHistory, usePortfolioSnapshots } from '@/hooks/usePriceHistory';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -116,9 +116,7 @@ export function PortfolioChart({ solBalance }: PortfolioChartProps) {
       {/* Chart */}
       <View style={styles.chartContainer}>
         {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="small" color={COLORS.primary} />
-          </View>
+          <Skeleton width="100%" height={CHART_HEIGHT} borderRadius={RADII.lg} />
         ) : chart?.linePath ? (
           <Svg width={CHART_WIDTH} height={CHART_HEIGHT}>
             <Defs>

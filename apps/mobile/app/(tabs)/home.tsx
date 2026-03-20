@@ -3,7 +3,7 @@ import {
   View,
   StyleSheet,
   FlatList,
-  Dimensions,
+  useWindowDimensions,
   Pressable,
   Share,
   ActivityIndicator,
@@ -12,7 +12,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Text, Avatar } from '@/components/primitives';
+import { Text, Avatar, MomentoLogo } from '@/components/primitives';
 import { LikeButton, TickerBanner, BookmarkButton, FeedSkeleton, FeedAlgorithmModal } from '@/components/features';
 import { useFeed } from '@/hooks';
 import type { FeedSortMode } from '@/hooks/useFeed';
@@ -21,8 +21,6 @@ import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo, formatNumber } from '@/utils/formatters';
 import { DUMMY_TRENDING_TOKENS, DUMMY_CREATORS_TO_WATCH } from '@momento/shared';
 import type { PostWithCreator } from '@momento/shared';
-
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // TickerBanner data
 const TRENDING_ITEMS = DUMMY_TRENDING_TOKENS.map((t) => ({
@@ -39,7 +37,6 @@ const CREATORS_ITEMS = DUMMY_CREATORS_TO_WATCH.map((t) => ({
 const HEADER_HEIGHT = 44;
 const TICKER_HEIGHT = 72; // approx height for 2 ticker banners
 const TAB_BAR_HEIGHT = 80;
-const PAGE_HEIGHT = SCREEN_HEIGHT - HEADER_HEIGHT - TICKER_HEIGHT - TAB_BAR_HEIGHT;
 
 const SORT_ICONS: Record<FeedSortMode, keyof typeof Ionicons.glyphMap> = {
   smart: 'sparkles',
@@ -49,7 +46,7 @@ const SORT_ICONS: Record<FeedSortMode, keyof typeof Ionicons.glyphMap> = {
   following: 'people-outline',
 };
 
-function FeedPage({ post }: { post: PostWithCreator }) {
+function FeedPage({ post, screenWidth, pageHeight }: { post: PostWithCreator; screenWidth: number; pageHeight: number }) {
   const router = useRouter();
 
   const handleCreatorPress = useCallback(() => {
@@ -67,7 +64,7 @@ function FeedPage({ post }: { post: PostWithCreator }) {
   }, [post.caption, post.content]);
 
   return (
-    <View style={[styles.page, { width: SCREEN_WIDTH }]}>
+    <View style={[styles.page, { width: screenWidth, height: pageHeight }]}>
       {/* Full-screen media — contain to show full image */}
       <Pressable onPress={handlePostPress} style={styles.mediaContainer}>
         {post.mediaUrl ? (
@@ -154,6 +151,8 @@ function FeedPage({ post }: { post: PostWithCreator }) {
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
+  const PAGE_HEIGHT = SCREEN_HEIGHT - HEADER_HEIGHT - TICKER_HEIGHT - TAB_BAR_HEIGHT;
   const [feedSort, setFeedSort] = useState<FeedSortMode>('smart');
   const [showAlgoModal, setShowAlgoModal] = useState(false);
   const feedQuery = useFeed({ sort: feedSort });
@@ -199,8 +198,8 @@ export default function HomeScreen() {
   }).current;
 
   const renderItem = useCallback(
-    ({ item }: { item: PostWithCreator }) => <FeedPage post={item} />,
-    []
+    ({ item }: { item: PostWithCreator }) => <FeedPage post={item} screenWidth={SCREEN_WIDTH} pageHeight={PAGE_HEIGHT} />,
+    [SCREEN_WIDTH, PAGE_HEIGHT]
   );
 
   const keyExtractor = useCallback(
@@ -212,7 +211,7 @@ export default function HomeScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
-          <Text style={styles.logo}>M O M E N T O</Text>
+          <MomentoLogo size={28} />
         </View>
         <FeedSkeleton />
       </SafeAreaView>
@@ -236,7 +235,7 @@ export default function HomeScreen() {
           />
         </Pressable>
 
-        <Text style={styles.logo}>M O M E N T O</Text>
+        <MomentoLogo size={28} />
 
         <Pressable onPress={handleRefresh} style={styles.refreshButton} hitSlop={8}>
           {feedQuery.isRefetching ? (
@@ -354,7 +353,6 @@ const styles = StyleSheet.create({
 
   // Feed page
   page: {
-    height: PAGE_HEIGHT,
     position: 'relative',
     backgroundColor: COLORS.background,
   },

@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { usePrivyGuard } from '@/providers/PrivyGuard';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Text } from '@/components/primitives';
+import { Text, MomentoLogo } from '@/components/primitives';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 
@@ -60,7 +60,7 @@ export default function LoginScreen() {
 
         {/* Logo */}
         <View style={styles.logoContainer}>
-          <Text style={styles.logo}>M O M E N T O</Text>
+          <MomentoLogo size={80} showText />
           <Text style={styles.subtitle}>THE STOCK MARKET FOR CULTURE</Text>
         </View>
 

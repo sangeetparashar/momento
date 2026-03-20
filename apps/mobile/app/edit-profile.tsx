@@ -156,11 +156,8 @@ export default function EditProfileScreen() {
   );
 
   const handleStartKyc = useCallback(() => {
-    kycMutation.mutate({
-      tokenSymbol: tokenSymbol || 'TOKEN',
-      applicationText: 'Creator verification request',
-    });
-  }, [kycMutation, tokenSymbol]);
+    kycMutation.mutate({});
+  }, [kycMutation]);
 
   const getKycStatusDisplay = () => {
     const status = user?.kycStatus || KycStatus.NONE;
@@ -203,6 +200,7 @@ export default function EditProfileScreen() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
       <ScrollView
         showsVerticalScrollIndicator={false}

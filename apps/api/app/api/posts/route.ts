@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
         content: post.content,
         caption: post.caption,
         mediaUrl: post.mediaUrl,
-        mediaUrls: post.mediaUrls,
+        mediaUrls: Array.isArray(post.mediaUrls) ? post.mediaUrls : null,
         latitude: post.latitude,
         longitude: post.longitude,
         likeCount: post.likeCount,

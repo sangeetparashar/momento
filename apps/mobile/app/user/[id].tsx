@@ -1,10 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import {
   View,
   StyleSheet,
   ScrollView,
   Pressable,
-  Dimensions,
+  useWindowDimensions,
   Linking,
   ActivityIndicator,
 } from 'react-native';
@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar } from '@/components/primitives';
-import { ComingSoonModal } from '@/components/features';
+import { ComingSoonModal, UserProfileSkeleton } from '@/components/features';
 import { usePublicProfile, useCreatorProfile } from '@/hooks';
 import { apiService } from '@/services/api';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
@@ -23,14 +23,14 @@ import { formatNumber } from '@/utils/formatters';
 import { SOCIAL_PLATFORMS } from '@momento/shared';
 import { UserRole } from '@momento/shared';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_GAP = 2;
 const GRID_COLUMNS = 3;
-const GRID_ITEM_SIZE = (SCREEN_WIDTH - GRID_GAP * (GRID_COLUMNS + 1)) / GRID_COLUMNS;
 
 export default function UserScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { width: SCREEN_WIDTH } = useWindowDimensions();
+  const GRID_ITEM_SIZE = useMemo(() => (SCREEN_WIDTH - GRID_GAP * (GRID_COLUMNS + 1)) / GRID_COLUMNS, [SCREEN_WIDTH]);
   const { profile, isLoading } = usePublicProfile(id);
   const [showComingSoon, setShowComingSoon] = useState(false);
 
@@ -178,7 +178,7 @@ export default function UserScreen() {
           <Pressable
             key={post.id}
             onPress={() => router.push(`/post/${post.id}`)}
-            style={styles.gridItem}
+            style={[styles.gridItem, { width: GRID_ITEM_SIZE, height: GRID_ITEM_SIZE }]}
           >
             {post.mediaUrl ? (
               <Image
@@ -209,9 +209,7 @@ export default function UserScreen() {
           <Text style={styles.navTitle}>Profile</Text>
           <View style={styles.navSpacer} />
         </View>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-        </View>
+        <UserProfileSkeleton />
       </SafeAreaView>
     );
   }
@@ -459,8 +457,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: GRID_GAP,
   },
   gridItem: {
-    width: GRID_ITEM_SIZE,
-    height: GRID_ITEM_SIZE,
     margin: GRID_GAP / 2,
   },
   gridImage: {

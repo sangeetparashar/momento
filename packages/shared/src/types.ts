@@ -28,6 +28,8 @@ export interface SocialLinks {
   website?: string;
 }
 
+// Note: pushToken is intentionally excluded from the User interface.
+// It is stored in the database but never exposed to clients for privacy/security.
 export interface User {
   id: string;
   privyUserId: string;
@@ -192,4 +194,23 @@ export interface KycApplicationResponse {
     kycStatus: string;
     isAdminApproved: boolean;
   };
+}
+
+const SOCIAL_LINK_KEYS: ReadonlySet<string> = new Set([
+  'youtube', 'instagram', 'twitter', 'spotify', 'soundcloud', 'tiktok', 'website',
+]);
+
+/**
+ * Runtime validator for SocialLinks JSON blobs from the database.
+ * Returns a valid SocialLinks object or undefined if the input is not valid.
+ */
+export function parseSocialLinks(value: unknown): SocialLinks | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const result: Record<string, string> = {};
+  for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+    if (SOCIAL_LINK_KEYS.has(key) && typeof val === 'string' && val.length > 0) {
+      result[key] = val;
+    }
+  }
+  return Object.keys(result).length > 0 ? (result as SocialLinks) : undefined;
 }
