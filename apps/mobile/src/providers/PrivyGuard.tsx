@@ -54,7 +54,15 @@ function PrivyWithAuth({ children }: { children: React.ReactNode }) {
 
   return (
     <PrivyGuardContext.Provider value={{ isPrivyAvailable: true }}>
-      <PrivyProvider appId={ENV.PRIVY_APP_ID} clientId="client-WY6UDfFofojZafsbGzmGDGYExCP86xeQuKCcUvoyGmpqZ">
+      <PrivyProvider
+        appId={ENV.PRIVY_APP_ID}
+        clientId="client-WY6UDfFofojZafsbGzmGDGYExCP86xeQuKCcUvoyGmpqZ"
+        config={{
+          embedded: {
+            solana: { createOnLogin: 'users-without-wallets' },
+          },
+        }}
+      >
         <AuthBridge>
           {children}
         </AuthBridge>

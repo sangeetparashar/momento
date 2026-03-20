@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { usePrivyGuard } from '@/providers/PrivyGuard';
 
 // Re-export for convenience
@@ -14,7 +15,7 @@ export { usePrivyGuard };
 let _privyHooks: {
   usePrivy: any;
   useLoginWithOAuth: any;
-  useCreateWallet: any | null;
+  useEmbeddedSolanaWallet: any;
 } | false | null = null;
 
 function getPrivyHooks() {
@@ -24,8 +25,7 @@ function getPrivyHooks() {
       _privyHooks = {
         usePrivy: privy.usePrivy,
         useLoginWithOAuth: privy.useLoginWithOAuth,
-        // useCreateWallet may not exist in all SDK versions
-        useCreateWallet: typeof privy.useCreateWallet === 'function' ? privy.useCreateWallet : null,
+        useEmbeddedSolanaWallet: privy.useEmbeddedSolanaWallet,
       };
     } catch {
       _privyHooks = false;
@@ -42,6 +42,8 @@ const GUEST_AUTH = {
   },
   logout: async () => {},
   getAccessToken: async () => null,
+  walletAddress: null as string | null,
+  walletStatus: 'disconnected' as string,
 };
 
 /**
@@ -51,6 +53,7 @@ const GUEST_AUTH = {
  */
 export function useAuth() {
   const { isPrivyAvailable } = usePrivyGuard();
+  const creatingRef = useRef(false);
 
   if (!isPrivyAvailable) {
     return GUEST_AUTH;
@@ -63,31 +66,63 @@ export function useAuth() {
   const privy = hooks.usePrivy();
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const { login: oauthLogin } = hooks.useLoginWithOAuth();
-  // useCreateWallet may not exist in all Privy SDK versions
+
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  const walletHook = hooks.useCreateWallet ? hooks.useCreateWallet() : null;
+  const solanaWallet = hooks.useEmbeddedSolanaWallet({
+    onCreateWalletSuccess: (wallet: any) => {
+      console.log('[useAuth] Solana wallet created successfully:', wallet?.address);
+      creatingRef.current = false;
+    },
+    onCreateWalletError: (error: Error) => {
+      console.error('[useAuth] Solana wallet creation failed:', error.message);
+      creatingRef.current = false;
+    },
+  });
+
+  // Auto-create wallet when user is logged in but wallet doesn't exist yet
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    if (
+      privy.user &&
+      solanaWallet.status === 'not-created' &&
+      !creatingRef.current
+    ) {
+      console.log('[useAuth] User logged in but no Solana wallet — creating...');
+      creatingRef.current = true;
+      solanaWallet.create({ recoveryMethod: 'privy' }).catch((err: any) => {
+        console.error('[useAuth] Wallet create() rejected:', err?.message || err);
+        creatingRef.current = false;
+      });
+    }
+  }, [privy.user, solanaWallet.status]);
+
+  // Log wallet status changes for debugging
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    console.log('[useAuth] Wallet status:', solanaWallet.status);
+    if (solanaWallet.status === 'connected' && solanaWallet.wallets?.length > 0) {
+      console.log('[useAuth] Wallet address:', solanaWallet.wallets[0].address);
+    }
+    if (solanaWallet.status === 'error') {
+      console.error('[useAuth] Wallet error:', (solanaWallet as any).error);
+    }
+  }, [solanaWallet.status]);
+
+  const walletAddress =
+    solanaWallet.status === 'connected' && solanaWallet.wallets?.length > 0
+      ? solanaWallet.wallets[0].address
+      : null;
 
   return {
     isReady: privy.isReady,
     user: privy.user,
     login: async () => {
       await oauthLogin({ provider: 'google' });
-
-      // Attempt to create an embedded Solana wallet if the user doesn't have one
-      if (walletHook?.createWallet) {
-        try {
-          const hasWallet = privy.user?.linkedAccounts?.some(
-            (account: any) => account.type === 'wallet' && account.walletClientType === 'privy',
-          );
-          if (!hasWallet) {
-            await walletHook.createWallet();
-          }
-        } catch (walletError: any) {
-          console.warn('[useAuth] Embedded wallet creation failed:', walletError?.message || walletError);
-        }
-      }
+      // Wallet creation happens via the useEffect above once the user state updates
     },
     logout: privy.logout,
     getAccessToken: async () => null, // handled by AuthBridge
+    walletAddress,
+    walletStatus: solanaWallet.status,
   };
 }

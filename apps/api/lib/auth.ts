@@ -95,6 +95,27 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
         isAdmin: true,
       },
     });
+  } else if (user.walletAddress.startsWith('pending-')) {
+    // User exists but wallet was created after initial signup — sync it
+    try {
+      const privyUser = await getPrivy().getUser(privyUserId);
+      const wallet = privyUser.wallet;
+      if (wallet?.address) {
+        user = await prisma.user.update({
+          where: { privyUserId },
+          data: { walletAddress: wallet.address },
+          select: {
+            id: true,
+            privyUserId: true,
+            walletAddress: true,
+            role: true,
+            isAdmin: true,
+          },
+        });
+      }
+    } catch (error: any) {
+      console.error('Failed to sync wallet address:', error?.message || error);
+    }
   }
 
   return user;
