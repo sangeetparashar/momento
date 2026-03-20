@@ -55,7 +55,8 @@ async function getTokenBalances(walletAddress: string): Promise<TokenHolding[]> 
         ownerAddress: walletAddress,
         tokenType: 'fungible',
         displayOptions: {
-          showFungible: true,
+          showNativeBalance: true,
+          showZeroBalance: false,
         },
       },
     }),
