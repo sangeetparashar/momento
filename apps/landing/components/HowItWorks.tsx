@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 const steps = [
   {
@@ -51,55 +51,70 @@ const steps = [
 
 export default function HowItWorks() {
   const sectionRef = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setVisible(true);
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.15 }
-    );
+    const init = async () => {
+      const { animate, onScroll } = await import('animejs');
 
-    const el = sectionRef.current;
-    if (el) observer.observe(el);
-    return () => {
-      if (el) observer.unobserve(el);
+      if (!sectionRef.current) return;
+
+      // Animate section label + heading — slide up
+      animate(sectionRef.current.querySelector('.anim-heading'), {
+        opacity: [0, 1],
+        translateY: [30, 0],
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: onScroll({
+          target: sectionRef.current,
+          enter: 'bottom -= 100px',
+        }),
+      });
+
+      // Animate step cards — slide up with stagger
+      animate(sectionRef.current.querySelectorAll('.anim-card'), {
+        opacity: [0, 1],
+        translateY: [40, 0],
+        delay: (_, i) => i * 100,
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: onScroll({
+          target: sectionRef.current,
+          enter: 'bottom -= 100px',
+        }),
+      });
     };
+
+    init();
   }, []);
 
   return (
     <section id="how-it-works" ref={sectionRef} className="py-24 px-6">
       <div className="max-w-7xl mx-auto">
         {/* Section label */}
-        <div className="flex items-center justify-center gap-4 mb-4">
-          <div className="h-px w-12 bg-momento-primary/30" />
-          <p className="text-momento-primary text-xs font-medium uppercase tracking-[3px]">
-            How It Works
-          </p>
-          <div className="h-px w-12 bg-momento-primary/30" />
-        </div>
+        <div className="anim-heading" style={{ opacity: 0, transform: 'translateY(30px)' }}>
+          <div className="flex items-center justify-center gap-4 mb-4">
+            <div className="h-px w-12 bg-momento-primary/30" />
+            <p className="text-momento-primary text-xs font-medium uppercase tracking-[3px]">
+              How It Works
+            </p>
+            <div className="h-px w-12 bg-momento-primary/30" />
+          </div>
 
-        {/* Heading */}
-        <h2 className="text-4xl md:text-5xl font-bold text-center mb-16 tracking-tight">
-          Four steps to owning culture
-        </h2>
+          {/* Heading */}
+          <h2 className="text-4xl md:text-5xl font-bold text-center mb-16 tracking-tight">
+            Four steps to owning culture
+          </h2>
+        </div>
 
         {/* Step cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {steps.map((step, i) => (
+          {steps.map((step) => (
             <div
               key={step.number}
-              className={`group relative backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-8
+              className="anim-card group relative backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-8
                          hover:border-momento-primary/30 hover:-translate-y-0.5
-                         transition-all duration-700 ease-out
-                         ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}
-              style={{ transitionDelay: `${i * 100}ms` }}
+                         transition-colors duration-300"
+              style={{ opacity: 0, transform: 'translateY(40px)' }}
             >
               {/* Watermark number */}
               <span className="absolute top-4 right-4 text-6xl font-black text-white/[0.05] select-none leading-none">

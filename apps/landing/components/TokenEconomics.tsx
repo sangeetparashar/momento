@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 const flowCards = [
   {
@@ -104,44 +104,83 @@ const pills = [
 
 export default function TokenEconomics() {
   const sectionRef = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setVisible(true);
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.15 }
-    );
+    const init = async () => {
+      const { animate, onScroll } = await import('animejs');
 
-    const el = sectionRef.current;
-    if (el) observer.observe(el);
-    return () => {
-      if (el) observer.unobserve(el);
+      if (!sectionRef.current) return;
+
+      // Animate section label + heading — slide up
+      animate(sectionRef.current.querySelector('.anim-heading'), {
+        opacity: [0, 1],
+        translateY: [30, 0],
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: onScroll({
+          target: sectionRef.current,
+          enter: 'bottom -= 100px',
+        }),
+      });
+
+      // Animate flow cards — slide up with stagger
+      animate(sectionRef.current.querySelectorAll('.anim-card'), {
+        opacity: [0, 1],
+        translateY: [40, 0],
+        delay: (_, i) => i * 100,
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: onScroll({
+          target: sectionRef.current,
+          enter: 'bottom -= 100px',
+        }),
+      });
+
+      // Animate arrow connectors — fade in
+      animate(sectionRef.current.querySelectorAll('.anim-arrow'), {
+        opacity: [0, 1],
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: onScroll({
+          target: sectionRef.current,
+          enter: 'bottom -= 100px',
+        }),
+      });
+
+      // Animate pills — slide up with stagger
+      animate(sectionRef.current.querySelectorAll('.anim-pill'), {
+        opacity: [0, 1],
+        translateY: [20, 0],
+        delay: (_, i) => i * 100,
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: onScroll({
+          target: sectionRef.current,
+          enter: 'bottom -= 100px',
+        }),
+      });
     };
+
+    init();
   }, []);
 
   return (
     <section id="token-economics" ref={sectionRef} className="py-24 px-6">
       <div className="max-w-7xl mx-auto">
-        {/* Section label */}
-        <div className="flex items-center justify-center gap-4 mb-4">
-          <div className="h-px w-12 bg-momento-primary/30" />
-          <p className="text-momento-primary text-xs font-medium uppercase tracking-[3px]">
-            Token Economics
-          </p>
-          <div className="h-px w-12 bg-momento-primary/30" />
-        </div>
+        {/* Section label + Heading */}
+        <div className="anim-heading" style={{ opacity: 0, transform: 'translateY(30px)' }}>
+          <div className="flex items-center justify-center gap-4 mb-4">
+            <div className="h-px w-12 bg-momento-primary/30" />
+            <p className="text-momento-primary text-xs font-medium uppercase tracking-[3px]">
+              Token Economics
+            </p>
+            <div className="h-px w-12 bg-momento-primary/30" />
+          </div>
 
-        {/* Heading */}
-        <h2 className="text-4xl md:text-5xl font-bold text-center mb-16 tracking-tight">
-          How creator tokens work
-        </h2>
+          <h2 className="text-4xl md:text-5xl font-bold text-center mb-16 tracking-tight">
+            How creator tokens work
+          </h2>
+        </div>
 
         {/* Flow diagram */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-0 items-stretch">
@@ -149,10 +188,8 @@ export default function TokenEconomics() {
             <div key={card.title} className="flex items-center">
               {/* Card */}
               <div
-                className={`flex-1 backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-8 text-center
-                           transition-all duration-700 ease-out
-                           ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}
-                style={{ transitionDelay: `${i * 100}ms` }}
+                className="anim-card flex-1 backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-8 text-center"
+                style={{ opacity: 0, transform: 'translateY(40px)' }}
               >
                 <h3 className="text-lg font-bold text-white mb-4">{card.title}</h3>
                 {card.content}
@@ -161,9 +198,8 @@ export default function TokenEconomics() {
               {/* Arrow connector (not after last card) */}
               {i < flowCards.length - 1 && (
                 <div
-                  className={`hidden md:flex items-center justify-center w-10 shrink-0 transition-all duration-700 ease-out
-                             ${visible ? 'opacity-100' : 'opacity-0'}`}
-                  style={{ transitionDelay: `${150 + i * 100}ms` }}
+                  className="anim-arrow hidden md:flex items-center justify-center w-10 shrink-0"
+                  style={{ opacity: 0 }}
                 >
                   <svg className="w-6 h-6 text-momento-primary/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
@@ -174,9 +210,8 @@ export default function TokenEconomics() {
               {/* Mobile arrow (down) */}
               {i < flowCards.length - 1 && (
                 <div
-                  className={`flex md:hidden items-center justify-center py-2 transition-all duration-700 ease-out
-                             ${visible ? 'opacity-100' : 'opacity-0'}`}
-                  style={{ transitionDelay: `${150 + i * 100}ms` }}
+                  className="anim-arrow flex md:hidden items-center justify-center py-2"
+                  style={{ opacity: 0 }}
                 >
                   <svg className="w-6 h-6 text-momento-primary/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" />
@@ -188,15 +223,12 @@ export default function TokenEconomics() {
         </div>
 
         {/* Key metrics pills */}
-        <div
-          className={`flex flex-wrap items-center justify-center gap-4 mt-16 transition-all duration-700 ease-out
-                     ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
-          style={{ transitionDelay: '400ms' }}
-        >
+        <div className="flex flex-wrap items-center justify-center gap-4 mt-16">
           {pills.map((pill) => (
             <div
               key={pill.label}
-              className="flex items-center gap-2 rounded-full backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] px-6 py-3 text-sm text-momento-text-secondary"
+              className="anim-pill flex items-center gap-2 rounded-full backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] px-6 py-3 text-sm text-momento-text-secondary"
+              style={{ opacity: 0, transform: 'translateY(20px)' }}
             >
               <span className="text-momento-primary">{pill.icon}</span>
               <span>{pill.label}</span>

@@ -1,30 +1,72 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import WaitlistForm from '@/components/WaitlistForm';
 
 export default function FinalCta() {
   const sectionRef = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setVisible(true);
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.1 }
-    );
+    const init = async () => {
+      const { animate, onScroll } = await import('animejs');
 
-    const el = sectionRef.current;
-    if (el) observer.observe(el);
-    return () => {
-      if (el) observer.unobserve(el);
+      if (!sectionRef.current) return;
+
+      const scrollTrigger = onScroll({
+        target: sectionRef.current,
+        enter: 'bottom -= 100px',
+      });
+
+      // Logo mark — scale in + fade
+      animate(sectionRef.current.querySelector('.anim-logo'), {
+        opacity: [0, 1],
+        scale: [0.8, 1],
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: scrollTrigger,
+      });
+
+      // Headline lines — slide up with stagger
+      animate(sectionRef.current.querySelectorAll('.anim-heading'), {
+        opacity: [0, 1],
+        translateY: [30, 0],
+        delay: (_, i) => 100 + i * 100,
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: scrollTrigger,
+      });
+
+      // Subtitle
+      animate(sectionRef.current.querySelector('.anim-subtitle'), {
+        opacity: [0, 1],
+        translateY: [30, 0],
+        delay: 300,
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: scrollTrigger,
+      });
+
+      // Waitlist form container
+      animate(sectionRef.current.querySelector('.anim-form'), {
+        opacity: [0, 1],
+        translateY: [30, 0],
+        delay: 400,
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: scrollTrigger,
+      });
+
+      // Social links
+      animate(sectionRef.current.querySelector('.anim-social'), {
+        opacity: [0, 1],
+        delay: 500,
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: scrollTrigger,
+      });
     };
+
+    init();
   }, []);
 
   return (
@@ -78,8 +120,8 @@ export default function FinalCta() {
       <div className="relative z-10 max-w-3xl mx-auto text-center">
         {/* Logo mark */}
         <div
-          className={`flex justify-center mb-8 transition-all duration-700 ease-out
-                      ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
+          className="anim-logo flex justify-center mb-8"
+          style={{ opacity: 0, transform: 'scale(0.8)' }}
         >
           <svg
             width="48"
@@ -104,35 +146,41 @@ export default function FinalCta() {
         </div>
 
         {/* Headline */}
-        <h2
-          className={`text-5xl md:text-7xl font-black text-center transition-all duration-700 ease-out delay-100
-                      ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
-        >
-          <span className="text-white block">Be First.</span>
-          <span className="text-shimmer block">Own the Culture.</span>
+        <h2 className="text-5xl md:text-7xl font-black text-center">
+          <span
+            className="anim-heading text-white block"
+            style={{ opacity: 0, transform: 'translateY(30px)' }}
+          >
+            Be First.
+          </span>
+          <span
+            className="anim-heading text-shimmer block"
+            style={{ opacity: 0, transform: 'translateY(30px)' }}
+          >
+            Own the Culture.
+          </span>
         </h2>
 
         {/* Subtitle */}
         <p
-          className={`text-lg text-momento-text-secondary text-center max-w-xl mx-auto mt-6
-                      transition-all duration-700 ease-out delay-200
-                      ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+          className="anim-subtitle text-lg text-momento-text-secondary text-center max-w-xl mx-auto mt-6"
+          style={{ opacity: 0, transform: 'translateY(30px)' }}
         >
           Join the waitlist for early access to Momento. Be part of the future of the creator economy.
         </p>
 
         {/* Waitlist form */}
         <div
-          className={`mt-10 flex justify-center transition-all duration-700 ease-out delay-300
-                      ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+          className="anim-form mt-10 flex justify-center"
+          style={{ opacity: 0, transform: 'translateY(30px)' }}
         >
           <WaitlistForm />
         </div>
 
         {/* Social links */}
         <div
-          className={`flex items-center justify-center gap-6 mt-8 transition-all duration-700 ease-out delay-[400ms]
-                      ${visible ? 'opacity-100' : 'opacity-0'}`}
+          className="anim-social flex items-center justify-center gap-6 mt-8"
+          style={{ opacity: 0 }}
         >
           <a
             href="https://x.com"

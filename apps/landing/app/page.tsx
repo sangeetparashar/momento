@@ -1,7 +1,6 @@
 import Navbar from '@/components/Navbar';
 import Hero from '@/components/Hero';
 import TickerBanner from '@/components/TickerBanner';
-import RiveAnimation from '@/components/RiveAnimation';
 import ProblemHook from '@/components/ProblemHook';
 import HowItWorks from '@/components/HowItWorks';
 import AppShowcase from '@/components/AppShowcase';
@@ -17,7 +16,6 @@ export default function Home() {
       <Navbar />
       <Hero />
       <TickerBanner />
-      <RiveAnimation />
       <ProblemHook />
       <HowItWorks />
       <AppShowcase />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 const stats = [
   {
@@ -19,26 +19,52 @@ const stats = [
 
 export default function ProblemHook() {
   const sectionRef = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setVisible(true);
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.15 }
-    );
+    const init = async () => {
+      const { animate, onScroll } = await import('animejs');
 
-    const el = sectionRef.current;
-    if (el) observer.observe(el);
-    return () => {
-      if (el) observer.unobserve(el);
+      if (!sectionRef.current) return;
+
+      // Animate left column text — slide up
+      animate(sectionRef.current.querySelector('.anim-text'), {
+        opacity: [0, 1],
+        translateY: [30, 0],
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: onScroll({
+          target: sectionRef.current,
+          enter: 'bottom -= 100px',
+        }),
+      });
+
+      // Animate stat cards — slide up with stagger
+      animate(sectionRef.current.querySelectorAll('.anim-card'), {
+        opacity: [0, 1],
+        translateY: [40, 0],
+        delay: (_, i) => i * 100,
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: onScroll({
+          target: sectionRef.current,
+          enter: 'bottom -= 100px',
+        }),
+      });
+
+      // Animate "Momento flips this" text — fade in
+      animate(sectionRef.current.querySelector('.anim-flip'), {
+        opacity: [0, 1],
+        translateY: [20, 0],
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: onScroll({
+          target: sectionRef.current,
+          enter: 'bottom -= 100px',
+        }),
+      });
     };
+
+    init();
   }, []);
 
   return (
@@ -54,11 +80,7 @@ export default function ProblemHook() {
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
           {/* Left column — bold statement */}
-          <div
-            className={`transition-all duration-700 ease-out ${
-              visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'
-            }`}
-          >
+          <div className="anim-text" style={{ opacity: 0, transform: 'translateY(30px)' }}>
             <h2 className="text-4xl md:text-5xl font-bold text-white leading-tight">
               Creators earn pennies from platforms.
             </h2>
@@ -69,13 +91,11 @@ export default function ProblemHook() {
 
           {/* Right column — stat cards */}
           <div className="flex flex-col gap-4">
-            {stats.map((stat, i) => (
+            {stats.map((stat) => (
               <div
                 key={stat.number}
-                className={`backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6
-                           transition-all duration-700 ease-out
-                           ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}
-                style={{ transitionDelay: `${200 + i * 100}ms` }}
+                className="anim-card backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-6"
+                style={{ opacity: 0, transform: 'translateY(40px)' }}
               >
                 <p className="text-4xl font-black text-momento-primary">{stat.number}</p>
                 <p className="text-momento-text-secondary text-sm mt-1">{stat.description}</p>
@@ -86,10 +106,8 @@ export default function ProblemHook() {
 
         {/* Transition text */}
         <p
-          className={`text-center mt-12 text-momento-primary font-semibold text-lg
-                     transition-all duration-700 ease-out
-                     ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
-          style={{ transitionDelay: '600ms' }}
+          className="anim-flip text-center mt-12 text-momento-primary font-semibold text-lg"
+          style={{ opacity: 0, transform: 'translateY(20px)' }}
         >
           Momento flips this.
         </p>

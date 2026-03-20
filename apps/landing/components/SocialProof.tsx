@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 /* ─── Animated Counter Hook ──────────────────────────────────── */
 function useCountUp(target: number, duration: number, start: boolean): number {
@@ -94,8 +94,8 @@ export default function SocialProof() {
   const statsRef = useRef<HTMLDivElement>(null);
   const testimonialsRef = useRef<HTMLDivElement>(null);
   const [statsVisible, setStatsVisible] = useState(false);
-  const [testimonialsVisible, setTestimonialsVisible] = useState(false);
 
+  // IntersectionObserver ONLY for triggering the count-up animation
   useEffect(() => {
     const observerStats = new IntersectionObserver(
       ([entry]) => {
@@ -107,26 +107,62 @@ export default function SocialProof() {
       { threshold: 0.2 }
     );
 
-    const observerTestimonials = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setTestimonialsVisible(true);
-          observerTestimonials.unobserve(entry.target);
-        }
-      },
-      { threshold: 0.15 }
-    );
-
     const statsEl = statsRef.current;
-    const testimonialsEl = testimonialsRef.current;
-
     if (statsEl) observerStats.observe(statsEl);
-    if (testimonialsEl) observerTestimonials.observe(testimonialsEl);
 
     return () => {
       if (statsEl) observerStats.unobserve(statsEl);
-      if (testimonialsEl) observerTestimonials.unobserve(testimonialsEl);
     };
+  }, []);
+
+  // anime.js onScroll for visual slide-in animations
+  useEffect(() => {
+    const init = async () => {
+      const { animate, onScroll } = await import('animejs');
+
+      // Stats container slide up
+      if (statsRef.current) {
+        animate(statsRef.current, {
+          opacity: [0, 1],
+          translateY: [40, 0],
+          duration: 1000,
+          easing: 'easeOutCubic',
+          autoplay: onScroll({
+            target: statsRef.current,
+            enter: 'bottom -= 100px',
+          }),
+        });
+      }
+
+      if (testimonialsRef.current) {
+        // Testimonial heading slide up
+        animate(testimonialsRef.current.querySelector('.anim-heading'), {
+          opacity: [0, 1],
+          translateY: [30, 0],
+          duration: 800,
+          easing: 'easeOutCubic',
+          autoplay: onScroll({
+            target: testimonialsRef.current,
+            enter: 'bottom -= 100px',
+          }),
+        });
+
+        // Testimonial cards slide up with stagger
+        animate(testimonialsRef.current.querySelectorAll('.anim-card'), {
+          opacity: [0, 1],
+          translateY: [40, 0],
+          delay: (_: unknown, i: number) => i * 150,
+          duration: 800,
+          easing: 'easeOutCubic',
+          autoplay: onScroll({
+            target: testimonialsRef.current,
+            enter: 'bottom -= 100px',
+          }),
+        });
+      }
+    };
+
+    init();
   }, []);
 
   return (
@@ -142,9 +178,8 @@ export default function SocialProof() {
         {/* ─── Stats Counter ─────────────────────────────────── */}
         <div
           ref={statsRef}
-          className={`bg-white/[0.02] border border-white/[0.06] rounded-2xl p-8 md:p-12 backdrop-blur-sm transition-all duration-1000 ease-out ${
-            statsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-          }`}
+          className="bg-white/[0.02] border border-white/[0.06] rounded-2xl p-8 md:p-12 backdrop-blur-sm"
+          style={{ opacity: 0, transform: 'translateY(40px)' }}
         >
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             {stats.map((stat, i) => (
@@ -156,9 +191,8 @@ export default function SocialProof() {
         {/* ─── Testimonials ──────────────────────────────────── */}
         <div ref={testimonialsRef} className="mt-20">
           <h3
-            className={`text-2xl font-bold text-center mb-10 transition-all duration-700 ease-out ${
-              testimonialsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'
-            }`}
+            className="anim-heading text-2xl font-bold text-center mb-10"
+            style={{ opacity: 0, transform: 'translateY(30px)' }}
           >
             Backed by believers
           </h3>
@@ -167,10 +201,8 @@ export default function SocialProof() {
             {testimonials.map((t, i) => (
               <div
                 key={i}
-                className={`bg-white/[0.02] border border-white/[0.06] rounded-2xl p-6 transition-all duration-700 ease-out ${
-                  testimonialsVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'
-                }`}
-                style={{ transitionDelay: `${(i + 1) * 200}ms` }}
+                className="anim-card bg-white/[0.02] border border-white/[0.06] rounded-2xl p-6"
+                style={{ opacity: 0, transform: 'translateY(40px)' }}
               >
                 <QuoteIcon />
                 <p className="text-sm italic text-white/80 mt-3 leading-relaxed">

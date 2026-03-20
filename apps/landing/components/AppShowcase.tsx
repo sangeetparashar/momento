@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 /* ─── Checkmark Icon ─────────────────────────────────────────── */
 function CheckIcon() {
@@ -199,40 +199,40 @@ const blocks = [
 /* ─── Showcase Block ─────────────────────────────────────────── */
 function ShowcaseBlock({
   block,
-  index,
 }: {
   block: (typeof blocks)[number];
-  index: number;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
+  const blockRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-          observer.unobserve(entry.target);
-        }
-      },
-      { threshold: 0.15 }
-    );
-    const el = ref.current;
-    if (el) observer.observe(el);
-    return () => {
-      if (el) observer.unobserve(el);
-    };
-  }, []);
+    const init = async () => {
+      const { animate, onScroll } = await import('animejs');
 
-  const slideClass = block.imageRight ? 'translate-x-[-40px]' : 'translate-x-[40px]';
+      if (!blockRef.current) return;
+
+      const fromX = block.imageRight ? -40 : 40;
+
+      animate(blockRef.current, {
+        opacity: [0, 1],
+        translateX: [fromX, 0],
+        duration: 1000,
+        easing: 'easeOutCubic',
+        autoplay: onScroll({
+          target: blockRef.current,
+          enter: 'bottom -= 100px',
+        }),
+      });
+    };
+
+    init();
+  }, [block.imageRight]);
+
+  const initialTranslateX = block.imageRight ? '-40px' : '40px';
 
   return (
     <div
-      ref={ref}
-      className={`transition-all duration-1000 ease-out ${
-        visible ? 'opacity-100 translate-x-0' : `opacity-0 ${slideClass}`
-      }`}
-      style={{ transitionDelay: `${index * 150}ms` }}
+      ref={blockRef}
+      style={{ opacity: 0, transform: `translateX(${initialTranslateX})` }}
     >
       <div className="bg-white/[0.02] border border-white/[0.06] rounded-3xl p-8 md:p-12">
         <div
@@ -264,24 +264,81 @@ function ShowcaseBlock({
 
 /* ─── Main Export ─────────────────────────────────────────────── */
 export default function AppShowcase() {
+  const sectionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const init = async () => {
+      const { animate, onScroll } = await import('animejs');
+
+      if (!sectionRef.current) return;
+
+      // Animate section header elements
+      animate(sectionRef.current.querySelector('.anim-heading-label'), {
+        opacity: [0, 1],
+        translateY: [30, 0],
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: onScroll({
+          target: sectionRef.current,
+          enter: 'bottom -= 100px',
+        }),
+      });
+
+      animate(sectionRef.current.querySelector('.anim-heading'), {
+        opacity: [0, 1],
+        translateY: [30, 0],
+        duration: 800,
+        delay: 100,
+        easing: 'easeOutCubic',
+        autoplay: onScroll({
+          target: sectionRef.current,
+          enter: 'bottom -= 100px',
+        }),
+      });
+
+      animate(sectionRef.current.querySelector('.anim-heading-sub'), {
+        opacity: [0, 1],
+        translateY: [30, 0],
+        duration: 800,
+        delay: 200,
+        easing: 'easeOutCubic',
+        autoplay: onScroll({
+          target: sectionRef.current,
+          enter: 'bottom -= 100px',
+        }),
+      });
+    };
+
+    init();
+  }, []);
+
   return (
-    <section id="features" className="py-24 px-6 overflow-hidden">
+    <section id="features" className="py-24 px-6 overflow-hidden" ref={sectionRef}>
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <p className="text-momento-primary text-xs font-semibold uppercase tracking-[3px] mb-3 text-center">
+        <p
+          className="anim-heading-label text-momento-primary text-xs font-semibold uppercase tracking-[3px] mb-3 text-center"
+          style={{ opacity: 0, transform: 'translateY(30px)' }}
+        >
           THE APP
         </p>
-        <h2 className="text-4xl md:text-5xl font-bold text-center mb-4 tracking-tight">
+        <h2
+          className="anim-heading text-4xl md:text-5xl font-bold text-center mb-4 tracking-tight"
+          style={{ opacity: 0, transform: 'translateY(30px)' }}
+        >
           Built for the culture
         </h2>
-        <p className="text-momento-text-secondary text-center max-w-2xl mx-auto mb-16">
+        <p
+          className="anim-heading-sub text-momento-text-secondary text-center max-w-2xl mx-auto mb-16"
+          style={{ opacity: 0, transform: 'translateY(30px)' }}
+        >
           Discover creators, trade tokens, and build your portfolio — all from your phone.
         </p>
 
         {/* Feature blocks */}
         <div className="space-y-12">
           {blocks.map((block, i) => (
-            <ShowcaseBlock key={i} block={block} index={i} />
+            <ShowcaseBlock key={i} block={block} />
           ))}
         </div>
       </div>

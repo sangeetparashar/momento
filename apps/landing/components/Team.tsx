@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 
 const team = [
   {
@@ -28,26 +28,60 @@ const team = [
 
 export default function Team() {
   const sectionRef = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            setVisible(true);
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.2 }
-    );
+    const init = async () => {
+      const { animate, onScroll } = await import('animejs');
 
-    const el = sectionRef.current;
-    if (el) observer.observe(el);
-    return () => {
-      if (el) observer.unobserve(el);
+      if (!sectionRef.current) return;
+
+      const scrollTrigger = onScroll({
+        target: sectionRef.current,
+        enter: 'bottom -= 100px',
+      });
+
+      // Section label
+      animate(sectionRef.current.querySelector('.anim-label'), {
+        opacity: [0, 1],
+        translateY: [30, 0],
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: scrollTrigger,
+      });
+
+      // Heading
+      animate(sectionRef.current.querySelector('.anim-heading'), {
+        opacity: [0, 1],
+        translateY: [30, 0],
+        delay: 100,
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: scrollTrigger,
+      });
+
+      // Subtitle
+      animate(sectionRef.current.querySelector('.anim-subtitle'), {
+        opacity: [0, 1],
+        translateY: [30, 0],
+        delay: 200,
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: scrollTrigger,
+      });
+
+      // Team cards with stagger + scale
+      animate(sectionRef.current.querySelectorAll('.anim-card'), {
+        opacity: [0, 1],
+        translateY: [40, 0],
+        scale: [0.95, 1],
+        delay: (_, i) => 300 + i * 100,
+        duration: 800,
+        easing: 'easeOutCubic',
+        autoplay: scrollTrigger,
+      });
     };
+
+    init();
   }, []);
 
   return (
@@ -55,18 +89,21 @@ export default function Team() {
       <div className="max-w-5xl mx-auto">
         {/* Section header */}
         <div className="text-center mb-16">
-          <p className="text-momento-primary text-xs font-semibold uppercase tracking-[3px] mb-4">
+          <p
+            className="anim-label text-momento-primary text-xs font-semibold uppercase tracking-[3px] mb-4"
+            style={{ opacity: 0, transform: 'translateY(30px)' }}
+          >
             THE TEAM
           </p>
           <h2
-            className={`text-4xl md:text-5xl font-bold text-center text-white transition-all duration-700 ease-out
-                        ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
+            className="anim-heading text-4xl md:text-5xl font-bold text-center text-white"
+            style={{ opacity: 0, transform: 'translateY(30px)' }}
           >
             Built by operators
           </h2>
           <p
-            className={`text-momento-text-secondary text-center text-lg mt-4 transition-all duration-700 ease-out delay-100
-                        ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+            className="anim-subtitle text-momento-text-secondary text-center text-lg mt-4"
+            style={{ opacity: 0, transform: 'translateY(30px)' }}
           >
             From the creator economy, fintech, and Web3.
           </p>
@@ -74,14 +111,12 @@ export default function Team() {
 
         {/* Team cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {team.map((member, i) => (
+          {team.map((member) => (
             <div
               key={member.name}
-              className={`backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-8 text-center
-                         hover:border-white/[0.16] hover:-translate-y-0.5
-                         transition-all duration-700 ease-out
-                         ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
-              style={{ transitionDelay: `${(i + 1) * 100}ms` }}
+              className="anim-card backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-8 text-center
+                         hover:border-white/[0.16] hover:-translate-y-0.5 transition-all duration-300"
+              style={{ opacity: 0, transform: 'translateY(40px) scale(0.95)' }}
             >
               {/* Avatar */}
               <div
