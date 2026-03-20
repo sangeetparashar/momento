@@ -58,6 +58,21 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       filePath: browserPath,
     };
   }
+  // Resolve @privy-io/expo sub-path exports (e.g. @privy-io/expo/ui)
+  // Metro's package exports resolution breaks when a custom resolveRequest is set,
+  // so we resolve these sub-paths explicitly.
+  const privyExpoMatch = moduleName.match(/^@privy-io\/expo\/(.+)$/);
+  if (privyExpoMatch) {
+    const subpath = privyExpoMatch[1];
+    const privyExpoDist = path.resolve(
+      monorepoRoot,
+      'node_modules/@privy-io/expo/dist/esm',
+    );
+    return {
+      type: 'sourceFile',
+      filePath: path.resolve(privyExpoDist, `${subpath}.js`),
+    };
+  }
   // Default resolution
   if (originalResolveRequest) {
     return originalResolveRequest(context, moduleName, platform);

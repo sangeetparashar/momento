@@ -7,17 +7,19 @@ import {
   RefreshControl,
   useWindowDimensions,
   Animated,
+  TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Text } from '@/components/primitives';
+import { Text, Avatar } from '@/components/primitives';
 import { ExploreSkeleton } from '@/components/features';
-import { useFeed, useNearbyCreators } from '@/hooks';
+import { useFeed, useNearbyCreators, useSearch } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
-import { formatDistance } from '@/utils/formatters';
+import { formatDistance, formatNumber } from '@/utils/formatters';
 import type { PostWithCreator, PublicCreator } from '@momento/shared';
 
 type ExploreTab = 'CREATORS' | 'POSTS';
@@ -143,14 +145,93 @@ function AnimatedCard({
   );
 }
 
+// Search result row for creators
+function CreatorSearchRow({
+  creator,
+  onPress,
+}: {
+  creator: PublicCreator;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.searchRow}>
+      <Avatar
+        uri={creator.avatarUrl}
+        name={creator.displayName || creator.username}
+        size="md"
+      />
+      <View style={styles.searchRowInfo}>
+        <Text style={styles.searchRowName} numberOfLines={1}>
+          {creator.displayName || creator.username}
+        </Text>
+        <View style={styles.searchRowMeta}>
+          {creator.tokenSymbol && (
+            <Text style={styles.searchRowToken}>${creator.tokenSymbol}</Text>
+          )}
+          <Text style={styles.searchRowStat}>
+            {formatNumber(creator.followerCount)} followers
+          </Text>
+          {creator.distanceMeters != null && (
+            <Text style={styles.searchRowStat}>
+              {formatDistance(creator.distanceMeters)}
+            </Text>
+          )}
+        </View>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={COLORS.textTertiary} />
+    </Pressable>
+  );
+}
+
+// Search result row for posts
+function PostSearchRow({
+  post,
+  onPress,
+}: {
+  post: PostWithCreator;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={styles.searchRow}>
+      {post.mediaUrl ? (
+        <Image
+          source={{ uri: post.mediaUrl }}
+          style={styles.searchThumb}
+          contentFit="cover"
+          transition={200}
+        />
+      ) : (
+        <View style={[styles.searchThumb, styles.searchThumbPlaceholder]}>
+          <Ionicons name="document-text-outline" size={18} color={COLORS.textTertiary} />
+        </View>
+      )}
+      <View style={styles.searchRowInfo}>
+        <Text style={styles.searchRowName} numberOfLines={1}>
+          {post.creator?.displayName || post.creator?.username || 'Creator'}
+        </Text>
+        <Text style={styles.searchRowCaption} numberOfLines={2}>
+          {post.caption || post.content || 'No caption'}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={COLORS.textTertiary} />
+    </Pressable>
+  );
+}
+
 export default function ExploreScreen() {
   const { width: SCREEN_WIDTH } = useWindowDimensions();
   const ITEM_WIDTH = useMemo(() => (SCREEN_WIDTH - SPACING.md * 2 - COLUMN_GAP) / 2, [SCREEN_WIDTH]);
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<ExploreTab>('CREATORS');
+  const [searchText, setSearchText] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
+  const inputRef = useRef<TextInput>(null);
   const feedQuery = useFeed();
   const { creators: nearbyCreators, isLoading: creatorsLoading, refetch: refetchCreators } = useNearbyCreators();
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const searchType = activeTab === 'CREATORS' ? 'creators' : 'posts';
+  const { results, isSearching, isActive: isSearchActive } = useSearch(searchText, searchText.length >= 2 ? searchType : 'all');
 
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
@@ -211,7 +292,6 @@ export default function ExploreScreen() {
     const right: GridItem[] = [];
     let leftHeight = 0;
     let rightHeight = 0;
-    // Distribute by shortest column for better visual balance
     gridItems.forEach((item) => {
       if (leftHeight <= rightHeight) {
         left.push(item);
@@ -235,11 +315,45 @@ export default function ExploreScreen() {
     [router]
   );
 
+  const handleClearSearch = useCallback(() => {
+    setSearchText('');
+    inputRef.current?.blur();
+  }, []);
+
+  const showSearchResults = isSearchActive && searchText.length >= 2;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Explore</Text>
+      </View>
+
+      {/* Search Bar */}
+      <View style={styles.searchContainer}>
+        <View style={styles.searchBar}>
+          <Ionicons name="search" size={18} color={COLORS.textTertiary} />
+          <TextInput
+            ref={inputRef}
+            style={styles.searchInput}
+            value={searchText}
+            onChangeText={setSearchText}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
+            placeholder="Search creators, posts..."
+            placeholderTextColor={COLORS.textTertiary}
+            returnKeyType="search"
+            autoCorrect={false}
+          />
+          {searchText.length > 0 && (
+            <Pressable onPress={handleClearSearch} hitSlop={8}>
+              <Ionicons name="close-circle" size={18} color={COLORS.textTertiary} />
+            </Pressable>
+          )}
+          {isSearching && (
+            <ActivityIndicator size="small" color={COLORS.primary} style={{ marginLeft: 4 }} />
+          )}
+        </View>
       </View>
 
       {/* Segmented Toggle */}
@@ -278,57 +392,96 @@ export default function ExploreScreen() {
         </Pressable>
       </View>
 
-      {/* Masonry Grid */}
-      {((activeTab === 'CREATORS' && creatorsLoading) || (activeTab === 'POSTS' && feedQuery.isLoading)) ? (
-        <ExploreSkeleton />
-      ) : (
+      {/* Search Results */}
+      {showSearchResults ? (
         <FlatList
-          data={gridItems.length > 0 ? [{ key: 'masonry' }] : []}
-          renderItem={() => (
-            <View style={styles.masonryContainer}>
-              <View style={styles.column}>
-                {leftColumn.map((item, index) => (
-                  <AnimatedCard
-                    key={item.id}
-                    item={item}
-                    index={index * 2}
-                    itemWidth={ITEM_WIDTH}
-                    onPress={() => handleItemPress(item)}
-                  />
-                ))}
-              </View>
-              <View style={styles.column}>
-                {rightColumn.map((item, index) => (
-                  <AnimatedCard
-                    key={item.id}
-                    item={item}
-                    index={index * 2 + 1}
-                    itemWidth={ITEM_WIDTH}
-                    onPress={() => handleItemPress(item)}
-                  />
-                ))}
-              </View>
-            </View>
-          )}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.listContent}
-          refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={handleRefresh}
-              tintColor={COLORS.textTertiary}
-            />
+          data={
+            activeTab === 'CREATORS'
+              ? results.creators.map((c) => ({ ...c, _type: 'creator' as const }))
+              : results.posts.map((p) => ({ ...p, _type: 'post' as const }))
           }
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) =>
+            item._type === 'creator' ? (
+              <CreatorSearchRow
+                creator={item as any}
+                onPress={() => router.push(`/creator/${item.id}`)}
+              />
+            ) : (
+              <PostSearchRow
+                post={item as any}
+                onPress={() => router.push(`/post/${item.id}`)}
+              />
+            )
+          }
+          contentContainerStyle={styles.searchListContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>
-                {activeTab === 'CREATORS'
-                  ? 'No creators nearby'
-                  : 'Nothing to explore yet'}
-              </Text>
-            </View>
+            !isSearching ? (
+              <View style={styles.emptyState}>
+                <Ionicons name="search-outline" size={40} color={COLORS.textTertiary} />
+                <Text style={styles.emptyText}>
+                  No {activeTab === 'CREATORS' ? 'creators' : 'posts'} found for "{searchText}"
+                </Text>
+              </View>
+            ) : null
           }
         />
+      ) : (
+        /* Masonry Grid (default browse mode) */
+        ((activeTab === 'CREATORS' && creatorsLoading) || (activeTab === 'POSTS' && feedQuery.isLoading)) ? (
+          <ExploreSkeleton />
+        ) : (
+          <FlatList
+            data={gridItems.length > 0 ? [{ key: 'masonry' }] : []}
+            renderItem={() => (
+              <View style={styles.masonryContainer}>
+                <View style={styles.column}>
+                  {leftColumn.map((item, index) => (
+                    <AnimatedCard
+                      key={item.id}
+                      item={item}
+                      index={index * 2}
+                      itemWidth={ITEM_WIDTH}
+                      onPress={() => handleItemPress(item)}
+                    />
+                  ))}
+                </View>
+                <View style={styles.column}>
+                  {rightColumn.map((item, index) => (
+                    <AnimatedCard
+                      key={item.id}
+                      item={item}
+                      index={index * 2 + 1}
+                      itemWidth={ITEM_WIDTH}
+                      onPress={() => handleItemPress(item)}
+                    />
+                  ))}
+                </View>
+              </View>
+            )}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.listContent}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor={COLORS.textTertiary}
+              />
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>
+                  {activeTab === 'CREATORS'
+                    ? 'No creators nearby'
+                    : 'Nothing to explore yet'}
+                </Text>
+              </View>
+            }
+          />
+        )
       )}
     </SafeAreaView>
   );
@@ -341,13 +494,89 @@ const styles = StyleSheet.create({
   },
   header: {
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xs,
   },
   headerTitle: {
     ...TYPOGRAPHY.h2,
     color: COLORS.textPrimary,
     fontWeight: '800',
   },
+  // Search
+  searchContainer: {
+    paddingHorizontal: SPACING.md,
+    paddingBottom: SPACING.sm,
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: RADII.full,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    gap: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  searchInput: {
+    flex: 1,
+    ...TYPOGRAPHY.body,
+    color: COLORS.textPrimary,
+    padding: 0,
+    fontSize: 15,
+  },
+  // Search results
+  searchListContent: {
+    paddingHorizontal: SPACING.md,
+  },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.sm + 2,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+    gap: SPACING.sm,
+  },
+  searchThumb: {
+    width: 44,
+    height: 44,
+    borderRadius: RADII.md,
+    backgroundColor: COLORS.surface,
+  },
+  searchThumbPlaceholder: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.backgroundTertiary,
+  },
+  searchRowInfo: {
+    flex: 1,
+  },
+  searchRowName: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textPrimary,
+    fontWeight: '700',
+  },
+  searchRowMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginTop: 2,
+  },
+  searchRowToken: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.primary,
+    fontWeight: '700',
+  },
+  searchRowStat: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textTertiary,
+  },
+  searchRowCaption: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  // Tabs
   toggleContainer: {
     flexDirection: 'row',
     marginHorizontal: SPACING.md,
@@ -374,6 +603,7 @@ const styles = StyleSheet.create({
   toggleTextActive: {
     color: COLORS.textPrimary,
   },
+  // Grid
   listContent: {
     paddingHorizontal: SPACING.md,
   },
@@ -415,7 +645,6 @@ const styles = StyleSheet.create({
   },
   creatorOverlay: {
     paddingTop: SPACING.xl,
-    backgroundImage: undefined,
   },
   gridLabel: {
     ...TYPOGRAPHY.bodySmall,
@@ -454,9 +683,12 @@ const styles = StyleSheet.create({
   emptyState: {
     paddingVertical: SPACING.xl * 3,
     alignItems: 'center',
+    gap: SPACING.md,
   },
   emptyText: {
     ...TYPOGRAPHY.body,
     color: COLORS.textTertiary,
+    textAlign: 'center',
+    paddingHorizontal: SPACING.xl,
   },
 });

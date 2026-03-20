@@ -12,3 +12,4 @@ export { useDeleteAccount } from './useDeleteAccount';
 export { useSavedPosts } from './useSavedPosts';
 export { usePublicProfile } from './usePublicProfile';
 export { usePriceHistory } from './usePriceHistory';
+export { useSearch } from './useSearch';

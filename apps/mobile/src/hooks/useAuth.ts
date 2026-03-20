@@ -23,18 +23,12 @@ function getPrivyHooks() {
   if (_privyHooks === null) {
     try {
       const privy = require('@privy-io/expo');
-      let useFundSolanaWallet: any = null;
-      try {
-        const privyUI = require('@privy-io/expo/ui');
-        useFundSolanaWallet = privyUI.useFundSolanaWallet;
-      } catch {
-        console.warn('[useAuth] @privy-io/expo/ui not available — funding disabled');
-      }
+      const privyUI = require('@privy-io/expo/ui');
       _privyHooks = {
         usePrivy: privy.usePrivy,
         useLoginWithOAuth: privy.useLoginWithOAuth,
         useEmbeddedSolanaWallet: privy.useEmbeddedSolanaWallet,
-        useFundSolanaWallet,
+        useFundSolanaWallet: privyUI.useFundSolanaWallet,
       };
     } catch {
       _privyHooks = false;
