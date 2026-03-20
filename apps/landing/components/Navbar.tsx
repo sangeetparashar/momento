@@ -40,15 +40,15 @@ export default function Navbar() {
         {/* Left: Logo + wordmark */}
         <div className="flex items-center gap-3">
           <svg
-            width="28"
-            height="28"
-            viewBox="0 0 32 32"
+            width="32"
+            height="32"
+            viewBox="0 0 40 40"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
             className="transition-transform duration-300 hover:scale-110"
           >
-            <circle cx="16" cy="16" r="14" stroke="#00FF88" strokeWidth="2.5" />
-            <circle cx="16" cy="16" r="6" fill="#00FF88" />
+            <path d="M4 32V10L13 20L20 12L27 20L36 10V32" stroke="#00FF88" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+            <circle cx="36" cy="10" r="2.5" fill="#00FF88"/>
           </svg>
           <span className="text-white text-sm font-medium tracking-[0.3em] uppercase">
             MOMENTO

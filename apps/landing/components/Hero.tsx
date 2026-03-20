@@ -1,8 +1,16 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import WaitlistForm from './WaitlistForm';
 
 export default function Hero() {
+  const [revealed, setRevealed] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setRevealed(true), 400);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
       {/* Ambient gradient orbs */}
@@ -15,10 +23,28 @@ export default function Hero() {
 
       {/* Content */}
       <div className="relative z-10 text-center px-6 max-w-4xl mx-auto">
+        {/* Logo mark */}
+        <div
+          className="flex justify-center mb-6 opacity-0 animate-slide-up"
+          style={{ animationDelay: '0ms', animationFillMode: 'forwards' }}
+        >
+          <svg
+            width="56"
+            height="56"
+            viewBox="0 0 40 40"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            className="animate-float-slow"
+          >
+            <path d="M4 32V10L13 20L20 12L27 20L36 10V32" stroke="#00FF88" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+            <circle cx="36" cy="10" r="2.5" fill="#00FF88"/>
+          </svg>
+        </div>
+
         {/* Label */}
         <div
           className="flex items-center justify-center gap-2 mb-8 opacity-0 animate-slide-up"
-          style={{ animationDelay: '0ms', animationFillMode: 'forwards' }}
+          style={{ animationDelay: '100ms', animationFillMode: 'forwards' }}
         >
           <span className="w-1.5 h-1.5 rounded-full bg-momento-primary inline-block" />
           <span className="text-momento-primary text-xs font-medium tracking-[0.25em] uppercase">
@@ -26,14 +52,45 @@ export default function Hero() {
           </span>
         </div>
 
-        {/* Main headline */}
+        {/* Main headline with word-by-word reveal + sweeping highlight */}
         <h1
           className="text-7xl md:text-8xl lg:text-9xl font-black text-white leading-[0.95] tracking-tight opacity-0 animate-slide-up"
-          style={{ animationDelay: '150ms', animationFillMode: 'forwards' }}
+          style={{ animationDelay: '250ms', animationFillMode: 'forwards' }}
         >
-          Own the{' '}
-          <span className="bg-gradient-to-r from-[#00FF88] via-[#00DDAA] to-[#00FF88] bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient-shift">
-            Culture
+          <span className="inline-block overflow-hidden">
+            {['Own', 'the'].map((word, i) => (
+              <span
+                key={word}
+                className="inline-block transition-all duration-700 ease-out"
+                style={{
+                  transform: revealed ? 'translateY(0)' : 'translateY(100%)',
+                  opacity: revealed ? 1 : 0,
+                  transitionDelay: `${i * 120 + 400}ms`,
+                }}
+              >
+                {word}{' '}
+              </span>
+            ))}
+          </span>
+          <span className="inline-block relative">
+            <span
+              className="inline-block bg-gradient-to-r from-[#00FF88] via-[#00DDAA] to-[#00FF88] bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient-shift transition-all duration-700 ease-out"
+              style={{
+                transform: revealed ? 'translateY(0) scale(1)' : 'translateY(100%) scale(0.9)',
+                opacity: revealed ? 1 : 0,
+                transitionDelay: '640ms',
+              }}
+            >
+              Culture
+            </span>
+            {/* Sweeping light effect across "Culture" */}
+            <span
+              className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent bg-[length:50%_100%] pointer-events-none"
+              style={{
+                animation: revealed ? 'sweep 2s ease-in-out 1.2s forwards' : 'none',
+                opacity: 0,
+              }}
+            />
           </span>
         </h1>
 
