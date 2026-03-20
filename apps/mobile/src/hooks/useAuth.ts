@@ -16,19 +16,16 @@ let _privyHooks: {
   usePrivy: any;
   useLoginWithOAuth: any;
   useEmbeddedSolanaWallet: any;
-  useFundSolanaWallet: any;
 } | false | null = null;
 
 function getPrivyHooks() {
   if (_privyHooks === null) {
     try {
       const privy = require('@privy-io/expo');
-      const privyUI = require('@privy-io/expo/ui');
       _privyHooks = {
         usePrivy: privy.usePrivy,
         useLoginWithOAuth: privy.useLoginWithOAuth,
         useEmbeddedSolanaWallet: privy.useEmbeddedSolanaWallet,
-        useFundSolanaWallet: privyUI.useFundSolanaWallet,
       };
     } catch {
       _privyHooks = false;
@@ -125,39 +122,22 @@ export function useAuth() {
     }
   }, [solanaWallet.status]);
 
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const fundHook = hooks.useFundSolanaWallet ? hooks.useFundSolanaWallet() : null;
-
   const walletAddress =
     solanaWallet.status === 'connected' && solanaWallet.wallets?.length > 0
       ? solanaWallet.wallets[0].address
       : null;
-
-  const fundWallet = async (asset: 'native-currency' | 'USDC' = 'native-currency') => {
-    if (!fundHook?.fundWallet || !walletAddress) {
-      console.warn('[useAuth] Funding not available');
-      return;
-    }
-    await fundHook.fundWallet({
-      address: walletAddress,
-      asset,
-      cluster: { name: 'mainnet-beta' },
-      defaultPaymentMethod: 'card' as any,
-    });
-  };
 
   return {
     isReady: privy.isReady,
     user: privy.user,
     login: async () => {
       await oauthLogin({ provider: 'google' });
-      // Wallet creation happens via the useEffect above once the user state updates
     },
     logout: privy.logout,
     getAccessToken: async () => null, // handled by AuthBridge
     walletAddress,
     walletStatus: solanaWallet.status,
-    fundWallet,
-    canFund: !!fundHook?.fundWallet,
+    fundWallet: async () => {},
+    canFund: false,
   };
 }

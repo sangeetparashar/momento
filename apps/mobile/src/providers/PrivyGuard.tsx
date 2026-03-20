@@ -49,7 +49,6 @@ export function PrivyGuard({ children }: { children: React.ReactNode }) {
 function PrivyWithAuth({ children }: { children: React.ReactNode }) {
   console.log('[PrivyWithAuth] Rendering...');
   const { PrivyProvider } = require('@privy-io/expo');
-  const { PrivyElements } = require('@privy-io/expo/ui');
   const { AuthBridge } = require('@/providers/AuthBridge');
   console.log('[PrivyWithAuth] PrivyProvider:', typeof PrivyProvider, 'AuthBridge:', typeof AuthBridge);
 
@@ -64,12 +63,6 @@ function PrivyWithAuth({ children }: { children: React.ReactNode }) {
           },
         }}
       >
-        <PrivyElements config={{
-          appearance: {
-            colorScheme: 'dark',
-            accentColor: '#00FF88',
-          },
-        }} />
         <AuthBridge>
           {children}
         </AuthBridge>
