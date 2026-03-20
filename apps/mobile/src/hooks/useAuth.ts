@@ -79,7 +79,9 @@ export function useAuth() {
     },
   });
 
-  // Auto-create wallet when user is logged in but wallet doesn't exist yet
+  // Auto-create wallet when user is logged in but wallet doesn't exist yet.
+  // Skip if already attempted (creatingRef) to avoid retrying on 'error' status
+  // caused by the wallet already existing (race between SDK connect and our effect).
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     if (
@@ -87,12 +89,22 @@ export function useAuth() {
       solanaWallet.status === 'not-created' &&
       !creatingRef.current
     ) {
-      console.log('[useAuth] User logged in but no Solana wallet — creating...');
-      creatingRef.current = true;
-      solanaWallet.create({ recoveryMethod: 'privy' }).catch((err: any) => {
-        console.error('[useAuth] Wallet create() rejected:', err?.message || err);
-        creatingRef.current = false;
-      });
+      // Small delay to let the SDK finish connecting an existing wallet
+      const timer = setTimeout(() => {
+        if (creatingRef.current) return;
+        console.log('[useAuth] User logged in but no Solana wallet — creating...');
+        creatingRef.current = true;
+        solanaWallet.create({ recoveryMethod: 'privy' }).catch((err: any) => {
+          // "already exists" is expected if SDK connected between our check and create call
+          if (err?.message?.includes('already exists')) {
+            console.log('[useAuth] Wallet already exists — skipping creation');
+          } else {
+            console.error('[useAuth] Wallet create() rejected:', err?.message || err);
+          }
+          creatingRef.current = false;
+        });
+      }, 1500);
+      return () => clearTimeout(timer);
     }
   }, [privy.user, solanaWallet.status]);
 

@@ -3,9 +3,12 @@ import { TokenHolding, WalletBalance } from '@momento/shared';
 function getHeliusConfig() {
   const apiKey = process.env.HELIUS_API_KEY;
   if (!apiKey) throw new Error('Missing HELIUS_API_KEY environment variable');
+  const network = process.env.SOLANA_NETWORK || 'devnet';
+  const rpcHost = network === 'mainnet-beta' ? 'mainnet.helius-rpc.com' : 'devnet.helius-rpc.com';
   return {
     apiKey,
-    rpcUrl: `https://mainnet.helius-rpc.com/?api-key=${apiKey}`,
+    network,
+    rpcUrl: `https://${rpcHost}/?api-key=${apiKey}`,
     apiUrl: 'https://api.helius.xyz/v0',
   };
 }
@@ -103,21 +106,13 @@ export async function fetchWalletBalance(walletAddress: string): Promise<WalletB
   // Fetch SOL price for total value calculation
   let solPriceUsd = 0;
   try {
-    const { apiKey, apiUrl } = getHeliusConfig();
+    // Use CoinGecko simple price API (free, no key needed)
     const priceResponse = await fetch(
-      `${apiUrl}/token-metadata?api-key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mintAccounts: ['So11111111111111111111111111111111111111112'],
-          includeOffChain: false,
-          disableCache: false,
-        }),
-      }
+      'https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd',
+      { headers: { 'Accept': 'application/json' } }
     );
     const priceData = await priceResponse.json();
-    solPriceUsd = priceData?.[0]?.legacyMetadata?.price || 0;
+    solPriceUsd = priceData?.solana?.usd || 0;
   } catch (error) {
     console.error('Failed to fetch SOL price:', error);
   }
