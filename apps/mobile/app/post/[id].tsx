@@ -18,7 +18,7 @@ import { Text, Avatar } from '@/components/primitives';
 import { LikeButton } from '@/components/features';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
-import { formatTimeAgo } from '@/utils/formatters';
+import { formatTimeAgo, formatDistance } from '@/utils/formatters';
 import { useQuery } from '@tanstack/react-query';
 import { useFeed, useComments } from '@/hooks';
 import { apiService } from '@/services/api';
@@ -153,6 +153,15 @@ export default function PostScreen() {
                 <Text style={styles.timeAgo}>
                   {formatTimeAgo(post.createdAt)}
                 </Text>
+                {post.distanceMeters != null && (
+                  <>
+                    <Text style={styles.dot}>  </Text>
+                    <Ionicons name="location-outline" size={12} color={COLORS.primary} />
+                    <Text style={styles.distanceText}>
+                      {formatDistance(post.distanceMeters)}
+                    </Text>
+                  </>
+                )}
               </View>
             </View>
           </Pressable>
@@ -332,6 +341,11 @@ const styles = StyleSheet.create({
   timeAgo: {
     ...TYPOGRAPHY.bodySmall,
     color: COLORS.textTertiary,
+  },
+  distanceText: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textSecondary,
+    marginLeft: 2,
   },
   postImage: {
     width: '100%',

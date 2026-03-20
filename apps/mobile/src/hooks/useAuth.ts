@@ -16,16 +16,25 @@ let _privyHooks: {
   usePrivy: any;
   useLoginWithOAuth: any;
   useEmbeddedSolanaWallet: any;
+  useFundSolanaWallet: any;
 } | false | null = null;
 
 function getPrivyHooks() {
   if (_privyHooks === null) {
     try {
       const privy = require('@privy-io/expo');
+      let useFundSolanaWallet: any = null;
+      try {
+        const privyUI = require('@privy-io/expo/ui');
+        useFundSolanaWallet = privyUI.useFundSolanaWallet;
+      } catch {
+        console.warn('[useAuth] @privy-io/expo/ui not available — funding disabled');
+      }
       _privyHooks = {
         usePrivy: privy.usePrivy,
         useLoginWithOAuth: privy.useLoginWithOAuth,
         useEmbeddedSolanaWallet: privy.useEmbeddedSolanaWallet,
+        useFundSolanaWallet,
       };
     } catch {
       _privyHooks = false;
@@ -44,6 +53,8 @@ const GUEST_AUTH = {
   getAccessToken: async () => null,
   walletAddress: null as string | null,
   walletStatus: 'disconnected' as string,
+  fundWallet: async () => {},
+  canFund: false,
 };
 
 /**
@@ -120,10 +131,26 @@ export function useAuth() {
     }
   }, [solanaWallet.status]);
 
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const fundHook = hooks.useFundSolanaWallet ? hooks.useFundSolanaWallet() : null;
+
   const walletAddress =
     solanaWallet.status === 'connected' && solanaWallet.wallets?.length > 0
       ? solanaWallet.wallets[0].address
       : null;
+
+  const fundWallet = async (asset: 'native-currency' | 'USDC' = 'native-currency') => {
+    if (!fundHook?.fundWallet || !walletAddress) {
+      console.warn('[useAuth] Funding not available');
+      return;
+    }
+    await fundHook.fundWallet({
+      address: walletAddress,
+      asset,
+      cluster: { name: 'mainnet-beta' },
+      defaultPaymentMethod: 'card' as any,
+    });
+  };
 
   return {
     isReady: privy.isReady,
@@ -136,5 +163,7 @@ export function useAuth() {
     getAccessToken: async () => null, // handled by AuthBridge
     walletAddress,
     walletStatus: solanaWallet.status,
+    fundWallet,
+    canFund: !!fundHook?.fundWallet,
   };
 }

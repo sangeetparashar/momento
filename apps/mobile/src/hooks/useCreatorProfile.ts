@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { PublicCreator, FollowResponse } from '@momento/shared';
 import { apiService } from '@/services/api';
 import { showErrorToast } from '@/utils/toast';
+import { useLocation } from '@/providers/LocationProvider';
 
 interface CreatorProfileResponse extends PublicCreator {
   isFollowing: boolean;
@@ -13,11 +14,18 @@ interface CreatorProfileResponse extends PublicCreator {
  */
 export function useCreatorProfile(creatorId: string | undefined) {
   const queryClient = useQueryClient();
+  const { location } = useLocation();
 
   const profileQuery = useQuery<CreatorProfileResponse>({
     queryKey: ['creator', creatorId],
-    queryFn: () =>
-      apiService.get<CreatorProfileResponse>(`/creators/${creatorId}`),
+    queryFn: () => {
+      const params: Record<string, any> = {};
+      if (location) {
+        params.lat = location.latitude;
+        params.lng = location.longitude;
+      }
+      return apiService.get<CreatorProfileResponse>(`/creators/${creatorId}`, params);
+    },
     enabled: !!creatorId,
   });
 

@@ -36,7 +36,7 @@ export default function WalletScreen() {
   const walletQuery = useWalletBalance();
   const balance = walletQuery.data;
   const { user: profile } = useUserProfile();
-  const { walletAddress: clientWalletAddress } = useAuth();
+  const { walletAddress: clientWalletAddress, fundWallet, canFund } = useAuth();
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -59,6 +59,20 @@ export default function WalletScreen() {
   const handleSwapPress = useCallback(() => {
     setShowSwapModal(true);
   }, []);
+
+  const handleBuyCrypto = useCallback(async () => {
+    if (canFund) {
+      try {
+        await fundWallet('native-currency');
+      } catch (err: any) {
+        if (!err?.message?.includes('cancelled')) {
+          console.error('[Wallet] Fund error:', err?.message);
+        }
+      }
+    } else {
+      setShowComingSoon(true);
+    }
+  }, [canFund, fundWallet]);
 
   const handleCopyAddress = useCallback(async () => {
     if (!walletAddress) return;
@@ -256,12 +270,18 @@ export default function WalletScreen() {
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
-      {/* Fixed SWAP Button */}
+      {/* Fixed Bottom Buttons */}
       <View style={styles.swapButtonContainer}>
-        <Pressable onPress={handleSwapPress} style={styles.swapButton}>
-          <Ionicons name="swap-horizontal" size={20} color={COLORS.background} />
-          <Text style={styles.swapButtonText}>SWAP</Text>
-        </Pressable>
+        <View style={styles.bottomButtons}>
+          <Pressable onPress={handleBuyCrypto} style={styles.buyButton}>
+            <Ionicons name="card-outline" size={20} color={COLORS.background} />
+            <Text style={styles.buyButtonText}>BUY CRYPTO</Text>
+          </Pressable>
+          <Pressable onPress={handleSwapPress} style={styles.swapButton}>
+            <Ionicons name="swap-horizontal" size={20} color={COLORS.background} />
+            <Text style={styles.swapButtonText}>SWAP</Text>
+          </Pressable>
+        </View>
       </View>
 
       {/* Modals */}
@@ -470,8 +490,30 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: COLORS.border,
   },
-  swapButton: {
+  bottomButtons: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  buyButton: {
+    flex: 1,
     backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.md,
+    borderRadius: RADII.full,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+  },
+  buyButtonText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.background,
+    fontWeight: '800',
+    letterSpacing: 1,
+    fontSize: 16,
+  },
+  swapButton: {
+    flex: 1,
+    backgroundColor: COLORS.backgroundTertiary,
     paddingVertical: SPACING.md,
     borderRadius: RADII.full,
     alignItems: 'center',
@@ -481,9 +523,9 @@ const styles = StyleSheet.create({
   },
   swapButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.background,
+    color: COLORS.textPrimary,
     fontWeight: '800',
     letterSpacing: 1,
-    fontSize: 18,
+    fontSize: 16,
   },
 });

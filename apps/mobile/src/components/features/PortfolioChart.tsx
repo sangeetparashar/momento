@@ -1,19 +1,24 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { View, StyleSheet, Pressable, useWindowDimensions, ActivityIndicator } from 'react-native';
-import Svg, { Path, Defs, LinearGradient, Stop, Circle, Line, Text as SvgText } from 'react-native-svg';
+import Svg, { Path, Defs, LinearGradient, Stop, Circle, Text as SvgText } from 'react-native-svg';
 import { Text } from '@/components/primitives';
-import { usePriceHistory } from '@/hooks/usePriceHistory';
+import { usePriceHistory, usePortfolioSnapshots } from '@/hooks/usePriceHistory';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
-import type { PricePoint } from '@momento/shared';
 
 type TimeRange = '24H' | '7D' | '1M' | '3M' | '1Y';
 
 const TIME_RANGES: TimeRange[] = ['24H', '7D', '1M', '3M', '1Y'];
 const CHART_HEIGHT = 180;
 const Y_PADDING = 20;
+const MIN_SNAPSHOT_POINTS = 3;
 
-function createSmoothPath(data: PricePoint[], width: number, height: number): {
+interface ChartPoint {
+  t: number;
+  p: number;
+}
+
+function createSmoothPath(data: ChartPoint[], width: number, height: number): {
   linePath: string;
   gradientPath: string;
   min: number;
@@ -38,7 +43,6 @@ function createSmoothPath(data: PricePoint[], width: number, height: number): {
     y: Y_PADDING + effectiveHeight - ((d.p - min) / range) * effectiveHeight,
   }));
 
-  // Catmull-Rom to cubic bezier for smoother curves
   let linePath = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
   for (let i = 1; i < points.length; i++) {
     const prev = points[i - 1];
@@ -73,12 +77,21 @@ export function PortfolioChart({ solBalance }: PortfolioChartProps) {
   const CHART_WIDTH = SCREEN_WIDTH - SPACING.md * 4;
   const [selectedRange, setSelectedRange] = useState<TimeRange>('1M');
 
-  const { data: priceData, isLoading } = usePriceHistory(selectedRange);
+  const snapshots = usePortfolioSnapshots(selectedRange);
+  const priceHistory = usePriceHistory(selectedRange);
+
+  // Use snapshots if we have enough data points, otherwise fall back to SOL price history
+  const hasSnapshots = (snapshots.data?.length ?? 0) >= MIN_SNAPSHOT_POINTS;
+  const chartData: ChartPoint[] | undefined = hasSnapshots
+    ? snapshots.data
+    : priceHistory.data;
+  const isLoading = hasSnapshots ? snapshots.isLoading : priceHistory.isLoading;
+  const chartLabel = hasSnapshots ? 'Portfolio Value' : 'SOL Price';
 
   const chart = useMemo(() => {
-    if (!priceData || priceData.length < 2) return null;
-    return createSmoothPath(priceData, CHART_WIDTH, CHART_HEIGHT);
-  }, [priceData, CHART_WIDTH]);
+    if (!chartData || chartData.length < 2) return null;
+    return createSmoothPath(chartData, CHART_WIDTH, CHART_HEIGHT);
+  }, [chartData, CHART_WIDTH]);
 
   const isPositive = chart ? chart.last >= chart.first : true;
   const lineColor = isPositive ? COLORS.success : COLORS.error;
@@ -93,7 +106,7 @@ export function PortfolioChart({ solBalance }: PortfolioChartProps) {
       {/* Price header */}
       {chart && (
         <View style={styles.priceHeader}>
-          <Text style={styles.currentPrice}>SOL {formatPrice(chart.last)}</Text>
+          <Text style={styles.currentPrice}>{chartLabel} {formatPrice(chart.last)}</Text>
           <Text style={[styles.priceChange, { color: lineColor }]}>
             {changePercent >= 0 ? '+' : ''}{changePercent.toFixed(2)}%
           </Text>

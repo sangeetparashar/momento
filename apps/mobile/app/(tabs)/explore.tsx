@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -6,20 +6,23 @@ import {
   FlatList,
   RefreshControl,
   useWindowDimensions,
+  Animated,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/primitives';
 import { ExploreSkeleton } from '@/components/features';
 import { useFeed, useNearbyCreators } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
+import { formatDistance } from '@/utils/formatters';
 import type { PostWithCreator, PublicCreator } from '@momento/shared';
 
 type ExploreTab = 'CREATORS' | 'POSTS';
 
-const COLUMN_GAP = SPACING.xs;
+const COLUMN_GAP = SPACING.sm;
 
 interface GridItem {
   id: string;
@@ -27,9 +30,117 @@ interface GridItem {
   imageUri?: string;
   label?: string;
   sublabel?: string;
+  distanceText?: string;
   heightMultiplier: number;
   postId?: string;
   creatorId?: string;
+  followerCount?: number;
+  postCount?: number;
+}
+
+// Staggered animated card
+function AnimatedCard({
+  item,
+  index,
+  itemWidth,
+  onPress,
+}: {
+  item: GridItem;
+  index: number;
+  itemWidth: number;
+  onPress: () => void;
+}) {
+  const animValue = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.spring(animValue, {
+      toValue: 1,
+      delay: index * 80,
+      damping: 14,
+      stiffness: 120,
+      mass: 0.8,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  const height = itemWidth * item.heightMultiplier;
+  const isCreator = item.type === 'creator';
+
+  return (
+    <Animated.View
+      style={{
+        opacity: animValue,
+        transform: [
+          {
+            translateY: animValue.interpolate({
+              inputRange: [0, 1],
+              outputRange: [30, 0],
+            }),
+          },
+          {
+            scale: animValue.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.95, 1],
+            }),
+          },
+        ],
+      }}
+    >
+      <Pressable
+        onPress={onPress}
+        style={[styles.gridItem, { height }]}
+      >
+        {item.imageUri ? (
+          <Image
+            source={{ uri: item.imageUri }}
+            style={styles.gridImage}
+            contentFit="cover"
+            transition={200}
+          />
+        ) : (
+          <View style={[styles.gridImage, styles.gridPlaceholder]}>
+            <Text style={styles.placeholderText}>
+              {(item.label || '?').charAt(0).toUpperCase()}
+            </Text>
+          </View>
+        )}
+
+        {/* Bottom overlay with info */}
+        <View style={[
+          styles.gridOverlay,
+          isCreator && styles.creatorOverlay,
+        ]}>
+          <Text style={styles.gridLabel} numberOfLines={1}>
+            {item.label}
+          </Text>
+          {isCreator && (
+            <View style={styles.creatorMeta}>
+              {item.sublabel && (
+                <Text style={styles.tokenBadge}>{item.sublabel}</Text>
+              )}
+              {item.distanceText && (
+                <View style={styles.distanceRow}>
+                  <Ionicons name="location-outline" size={10} color={COLORS.primary} />
+                  <Text style={styles.distanceText}>{item.distanceText}</Text>
+                </View>
+              )}
+            </View>
+          )}
+          {!isCreator && item.sublabel && (
+            <Text style={styles.gridSublabel} numberOfLines={2}>
+              {item.sublabel}
+            </Text>
+          )}
+          {!isCreator && item.distanceText && (
+            <View style={styles.distanceRow}>
+              <Ionicons name="location-outline" size={10} color={COLORS.primary} />
+              <Text style={styles.distanceText}>{item.distanceText}</Text>
+            </View>
+          )}
+        </View>
+      </Pressable>
+    </Animated.View>
+  );
 }
 
 export default function ExploreScreen() {
@@ -59,6 +170,9 @@ export default function ExploreScreen() {
     return feedQuery.data.pages.flatMap((page) => page.posts);
   }, [feedQuery.data]);
 
+  // Create varied height patterns for visual interest
+  const heightPattern = [1.0, 1.35, 1.15, 1.0, 1.4, 1.0, 1.2, 1.0, 1.3, 1.1];
+
   const gridItems = useMemo((): GridItem[] => {
     if (activeTab === 'POSTS') {
       return posts.map((post: PostWithCreator, index: number) => ({
@@ -67,7 +181,8 @@ export default function ExploreScreen() {
         imageUri: post.mediaUrl,
         label: post.creator.displayName || post.creator.username,
         sublabel: post.caption,
-        heightMultiplier: index % 3 === 0 ? 1.3 : 1.0,
+        distanceText: post.distanceMeters ? formatDistance(post.distanceMeters) : undefined,
+        heightMultiplier: heightPattern[index % heightPattern.length],
         postId: post.id,
       }));
     }
@@ -81,8 +196,11 @@ export default function ExploreScreen() {
         sublabel: creator.tokenSymbol
           ? `$${creator.tokenSymbol}`
           : undefined,
-        heightMultiplier: index % 3 === 0 ? 1.3 : 1.0,
+        distanceText: creator.distanceMeters ? formatDistance(creator.distanceMeters) : undefined,
+        heightMultiplier: heightPattern[(index + 3) % heightPattern.length],
         creatorId: creator.id,
+        followerCount: creator.followerCount,
+        postCount: creator.postCount,
       })
     );
   }, [activeTab, posts, nearbyCreators]);
@@ -91,11 +209,16 @@ export default function ExploreScreen() {
   const { leftColumn, rightColumn } = useMemo(() => {
     const left: GridItem[] = [];
     const right: GridItem[] = [];
-    gridItems.forEach((item, index) => {
-      if (index % 2 === 0) {
+    let leftHeight = 0;
+    let rightHeight = 0;
+    // Distribute by shortest column for better visual balance
+    gridItems.forEach((item) => {
+      if (leftHeight <= rightHeight) {
         left.push(item);
+        leftHeight += item.heightMultiplier;
       } else {
         right.push(item);
+        rightHeight += item.heightMultiplier;
       }
     });
     return { leftColumn: left, rightColumn: right };
@@ -110,47 +233,6 @@ export default function ExploreScreen() {
       }
     },
     [router]
-  );
-
-  const renderGridItem = useCallback(
-    (item: GridItem) => {
-      const height = ITEM_WIDTH * item.heightMultiplier;
-      return (
-        <Pressable
-          key={item.id}
-          onPress={() => handleItemPress(item)}
-          style={[styles.gridItem, { height }]}
-        >
-          {item.imageUri ? (
-            <Image
-              source={{ uri: item.imageUri }}
-              style={styles.gridImage}
-              contentFit="cover"
-              transition={200}
-            />
-          ) : (
-            <View style={[styles.gridImage, styles.gridPlaceholder]}>
-              <Text style={styles.placeholderText}>
-                {(item.label || '?').charAt(0).toUpperCase()}
-              </Text>
-            </View>
-          )}
-          {item.label && (
-            <View style={styles.gridOverlay}>
-              <Text style={styles.gridLabel} numberOfLines={1}>
-                {item.label}
-              </Text>
-              {item.sublabel && (
-                <Text style={styles.gridSublabel} numberOfLines={1}>
-                  {item.sublabel}
-                </Text>
-              )}
-            </View>
-          )}
-        </Pressable>
-      );
-    },
-    [handleItemPress, ITEM_WIDTH]
   );
 
   return (
@@ -205,10 +287,26 @@ export default function ExploreScreen() {
           renderItem={() => (
             <View style={styles.masonryContainer}>
               <View style={styles.column}>
-                {leftColumn.map(renderGridItem)}
+                {leftColumn.map((item, index) => (
+                  <AnimatedCard
+                    key={item.id}
+                    item={item}
+                    index={index * 2}
+                    itemWidth={ITEM_WIDTH}
+                    onPress={() => handleItemPress(item)}
+                  />
+                ))}
               </View>
               <View style={styles.column}>
-                {rightColumn.map(renderGridItem)}
+                {rightColumn.map((item, index) => (
+                  <AnimatedCard
+                    key={item.id}
+                    item={item}
+                    index={index * 2 + 1}
+                    itemWidth={ITEM_WIDTH}
+                    onPress={() => handleItemPress(item)}
+                  />
+                ))}
               </View>
             </View>
           )}
@@ -288,7 +386,7 @@ const styles = StyleSheet.create({
     gap: COLUMN_GAP,
   },
   gridItem: {
-    borderRadius: RADII.md,
+    borderRadius: RADII.lg,
     overflow: 'hidden',
     backgroundColor: COLORS.surface,
   },
@@ -312,7 +410,12 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     padding: SPACING.sm,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingTop: SPACING.lg,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+  },
+  creatorOverlay: {
+    paddingTop: SPACING.xl,
+    backgroundImage: undefined,
   },
   gridLabel: {
     ...TYPOGRAPHY.bodySmall,
@@ -323,6 +426,30 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.caption,
     color: COLORS.textSecondary,
     marginTop: 2,
+  },
+  creatorMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginTop: 3,
+    flexWrap: 'wrap',
+  },
+  tokenBadge: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.primary,
+    fontWeight: '700',
+    fontSize: 11,
+  },
+  distanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginTop: 2,
+  },
+  distanceText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    fontSize: 10,
   },
   emptyState: {
     paddingVertical: SPACING.xl * 3,

@@ -19,7 +19,7 @@ import { useCreatorProfile } from '@/hooks';
 import { apiService } from '@/services/api';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
-import { formatNumber } from '@/utils/formatters';
+import { formatNumber, formatDistance } from '@/utils/formatters';
 import { SOCIAL_PLATFORMS } from '@momento/shared';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -202,13 +202,24 @@ export default function CreatorScreen() {
             {renderSocialLinks()}
           </View>
 
-          {/* Name + Token + Bio */}
+          {/* Name + Token + Location + Bio */}
           <View style={styles.infoSection}>
             <Text style={styles.creatorName}>
               {profile?.displayName || profile?.username || 'Creator'}
             </Text>
             {profile?.tokenSymbol && (
               <Text style={styles.tokenSymbol}>${profile.tokenSymbol}</Text>
+            )}
+            {(profile?.distanceMeters != null || profile?.city) && (
+              <View style={styles.locationRow}>
+                <Ionicons name="location" size={14} color={COLORS.primary} />
+                <Text style={styles.locationText}>
+                  {[
+                    profile.distanceMeters != null ? formatDistance(profile.distanceMeters) : null,
+                    profile.city,
+                  ].filter(Boolean).join(' · ')}
+                </Text>
+              </View>
             )}
             {profile?.bio && <Text style={styles.bio}>{profile.bio}</Text>}
           </View>
@@ -354,6 +365,16 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: '700',
     marginTop: 2,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: SPACING.xs,
+  },
+  locationText: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textSecondary,
   },
   bio: {
     ...TYPOGRAPHY.body,

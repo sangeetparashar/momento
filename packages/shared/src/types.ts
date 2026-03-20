@@ -67,6 +67,8 @@ export interface PublicCreator {
   postCount: number;
   role?: string;
   createdAt?: string;
+  distanceMeters?: number;
+  city?: string;
 }
 
 // Post types
@@ -133,6 +135,13 @@ export interface WalletBalance {
 export interface PricePoint {
   t: number; // timestamp ms
   p: number; // price usd
+}
+
+export interface PortfolioPoint {
+  t: number;      // timestamp ms
+  p: number;      // total portfolio value usd
+  sol: number;    // sol value usd
+  tokens: number; // token value usd
 }
 
 // API Response types

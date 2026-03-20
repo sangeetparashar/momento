@@ -87,6 +87,16 @@ export function formatPercentage(value: number): string {
 }
 
 /**
+ * Format distance in meters to a human-readable string.
+ */
+export function formatDistance(meters: number): string {
+  if (meters < 1000) {
+    return `${Math.round(meters)}m away`;
+  }
+  return `${(meters / 1000).toFixed(1)}km away`;
+}
+
+/**
  * Truncate a Solana (or any) address to a short display format.
  * e.g. "7nY...xK3" with configurable start/end lengths.
  */
