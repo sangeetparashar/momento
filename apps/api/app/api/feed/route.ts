@@ -6,6 +6,8 @@ import { readLimiter, applyRateLimit } from '@/lib/ratelimit';
 
 const DEFAULT_RADIUS_KM = 50;
 const PAGE_SIZE = 20;
+/** How many raw posts to fetch for the ranking pool */
+const RANKING_POOL_SIZE = 200;
 
 /**
  * Feed sort modes:
@@ -31,6 +33,50 @@ const WEIGHT_PRESETS: Record<SortMode, [number, number, number, number]> = {
   following: [0.07, 0.07, 0.06, 0.80],
 };
 
+const HALF_LIFE_MS = 12 * 60 * 60 * 1000; // 12 hours
+
+function rankPosts(
+  posts: any[],
+  sort: SortMode,
+  followedIds: Set<string>,
+): any[] {
+  const [wRecency, wEngagement, wProximity, wFollowing] = WEIGHT_PRESETS[sort];
+  const now = Date.now();
+
+  return posts
+    .map((p) => {
+      const createdAt = typeof p.createdAt === 'string'
+        ? new Date(p.createdAt).getTime()
+        : p.createdAt.getTime();
+      const ageMs = now - createdAt;
+
+      // Recency: exponential decay with 12h half-life → [0, 1]
+      const recency = Math.pow(0.5, ageMs / HALF_LIFE_MS);
+
+      // Engagement: log-normalized likes + comments → [0, 1]
+      const engagement = Math.min(
+        1,
+        Math.log(1 + (p.likeCount || 0) + (p.commentCount || 0)) / Math.log(1000),
+      );
+
+      // Proximity: inverse distance decay → [0, 1] (1 at 0m, ~0.5 at 5km)
+      const distM = Number(p.distanceMeters) || 0;
+      const proximity = 1 / (1 + distM / 5000);
+
+      // Following: 1 if user follows creator, 0 otherwise
+      const isFollowed = followedIds.has(p.creatorId) ? 1 : 0;
+
+      const score =
+        wRecency * recency +
+        wEngagement * engagement +
+        wProximity * proximity +
+        wFollowing * isFollowed;
+
+      return { ...p, _score: score };
+    })
+    .sort((a, b) => b._score - a._score);
+}
+
 export async function GET(request: NextRequest) {
   try {
     const rateLimitResponse = await applyRateLimit(request, readLimiter);
@@ -39,7 +85,7 @@ export async function GET(request: NextRequest) {
     const lat = parseFloat(searchParams.get('lat') || '0');
     const lng = parseFloat(searchParams.get('lng') || '0');
     const radiusKm = parseInt(searchParams.get('radius') || String(DEFAULT_RADIUS_KM), 10);
-    const cursor = searchParams.get('cursor') || undefined;
+    const page = Math.max(0, parseInt(searchParams.get('page') || '0', 10));
     const sortParam = (searchParams.get('sort') || 'smart') as SortMode;
     const sort: SortMode = SORT_MODES.has(sortParam) ? sortParam : 'smart';
 
@@ -66,24 +112,9 @@ export async function GET(request: NextRequest) {
       followedIds = new Set(follows.map(f => f.followingId));
     }
 
-    // Cache key includes sort mode (shared across users for same sort)
-    const cacheKey = cacheKeys.feed(lat, lng, radiusKm, sort, cursor);
-
-    let feedData = await getOrSetCache(cacheKey, cacheTTL.feed, async () => {
-      let cursorCondition = '';
-      const params: any[] = [lng, lat, radiusMeters, PAGE_SIZE + 1];
-      let paramIndex = params.length;
-
-      if (cursor) {
-        paramIndex++;
-        cursorCondition = `AND p."createdAt" < $${paramIndex}`;
-        params.push(new Date(cursor));
-      }
-
-      // Fetch more posts than needed for ranking (grab 3x, rank, take top PAGE_SIZE)
-      const fetchLimit = cursor ? PAGE_SIZE + 1 : Math.min(PAGE_SIZE * 3, 100);
-      params[3] = fetchLimit;
-
+    // Cache the RAW post pool (sort-agnostic, shared across all users & sort modes)
+    const poolCacheKey = cacheKeys.feed(lat, lng, radiusKm, 'pool');
+    const rawPosts: any[] = await getOrSetCache(poolCacheKey, cacheTTL.feed, async () => {
       const posts = await prisma.$queryRawUnsafe<any[]>(
         `
         SELECT
@@ -118,49 +149,14 @@ export async function GET(request: NextRequest) {
             ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
             $3
           )
-          ${cursorCondition}
         ORDER BY p."createdAt" DESC
         LIMIT $4
         `,
-        ...params
+        lng, lat, radiusMeters, RANKING_POOL_SIZE,
       );
 
-      // Apply ranking algorithm
-      const [wRecency, wEngagement, wProximity, wFollowing] = WEIGHT_PRESETS[sort];
-      const now = Date.now();
-      const HALF_LIFE_MS = 12 * 60 * 60 * 1000; // 12 hours
-
-      const scored = posts.map((p: any) => {
-        const createdAt = typeof p.createdAt === 'string' ? new Date(p.createdAt).getTime() : p.createdAt.getTime();
-        const ageMs = now - createdAt;
-
-        // Recency: exponential decay with 12h half-life → [0, 1]
-        const recency = Math.pow(0.5, ageMs / HALF_LIFE_MS);
-
-        // Engagement: log-normalized likes + comments → [0, 1] (capped at ~1 for 1000+ engagement)
-        const engagement = Math.min(1, Math.log(1 + (p.likeCount || 0) + (p.commentCount || 0)) / Math.log(1000));
-
-        // Proximity: inverse distance decay → [0, 1] (1 at 0m, ~0.5 at 5km, ~0.1 at 50km)
-        const distM = Number(p.distanceMeters) || 0;
-        const proximity = 1 / (1 + distM / 5000);
-
-        // Following: 1 if user follows creator, 0 otherwise
-        const isFollowed = followedIds.has(p.creatorId) ? 1 : 0;
-
-        const score = wRecency * recency + wEngagement * engagement + wProximity * proximity + wFollowing * isFollowed;
-
-        return { ...p, _score: score };
-      });
-
-      // Sort by score descending
-      scored.sort((a: any, b: any) => b._score - a._score);
-
-      // Take PAGE_SIZE + 1 for hasMore detection
-      const rankedPosts = scored.slice(0, PAGE_SIZE + 1);
-      const hasMore = rankedPosts.length > PAGE_SIZE;
-      const slicedPosts = hasMore ? rankedPosts.slice(0, PAGE_SIZE) : rankedPosts;
-
-      const formattedPosts = slicedPosts.map((p: any) => ({
+      // Format for caching (serialize dates)
+      return posts.map((p: any) => ({
         id: p.id,
         creatorId: p.creatorId,
         postType: p.postType,
@@ -175,7 +171,6 @@ export async function GET(request: NextRequest) {
         createdAt: typeof p.createdAt === 'string' ? p.createdAt : new Date(p.createdAt).toISOString(),
         updatedAt: typeof p.updatedAt === 'string' ? p.updatedAt : new Date(p.updatedAt).toISOString(),
         distanceMeters: Math.round(Number(p.distanceMeters)),
-        isLiked: false,
         creator: {
           id: p.creator_id,
           username: p.creator_username,
@@ -188,37 +183,46 @@ export async function GET(request: NextRequest) {
           postCount: p.creator_postCount,
         },
       }));
-
-      const nextCursor = hasMore
-        ? formattedPosts[formattedPosts.length - 1].createdAt
-        : undefined;
-
-      return {
-        posts: formattedPosts,
-        nextCursor,
-        hasMore,
-        sort,
-      };
     });
 
-    // Compute isLiked per-user outside the cache
-    if (userId && feedData.posts.length > 0) {
-      const postIds = feedData.posts.map((p: any) => p.id);
+    // Rank the full pool per-request (uses current user's following data + chosen sort)
+    const ranked = rankPosts(rawPosts, sort, followedIds);
+
+    // Paginate: offset-based since score ordering doesn't support cursor
+    const start = page * PAGE_SIZE;
+    const sliced = ranked.slice(start, start + PAGE_SIZE + 1);
+    const hasMore = sliced.length > PAGE_SIZE;
+    const pagePosts = hasMore ? sliced.slice(0, PAGE_SIZE) : sliced;
+
+    // Compute isLiked per-user
+    let finalPosts = pagePosts.map((p: any) => ({
+      ...p,
+      isLiked: false,
+      _score: undefined,
+    }));
+
+    if (userId && finalPosts.length > 0) {
+      const postIds = finalPosts.map((p: any) => p.id);
       const likedPosts = await prisma.like.findMany({
         where: { userId, postId: { in: postIds } },
         select: { postId: true },
       });
       const likedSet = new Set(likedPosts.map((l) => l.postId));
-      feedData = {
-        ...feedData,
-        posts: feedData.posts.map((p: any) => ({
-          ...p,
-          isLiked: likedSet.has(p.id),
-        })),
-      };
+      finalPosts = finalPosts.map((p: any) => ({
+        ...p,
+        isLiked: likedSet.has(p.id),
+      }));
     }
 
-    return NextResponse.json({ success: true, data: feedData });
+    return NextResponse.json({
+      success: true,
+      data: {
+        posts: finalPosts,
+        page,
+        hasMore,
+        sort,
+      },
+    });
   } catch (error) {
     console.error('Feed error:', error);
     return NextResponse.json(

@@ -44,7 +44,7 @@ export function useFeed(options: UseFeedOptions = {}) {
     ],
     queryFn: async ({ pageParam }) => {
       if (!location) throw new Error('Location not available');
-      const cursor = pageParam as string | undefined;
+      const page = (pageParam as number) ?? 0;
 
       // Determine radius: use override or try auto-expanding
       let currentRadius = radiusKm ?? RADIUS_TIERS_KM[0];
@@ -57,7 +57,7 @@ export function useFeed(options: UseFeedOptions = {}) {
           lng: location?.longitude,
           radius: currentRadius,
           sort,
-          cursor,
+          page,
         });
       } else {
         // Auto-expanding radius — start from cached tier if available
@@ -74,12 +74,11 @@ export function useFeed(options: UseFeedOptions = {}) {
             lng: location?.longitude,
             radius: tier,
             sort,
-            cursor,
+            page,
           });
 
-          // If we have enough posts or this is the first page with a cursor,
-          // stop expanding
-          if (response.posts.length >= MIN_POSTS || cursor) {
+          // If we have enough posts or paginating, stop expanding
+          if (response.posts.length >= MIN_POSTS || page > 0) {
             break;
           }
         }
@@ -90,9 +89,9 @@ export function useFeed(options: UseFeedOptions = {}) {
 
       return response!;
     },
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) =>
-      lastPage.hasMore ? lastPage.nextCursor : undefined,
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) =>
+      lastPage.hasMore ? allPages.length : undefined,
     enabled: enabled && location !== null,
     staleTime: 30_000,
   });

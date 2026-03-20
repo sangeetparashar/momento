@@ -148,7 +148,9 @@ export interface PortfolioPoint {
 export interface FeedResponse {
   posts: PostWithCreator[];
   nextCursor?: string;
+  page?: number;
   hasMore: boolean;
+  sort?: string;
 }
 
 export interface NearbyCreatorsResponse {
