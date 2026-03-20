@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
-import WaitlistForm from './WaitlistForm';
+import WaitlistForm from '@/components/WaitlistForm';
 
 export default function FinalCta() {
   const sectionRef = useRef<HTMLDivElement>(null);
@@ -30,54 +29,101 @@ export default function FinalCta() {
 
   return (
     <section
+      id="waitlist"
       ref={sectionRef}
-      className="relative py-32 px-6 overflow-hidden"
+      className="min-h-[80vh] flex items-center justify-center relative overflow-hidden px-6"
     >
-      {/* Animated green glow background */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[800px] h-[500px] bg-momento-primary/5 rounded-full blur-[150px] animate-pulse-glow" />
+      {/* Ambient gradient orbs */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div
+          className="absolute top-1/4 left-1/4 w-[600px] h-[600px] rounded-full blur-[180px] opacity-20"
+          style={{
+            background: 'radial-gradient(circle, #00FF88 0%, transparent 70%)',
+            animation: 'floatOrb1 8s ease-in-out infinite',
+          }}
+        />
+        <div
+          className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] rounded-full blur-[160px] opacity-15"
+          style={{
+            background: 'radial-gradient(circle, #00CC6A 0%, transparent 70%)',
+            animation: 'floatOrb2 10s ease-in-out infinite',
+          }}
+        />
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] rounded-full blur-[200px] opacity-10"
+          style={{
+            background: 'radial-gradient(circle, #00FFAA 0%, transparent 70%)',
+            animation: 'floatOrb3 12s ease-in-out infinite',
+          }}
+        />
       </div>
 
-      {/* Decorative particle dots */}
-      <div className="particle-dot top-20 left-[15%]" style={{ animationDelay: '0s' }} />
-      <div className="particle-dot top-32 right-[20%]" style={{ animationDelay: '1.5s' }} />
-      <div className="particle-dot bottom-24 left-[30%]" style={{ animationDelay: '0.8s' }} />
-      <div className="particle-dot bottom-16 right-[25%]" style={{ animationDelay: '2.2s' }} />
+      {/* Keyframes */}
+      <style jsx>{`
+        @keyframes floatOrb1 {
+          0%, 100% { transform: translate(0, 0); }
+          50% { transform: translate(30px, -20px); }
+        }
+        @keyframes floatOrb2 {
+          0%, 100% { transform: translate(0, 0); }
+          50% { transform: translate(-25px, 15px); }
+        }
+        @keyframes floatOrb3 {
+          0%, 100% { transform: translate(-50%, -50%) scale(1); }
+          50% { transform: translate(-50%, -50%) scale(1.1); }
+        }
+      `}</style>
 
-      <div className="relative z-10 max-w-2xl mx-auto text-center">
+      {/* Content */}
+      <div className="relative z-10 max-w-3xl mx-auto text-center">
         {/* Logo mark */}
         <div
-          className={`flex justify-center mb-6 transition-all duration-[800ms] ease-out
-                      ${visible ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+          className={`flex justify-center mb-8 transition-all duration-700 ease-out
+                      ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
         >
-          <Image
-            src="/logo-white.svg"
-            alt="Momento"
-            width={36}
-            height={36}
-            className="animate-float"
-          />
+          <svg
+            width="48"
+            height="48"
+            viewBox="0 0 48 48"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <rect width="48" height="48" rx="12" fill="#00FF88" fillOpacity="0.15" />
+            <text
+              x="24"
+              y="32"
+              textAnchor="middle"
+              fill="#00FF88"
+              fontSize="24"
+              fontWeight="bold"
+              fontFamily="system-ui, sans-serif"
+            >
+              M
+            </text>
+          </svg>
         </div>
 
+        {/* Headline */}
         <h2
-          className={`text-4xl sm:text-5xl font-extrabold tracking-tight mb-4
-                      transition-all duration-[800ms] ease-out delay-100
-                      ${visible ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.9]'}`}
+          className={`text-5xl md:text-7xl font-black text-center transition-all duration-700 ease-out delay-100
+                      ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
         >
-          Be First.{' '}
-          <span className="text-shimmer">Own the Culture.</span>
+          <span className="text-white block">Be First.</span>
+          <span className="text-shimmer block">Own the Culture.</span>
         </h2>
 
+        {/* Subtitle */}
         <p
-          className={`text-momento-text-secondary text-lg mb-10
-                      transition-all duration-[600ms] ease-out delay-200
+          className={`text-lg text-momento-text-secondary text-center max-w-xl mx-auto mt-6
+                      transition-all duration-700 ease-out delay-200
                       ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
         >
-          Join the waitlist for early access to Momento.
+          Join the waitlist for early access to Momento. Be part of the future of the creator economy.
         </p>
 
+        {/* Waitlist form */}
         <div
-          className={`flex justify-center mb-10 transition-all duration-[600ms] ease-out delay-300
+          className={`mt-10 flex justify-center transition-all duration-700 ease-out delay-300
                       ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
         >
           <WaitlistForm />
@@ -85,14 +131,14 @@ export default function FinalCta() {
 
         {/* Social links */}
         <div
-          className={`flex items-center justify-center gap-6 transition-all duration-[600ms] ease-out delay-[400ms]
+          className={`flex items-center justify-center gap-6 mt-8 transition-all duration-700 ease-out delay-[400ms]
                       ${visible ? 'opacity-100' : 'opacity-0'}`}
         >
           <a
             href="https://x.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-momento-text-tertiary hover:text-momento-primary transition-all duration-200 hover:scale-110"
+            className="text-momento-text-secondary hover:text-white transition-colors duration-200"
             aria-label="Follow on X"
           >
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -103,7 +149,7 @@ export default function FinalCta() {
             href="https://www.instagram.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-momento-text-tertiary hover:text-momento-primary transition-all duration-200 hover:scale-110"
+            className="text-momento-text-secondary hover:text-white transition-colors duration-200"
             aria-label="Follow on Instagram"
           >
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">

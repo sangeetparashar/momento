@@ -1,5 +1,19 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
+import { Inter } from 'next/font/google';
 import './globals.css';
+
+const inter = Inter({
+  subsets: ['latin'],
+  weight: ['100', '200', '300', '400', '500', '600', '700', '800', '900'],
+  variable: '--font-inter',
+  display: 'swap',
+});
+
+export const viewport: Viewport = {
+  themeColor: '#0D0D0D',
+  width: 'device-width',
+  initialScale: 1,
+};
 
 export const metadata: Metadata = {
   title: 'Momento — The Stock Market for Culture',
@@ -30,8 +44,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="font-sans antialiased">{children}</body>
+    <html lang="en" className={inter.variable}>
+      <body className="bg-momento-bg text-white antialiased font-sans">
+        {/* Fixed noise overlay across the entire page */}
+        <div
+          className="noise-overlay pointer-events-none fixed inset-0 z-50"
+          aria-hidden="true"
+        />
+        {children}
+      </body>
     </html>
   );
 }

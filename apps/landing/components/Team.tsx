@@ -5,21 +5,24 @@ import { useEffect, useRef, useState } from 'react';
 const team = [
   {
     name: 'J V',
-    title: 'Web3 Founder',
-    initial: 'J',
-    accentColor: 'bg-momento-primary/20',
+    role: 'Co-Founder',
+    bio: 'Web3 builder. Previously founded two crypto startups.',
+    initials: 'JV',
+    accent: '#00FF88',
   },
   {
     name: 'S P',
-    title: 'AI Engineer/Architect',
-    initial: 'S',
-    accentColor: 'bg-blue-500/20',
+    role: 'Co-Founder',
+    bio: 'AI engineer and systems architect. Built scalable platforms at enterprise scale.',
+    initials: 'SP',
+    accent: '#4488FF',
   },
   {
     name: 'J T',
-    title: 'Creator Economy Expert',
-    initial: 'J',
-    accentColor: 'bg-purple-500/20',
+    role: 'Advisor',
+    bio: 'Creator economy veteran. Deep expertise in talent monetization.',
+    initials: 'JT',
+    accent: '#AA66FF',
   },
 ];
 
@@ -48,38 +51,70 @@ export default function Team() {
   }, []);
 
   return (
-    <section ref={sectionRef} className="py-24 px-6">
-      <div className="max-w-4xl mx-auto text-center">
-        <p className="text-momento-primary text-xs font-semibold uppercase tracking-[3px] mb-3">
-          The Team
-        </p>
-        <h2 className="text-xl sm:text-2xl font-bold mb-12 tracking-tight text-momento-text-secondary max-w-xl mx-auto">
-          Built by operators from the creator economy, fintech, and Web3.
-        </h2>
+    <section id="team" ref={sectionRef} className="py-24 px-6">
+      <div className="max-w-5xl mx-auto">
+        {/* Section header */}
+        <div className="text-center mb-16">
+          <p className="text-momento-primary text-xs font-semibold uppercase tracking-[3px] mb-4">
+            THE TEAM
+          </p>
+          <h2
+            className={`text-4xl md:text-5xl font-bold text-center text-white transition-all duration-700 ease-out
+                        ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-6'}`}
+          >
+            Built by operators
+          </h2>
+          <p
+            className={`text-momento-text-secondary text-center text-lg mt-4 transition-all duration-700 ease-out delay-100
+                        ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
+          >
+            From the creator economy, fintech, and Web3.
+          </p>
+        </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+        {/* Team cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {team.map((member, i) => (
             <div
               key={member.name}
-              className={`group p-6 rounded-2xl bg-momento-bg-secondary border border-momento-border
-                         hover:border-momento-primary/30 hover:shadow-[0_0_30px_rgba(0,255,136,0.08)]
-                         transition-all duration-700 ease-out cursor-default
+              className={`backdrop-blur-xl bg-white/[0.03] border border-white/[0.08] rounded-2xl p-8 text-center
+                         hover:border-white/[0.16] hover:-translate-y-0.5
+                         transition-all duration-700 ease-out
                          ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
-              style={{ transitionDelay: `${i * 120}ms` }}
+              style={{ transitionDelay: `${(i + 1) * 100}ms` }}
             >
-              {/* Avatar with accent ring */}
-              <div className={`w-14 h-14 rounded-full ${member.accentColor} border border-momento-border
-                              mx-auto mb-4 flex items-center justify-center
-                              group-hover:border-momento-primary/40 transition-colors duration-300`}>
-                <span className="text-momento-primary font-bold text-lg">
-                  {member.initial}
+              {/* Avatar */}
+              <div
+                className="w-20 h-20 rounded-full mx-auto flex items-center justify-center border-2"
+                style={{
+                  borderColor: member.accent,
+                  backgroundColor: `${member.accent}1A`,
+                }}
+              >
+                <span
+                  className="font-bold text-xl"
+                  style={{ color: member.accent }}
+                >
+                  {member.initials}
                 </span>
               </div>
-              <h3 className="text-white font-semibold group-hover:text-momento-primary transition-colors duration-300">
+
+              {/* Name */}
+              <h3 className="text-xl font-bold text-white mt-4">
                 {member.name}
               </h3>
-              <p className="text-momento-text-secondary text-sm mt-1">
-                {member.title}
+
+              {/* Role */}
+              <p
+                className="text-sm font-medium mt-1"
+                style={{ color: member.accent }}
+              >
+                {member.role}
+              </p>
+
+              {/* Bio */}
+              <p className="text-sm text-momento-text-secondary mt-2">
+                {member.bio}
               </p>
             </div>
           ))}

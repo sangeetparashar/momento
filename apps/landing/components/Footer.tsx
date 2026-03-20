@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Image from 'next/image';
 import Modal from './Modal';
 import TermsContent from './TermsContent';
 import PrivacyContent from './PrivacyContent';
@@ -12,25 +11,27 @@ export default function Footer() {
 
   return (
     <>
-      <footer className="border-t border-momento-border py-12 px-6">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <Image
+      <footer className="border-t border-white/[0.06]">
+        <div className="max-w-7xl mx-auto py-8 px-6 flex flex-col md:flex-row items-center justify-between gap-6">
+          {/* Left — Logo + tagline */}
+          <div className="flex items-center gap-3">
+            <img
               src="/logo-white.svg"
               alt="Momento"
               width={24}
               height={24}
             />
-            <div className="text-center sm:text-left">
-              <span className="text-white font-extrabold text-lg tracking-[5px] uppercase">
+            <div>
+              <span className="text-white font-extrabold text-sm tracking-[4px] uppercase">
                 MOMENTO
               </span>
-              <p className="text-momento-text-tertiary text-sm mt-1">
+              <p className="text-xs text-momento-text-tertiary">
                 The Stock Market for Culture
               </p>
             </div>
           </div>
 
+          {/* Center — Legal links */}
           <div className="flex items-center gap-6 text-sm text-momento-text-tertiary">
             <button
               onClick={() => setShowPrivacy(true)}
@@ -46,8 +47,9 @@ export default function Footer() {
             </button>
           </div>
 
-          <p className="text-momento-text-tertiary text-sm">
-            &copy; 2026 Momento Inc. All rights reserved.
+          {/* Right — Copyright */}
+          <p className="text-sm text-momento-text-tertiary">
+            &copy; 2026 Momento Inc.
           </p>
         </div>
       </footer>

@@ -1,100 +1,90 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Image from 'next/image';
 import WaitlistForm from './WaitlistForm';
 
 export default function Hero() {
-  const [visible, setVisible] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setVisible(true), 100);
-    return () => clearTimeout(timer);
-  }, []);
-
   return (
-    <section className="relative min-h-screen flex items-center justify-center noise-overlay overflow-hidden">
-      {/* Animated green radial glow behind heading */}
-      <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[400px] bg-momento-primary/5 rounded-full blur-[120px] pointer-events-none animate-pulse-glow" />
+    <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
+      {/* Ambient gradient orbs */}
+      <div className="absolute top-[15%] left-[20%] w-[500px] h-[500px] bg-[#00FF88]/[0.07] rounded-full blur-[180px] pointer-events-none animate-float-slow" />
+      <div className="absolute bottom-[20%] right-[15%] w-[400px] h-[400px] bg-teal-500/[0.08] rounded-full blur-[160px] pointer-events-none animate-float-delayed" />
+      <div className="absolute top-[50%] left-[60%] w-[350px] h-[350px] bg-emerald-400/[0.06] rounded-full blur-[140px] pointer-events-none animate-float" />
 
-      {/* Subtle grid pattern */}
-      <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:64px_64px] pointer-events-none" />
+      {/* Subtle radial gradient from center */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(0,255,136,0.04)_0%,transparent_70%)] pointer-events-none" />
 
-      <div className="relative z-10 text-center px-6 pt-20 pb-16 max-w-3xl mx-auto">
-        {/* Logo mark */}
+      {/* Content */}
+      <div className="relative z-10 text-center px-6 max-w-4xl mx-auto">
+        {/* Label */}
         <div
-          className={`flex justify-center mb-8 transition-all duration-[1000ms] ease-out
-                      ${visible ? 'opacity-100 scale-100' : 'opacity-0 scale-75'}`}
+          className="flex items-center justify-center gap-2 mb-8 opacity-0 animate-slide-up"
+          style={{ animationDelay: '0ms', animationFillMode: 'forwards' }}
         >
-          <Image
-            src="/logo-white.svg"
-            alt="Momento"
-            width={48}
-            height={48}
-            className="animate-float"
-          />
+          <span className="w-1.5 h-1.5 rounded-full bg-momento-primary inline-block" />
+          <span className="text-momento-primary text-xs font-medium tracking-[0.25em] uppercase">
+            The Stock Market for Culture
+          </span>
         </div>
 
-        {/* MOMENTO wordmark — wide letter-spacing like Figma */}
-        <p
-          className={`text-momento-primary font-extrabold text-sm tracking-[10px] uppercase mb-6
-                      transition-all duration-[800ms] ease-out delay-100
-                      ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}
-        >
-          MOMENTO
-        </p>
-
+        {/* Main headline */}
         <h1
-          className={`text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight leading-[1.05] mb-6
-                      transition-all duration-[800ms] ease-out delay-200
-                      ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
-          style={{ letterSpacing: '-1px' }}
+          className="text-7xl md:text-8xl lg:text-9xl font-black text-white leading-[0.95] tracking-tight opacity-0 animate-slide-up"
+          style={{ animationDelay: '150ms', animationFillMode: 'forwards' }}
         >
-          The Stock Market
-          <br />
-          for{' '}
-          <span className="text-momento-primary relative">
+          Own the{' '}
+          <span className="bg-gradient-to-r from-[#00FF88] via-[#00DDAA] to-[#00FF88] bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient-shift">
             Culture
-            <span className="absolute -bottom-1 left-0 right-0 h-[3px] bg-momento-primary/40 rounded-full" />
           </span>
         </h1>
 
+        {/* Subtitle */}
         <p
-          className={`text-lg sm:text-xl text-momento-text-secondary max-w-xl mx-auto mb-10 leading-relaxed
-                      transition-all duration-[800ms] ease-out delay-[350ms]
-                      ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'}`}
+          className="text-lg md:text-xl text-momento-text-secondary max-w-2xl mx-auto mt-6 leading-relaxed opacity-0 animate-slide-up"
+          style={{ animationDelay: '300ms', animationFillMode: 'forwards' }}
         >
-          Invest in the creators you believe in. Trade in real time. Profit
-          alongside the culture you helped create.
+          Invest in the creators you believe in. Trade tokens in real time.
+          Profit alongside the culture you helped shape.
         </p>
 
+        {/* Waitlist form */}
         <div
-          className={`flex justify-center transition-all duration-[800ms] ease-out delay-[500ms]
-                      ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-5'}`}
+          id="waitlist"
+          className="mt-10 flex justify-center opacity-0 animate-slide-up"
+          style={{ animationDelay: '450ms', animationFillMode: 'forwards' }}
         >
           <WaitlistForm />
         </div>
 
-        <p
-          className={`mt-6 text-momento-text-tertiary text-sm transition-opacity duration-[600ms] ease-out delay-[700ms]
-                      ${visible ? 'opacity-100' : 'opacity-0'}`}
+        {/* Trust line */}
+        <div
+          className="mt-4 flex items-center justify-center gap-3 flex-wrap opacity-0 animate-slide-up"
+          style={{ animationDelay: '600ms', animationFillMode: 'forwards' }}
         >
-          Join 1,000+ fans already waiting
-        </p>
+          <span className="text-sm text-momento-text-tertiary">Free early access</span>
+          <span className="w-1 h-1 rounded-full bg-momento-text-tertiary" />
+          <span className="text-sm text-momento-text-tertiary">No crypto knowledge needed</span>
+          <span className="w-1 h-1 rounded-full bg-momento-text-tertiary" />
+          <span className="text-sm text-momento-text-tertiary">Solana-powered</span>
+        </div>
 
         {/* Scroll indicator */}
         <div
-          className={`mt-16 flex justify-center transition-all duration-[600ms] ease-out delay-[900ms]
-                      ${visible ? 'opacity-100' : 'opacity-0'}`}
+          className="mt-20 flex justify-center opacity-0 animate-slide-up"
+          style={{ animationDelay: '750ms', animationFillMode: 'forwards' }}
         >
-          <div className="animate-bounce-gentle">
+          <div className="animate-bounce-gentle opacity-50">
             <svg
-              className="w-5 h-5 text-momento-text-tertiary"
+              className="w-6 h-6 text-white/40"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M19 9l-7 7-7-7"
+              />
             </svg>
           </div>
         </div>
