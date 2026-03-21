@@ -7,6 +7,7 @@ import {
   Linking,
   ActivityIndicator,
   Share,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,7 +18,7 @@ import {
   SwapModal,
   ComingSoonModal,
 } from '@/components/features';
-import { useWalletBalance } from '@/hooks';
+import { useWalletBalance, useSwipeNavigation } from '@/hooks';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useAuth } from '@/hooks/useAuth';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
@@ -33,6 +34,7 @@ function getSolscanUrl(address: string): string {
 
 export default function WalletScreen() {
   const router = useRouter();
+  const { translateX, onTouchStart, onTouchEnd } = useSwipeNavigation({ currentScreen: '/wallet' });
   const walletQuery = useWalletBalance();
   const balance = walletQuery.data;
   const { user: profile } = useUserProfile();
@@ -94,7 +96,8 @@ export default function WalletScreen() {
   const isPositive = change24h >= 0;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top']} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <Animated.View style={[{ flex: 1 }, { transform: [{ translateX }] }]}>
       {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={handleBack} hitSlop={8}>
@@ -293,6 +296,7 @@ export default function WalletScreen() {
         visible={showComingSoon}
         onClose={() => setShowComingSoon(false)}
       />
+      </Animated.View>
     </SafeAreaView>
   );
 }

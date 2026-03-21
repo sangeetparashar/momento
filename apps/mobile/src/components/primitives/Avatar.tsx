@@ -77,6 +77,8 @@ export function Avatar({
           contentFit="cover"
           transition={200}
           placeholder={undefined}
+          cachePolicy="disk"
+          recyclingKey={uri}
         />
       </View>
     );

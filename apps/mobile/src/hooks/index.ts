@@ -14,3 +14,4 @@ export { usePublicProfile } from './usePublicProfile';
 export { usePriceHistory } from './usePriceHistory';
 export { useSearch } from './useSearch';
 export { useProfileComplete } from './useProfileComplete';
+export { useSwipeNavigation } from './useSwipeNavigation';

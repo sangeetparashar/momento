@@ -8,6 +8,7 @@ import {
   Linking,
   ActivityIndicator,
   RefreshControl,
+  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -22,8 +23,9 @@ import {
   FollowingModal,
   FavoritesSkeleton,
 } from '@/components/features';
-import { useUserProfile, useSavedPosts, useProfileComplete } from '@/hooks';
+import { useUserProfile, useSavedPosts, useProfileComplete, useSwipeNavigation } from '@/hooks';
 import { useAuth } from '@/hooks/useAuth';
+import { useNotifications } from '@/providers/NotificationProvider';
 import { apiService } from '@/services/api';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -53,6 +55,8 @@ function splitMasonryColumns(posts: any[]) {
 
 export default function ProfileScreen() {
   const router = useRouter();
+  const { translateX, onTouchStart, onTouchEnd } = useSwipeNavigation({ currentScreen: '/(tabs)/profile' });
+  const { unreadCount } = useNotifications();
   const { width: SCREEN_WIDTH } = useWindowDimensions();
   const ITEM_WIDTH = useMemo(() => (SCREEN_WIDTH - SPACING.md * 2 - COLUMN_GAP) / 2, [SCREEN_WIDTH]);
   const auth = useAuth();
@@ -202,6 +206,9 @@ export default function ProfileScreen() {
                     style={styles.masonryImage}
                     contentFit="cover"
                     transition={200}
+                    cachePolicy="disk"
+                    recyclingKey={post.mediaUrl}
+                    placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
                   />
                 ) : (
                   <View style={styles.masonryTextItem}>
@@ -226,6 +233,9 @@ export default function ProfileScreen() {
                     style={styles.masonryImage}
                     contentFit="cover"
                     transition={200}
+                    cachePolicy="disk"
+                    recyclingKey={post.mediaUrl}
+                    placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
                   />
                 ) : (
                   <View style={styles.masonryTextItem}>
@@ -290,6 +300,9 @@ export default function ProfileScreen() {
                   style={styles.masonryImage}
                   contentFit="cover"
                   transition={200}
+                  cachePolicy="disk"
+                  recyclingKey={post.mediaUrl}
+                  placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
                 />
               ) : (
                 <View style={styles.masonryTextItem}>
@@ -314,6 +327,9 @@ export default function ProfileScreen() {
                   style={styles.masonryImage}
                   contentFit="cover"
                   transition={200}
+                  cachePolicy="disk"
+                  recyclingKey={post.mediaUrl}
+                  placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
                 />
               ) : (
                 <View style={styles.masonryTextItem}>
@@ -380,19 +396,40 @@ export default function ProfileScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top']} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <Animated.View style={[{ flex: 1 }, { transform: [{ translateX }] }]}>
       {/* Header bar */}
       <View style={styles.header}>
         <Text style={styles.headerUsername}>
           {user?.username || 'Profile'}
         </Text>
-        <Pressable onPress={handleSettingsPress} hitSlop={8}>
-          <Ionicons
-            name="menu-outline"
-            size={26}
-            color={COLORS.textPrimary}
-          />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => router.push('/notifications')}
+            style={styles.bellButton}
+            hitSlop={8}
+          >
+            <Ionicons
+              name="notifications-outline"
+              size={22}
+              color={COLORS.textSecondary}
+            />
+            {unreadCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+          <Pressable onPress={handleSettingsPress} hitSlop={8}>
+            <Ionicons
+              name="menu-outline"
+              size={26}
+              color={COLORS.textPrimary}
+            />
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView
@@ -415,7 +452,7 @@ export default function ProfileScreen() {
             {!isProfileComplete && (
               <Pressable
                 style={styles.setupBanner}
-                onPress={() => router.push('/setup-profile')}
+                onPress={() => router.push({ pathname: '/setup-profile', params: { from: 'profile' } })}
               >
                 <Ionicons name="person-circle-outline" size={28} color={COLORS.primary} />
                 <View style={styles.setupBannerText}>
@@ -524,6 +561,7 @@ export default function ProfileScreen() {
         visible={showFollowing}
         onClose={() => setShowFollowing(false)}
       />
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -549,6 +587,32 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.h3,
     color: COLORS.textPrimary,
     fontWeight: '700',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+  },
+  bellButton: {
+    position: 'relative',
+    padding: SPACING.xs,
+  },
+  badge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: COLORS.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
   },
 
   // Avatar + Stats row

@@ -8,7 +8,7 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30 * 1000, // 30 seconds
-      gcTime: 2 * 60 * 1000, // 2 minutes — aggressively reclaim memory on mobile
+      gcTime: 5 * 60 * 1000, // 5 minutes — keep more data in memory for smoother navigation
       retry: 2,
       refetchOnWindowFocus: false,
       refetchOnReconnect: true,
@@ -35,12 +35,12 @@ export function QueryProvider({ children }: QueryProviderProps) {
       persistOptions={{
         persister: asyncStoragePersister,
         maxAge: 1000 * 60 * 60 * 24, // 24 hours
-        buster: 'v2',
+        buster: 'v3',
         dehydrateOptions: {
           shouldDehydrateQuery: (query) => {
             // Only persist feed, profile, and creator queries
             const key = String(query.queryKey[0]);
-            return ['feed', 'userProfile', 'creator', 'creators', 'walletBalance'].includes(key);
+            return ['userProfile', 'creator', 'creators', 'walletBalance'].includes(key);
           },
         },
       }}

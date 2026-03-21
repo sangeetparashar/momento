@@ -10,7 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -28,6 +28,7 @@ const SOCIAL_INPUTS = [
 
 export default function SetupProfileScreen() {
   const router = useRouter();
+  const { from } = useLocalSearchParams<{ from?: string }>();
   const { user, updateProfile, isUpdating } = useUserProfile();
   const { pickAndUpload, isUploading } = useUpload();
 
@@ -100,7 +101,11 @@ export default function SetupProfileScreen() {
       } as any,
       {
         onSuccess: () => {
-          router.replace('/(tabs)/home');
+          if (from === 'profile') {
+            router.back();
+          } else {
+            router.replace('/(tabs)/home');
+          }
         },
         onError: (err: Error) => {
           Alert.alert('Error', err.message || 'Failed to save profile.');
@@ -110,8 +115,12 @@ export default function SetupProfileScreen() {
   }, [username, displayName, avatarUri, socials, hasSocialLink, updateProfile, router]);
 
   const handleSkip = useCallback(() => {
-    router.replace('/(tabs)/home');
-  }, [router]);
+    if (from === 'profile') {
+      router.back();
+    } else {
+      router.replace('/(tabs)/home');
+    }
+  }, [router, from]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>

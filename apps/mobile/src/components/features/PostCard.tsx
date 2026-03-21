@@ -110,6 +110,8 @@ export function PostCard({ post }: PostCardProps) {
             contentFit="cover"
             transition={200}
             placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
+            cachePolicy="disk"
+            recyclingKey={post.mediaUrl}
           />
         </AnimatedPressable>
       ) : post.content ? (

@@ -158,6 +158,9 @@ export default function CreatorScreen() {
                   style={styles.masonryImage}
                   contentFit="cover"
                   transition={200}
+                  cachePolicy="disk"
+                  recyclingKey={post.mediaUrl}
+                  placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
                 />
               ) : (
                 <View style={styles.masonryTextItem}>
@@ -182,6 +185,9 @@ export default function CreatorScreen() {
                   style={styles.masonryImage}
                   contentFit="cover"
                   transition={200}
+                  cachePolicy="disk"
+                  recyclingKey={post.mediaUrl}
+                  placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
                 />
               ) : (
                 <View style={styles.masonryTextItem}>
@@ -231,6 +237,9 @@ export default function CreatorScreen() {
                 source={{ uri: profile.bannerUrl }}
                 style={styles.banner}
                 contentFit="cover"
+                cachePolicy="disk"
+                recyclingKey={profile.bannerUrl}
+                placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
               />
             ) : (
               <View style={[styles.banner, styles.bannerPlaceholder]} />

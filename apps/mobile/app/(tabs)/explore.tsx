@@ -16,11 +16,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar } from '@/components/primitives';
 import { ExploreSkeleton } from '@/components/features';
-import { useFeed, useNearbyCreators, useSearch } from '@/hooks';
+import { useFeed, useNearbyCreators, useSearch, useSwipeNavigation } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatDistance, formatNumber } from '@/utils/formatters';
+import { PostType } from '@momento/shared';
 import type { PostWithCreator, PublicCreator } from '@momento/shared';
+
+const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.webm'];
 
 type ExploreTab = 'CREATORS' | 'POSTS';
 
@@ -38,6 +41,7 @@ interface GridItem {
   creatorId?: string;
   followerCount?: number;
   postCount?: number;
+  isVideo?: boolean;
 }
 
 // Staggered animated card
@@ -93,12 +97,22 @@ function AnimatedCard({
         style={[styles.gridItem, { height }]}
       >
         {item.imageUri ? (
-          <Image
-            source={{ uri: item.imageUri }}
-            style={styles.gridImage}
-            contentFit="cover"
-            transition={200}
-          />
+          <>
+            <Image
+              source={{ uri: item.imageUri }}
+              style={styles.gridImage}
+              contentFit="cover"
+              transition={200}
+              cachePolicy="disk"
+              recyclingKey={item.imageUri}
+              placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
+            />
+            {item.isVideo && (
+              <View style={styles.videoPlayIcon}>
+                <Ionicons name="play-circle" size={36} color="rgba(255,255,255,0.85)" />
+              </View>
+            )}
+          </>
         ) : (
           <View style={[styles.gridImage, styles.gridPlaceholder]}>
             <Text style={styles.placeholderText}>
@@ -199,6 +213,8 @@ function PostSearchRow({
           style={styles.searchThumb}
           contentFit="cover"
           transition={200}
+          cachePolicy="disk"
+          recyclingKey={post.mediaUrl}
         />
       ) : (
         <View style={[styles.searchThumb, styles.searchThumbPlaceholder]}>
@@ -219,6 +235,7 @@ function PostSearchRow({
 }
 
 export default function ExploreScreen() {
+  const { translateX, onTouchStart, onTouchEnd } = useSwipeNavigation({ currentScreen: '/(tabs)/explore' });
   const { width: SCREEN_WIDTH } = useWindowDimensions();
   const ITEM_WIDTH = useMemo(() => (SCREEN_WIDTH - SPACING.md * 2 - COLUMN_GAP) / 2, [SCREEN_WIDTH]);
   const router = useRouter();
@@ -229,6 +246,22 @@ export default function ExploreScreen() {
   const feedQuery = useFeed();
   const creatorsQuery = useNearbyCreators();
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Sub-tab swipe between CREATORS ↔ POSTS
+  const subTabTouch = useRef<{ x: number; y: number; time: number } | null>(null);
+  const handleContentTouchStart = useCallback((e: any) => {
+    subTabTouch.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, time: Date.now() };
+  }, []);
+  const handleContentTouchEnd = useCallback((e: any) => {
+    if (!subTabTouch.current) return;
+    const dx = e.nativeEvent.pageX - subTabTouch.current.x;
+    const dy = e.nativeEvent.pageY - subTabTouch.current.y;
+    const dt = Date.now() - subTabTouch.current.time;
+    subTabTouch.current = null;
+    if (dt > 350 || Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
+    if (dx < 0 && activeTab === 'CREATORS') setActiveTab('POSTS');
+    else if (dx > 0 && activeTab === 'POSTS') setActiveTab('CREATORS');
+  }, [activeTab]);
 
   const searchType = activeTab === 'CREATORS' ? 'creators' : 'posts';
   const { results, isSearching, isActive: isSearchActive } = useSearch(searchText, searchText.length >= 2 ? searchType : 'all');
@@ -256,16 +289,21 @@ export default function ExploreScreen() {
 
   const gridItems = useMemo((): GridItem[] => {
     if (activeTab === 'POSTS') {
-      return posts.map((post: PostWithCreator, index: number) => ({
-        id: post.id,
-        type: 'post' as const,
-        imageUri: post.mediaUrl,
-        label: post.creator.displayName || post.creator.username,
-        sublabel: post.caption,
-        distanceText: post.distanceMeters ? formatDistance(post.distanceMeters) : undefined,
-        heightMultiplier: heightPattern[index % heightPattern.length],
-        postId: post.id,
-      }));
+      return posts.map((post: PostWithCreator, index: number) => {
+        const isVideo = post.postType === PostType.VIDEO ||
+          (post.mediaUrl ? VIDEO_EXTENSIONS.some((ext) => post.mediaUrl!.toLowerCase().endsWith(ext)) : false);
+        return {
+          id: post.id,
+          type: 'post' as const,
+          imageUri: post.mediaUrl,
+          label: post.creator.displayName || post.creator.username,
+          sublabel: post.caption,
+          distanceText: post.distanceMeters ? formatDistance(post.distanceMeters) : undefined,
+          heightMultiplier: heightPattern[index % heightPattern.length],
+          postId: post.id,
+          isVideo,
+        };
+      });
     }
 
     return creatorsQuery.creators.map(
@@ -338,7 +376,8 @@ export default function ExploreScreen() {
   const showSearchResults = isSearchActive && searchText.length >= 2;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['top']} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <Animated.View style={[{ flex: 1 }, { transform: [{ translateX }] }]}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Explore</Text>
@@ -407,7 +446,8 @@ export default function ExploreScreen() {
         </Pressable>
       </View>
 
-      {/* Search Results */}
+      {/* Content area — swipeable between CREATORS/POSTS */}
+      <View style={{ flex: 1 }} onTouchStart={handleContentTouchStart} onTouchEnd={handleContentTouchEnd}>
       {showSearchResults ? (
         <FlatList
           data={
@@ -450,6 +490,10 @@ export default function ExploreScreen() {
         ) : (
           <FlatList
             data={gridItems.length > 0 ? [{ key: 'masonry' }] : []}
+            removeClippedSubviews={true}
+            maxToRenderPerBatch={4}
+            windowSize={7}
+            initialNumToRender={3}
             renderItem={() => (
               <View style={styles.masonryContainer}>
                 <View style={styles.column}>
@@ -508,6 +552,8 @@ export default function ExploreScreen() {
           />
         )
       )}
+      </View>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -654,6 +700,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.backgroundTertiary,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  videoPlayIcon: {
+    position: 'absolute',
+    top: SPACING.sm,
+    right: SPACING.sm,
+    zIndex: 2,
   },
   placeholderText: {
     ...TYPOGRAPHY.h1,

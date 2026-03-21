@@ -185,6 +185,10 @@ export default function UserScreen() {
                 source={{ uri: post.mediaUrl }}
                 style={styles.gridImage}
                 contentFit="cover"
+                transition={200}
+                cachePolicy="disk"
+                recyclingKey={post.mediaUrl}
+                placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
               />
             ) : (
               <View style={styles.gridTextItem}>

@@ -10,6 +10,10 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { apiService } from '@/services/api';
+import {
+  saveNotification,
+  getUnreadCount,
+} from '@/services/notificationStorage';
 
 // expo-notifications is not available in Expo Go (removed in SDK 53+).
 // We dynamically require it and no-op when unavailable.
@@ -32,6 +36,10 @@ interface NotificationContextValue {
   pushToken: string | null;
   /** The most recent notification received while the app was foregrounded. */
   lastNotification: any | null;
+  /** Number of unread notifications stored locally. */
+  unreadCount: number;
+  /** Refresh the unread count from storage. */
+  refreshUnreadCount: () => void;
 }
 
 const NotificationContext = createContext<NotificationContextValue | null>(null);
@@ -43,9 +51,19 @@ interface NotificationProviderProps {
 export function NotificationProvider({ children }: NotificationProviderProps) {
   const [pushToken, setPushToken] = useState<string | null>(null);
   const [lastNotification, setLastNotification] = useState<any | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
   const notificationListener = useRef<any>(null);
   const responseListener = useRef<any>(null);
   const router = useRouter();
+
+  const refreshUnreadCount = useCallback(() => {
+    getUnreadCount().then(setUnreadCount).catch(() => {});
+  }, []);
+
+  // Load unread count on mount
+  useEffect(() => {
+    refreshUnreadCount();
+  }, [refreshUnreadCount]);
 
   // ---------------------------------------------------------------------------
   // Token registration
@@ -152,6 +170,20 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       notificationListener.current =
         Notifications.addNotificationReceivedListener((notification) => {
           setLastNotification(notification);
+
+          // Persist to local storage
+          const content = notification?.request?.content;
+          if (content) {
+            const data = (content.data as Record<string, string>) || {};
+            saveNotification({
+              type: data.type || 'general',
+              title: content.title || 'Momento',
+              body: content.body || '',
+              data,
+            })
+              .then(() => refreshUnreadCount())
+              .catch(() => {});
+          }
         });
 
       // Listen for notification taps
@@ -172,10 +204,12 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
         responseListener.current.remove();
       }
     };
-  }, [registerForPushNotifications, handleNotificationResponse]);
+  }, [registerForPushNotifications, handleNotificationResponse, refreshUnreadCount]);
 
   return (
-    <NotificationContext.Provider value={{ pushToken, lastNotification }}>
+    <NotificationContext.Provider
+      value={{ pushToken, lastNotification, unreadCount, refreshUnreadCount }}
+    >
       {children}
     </NotificationContext.Provider>
   );

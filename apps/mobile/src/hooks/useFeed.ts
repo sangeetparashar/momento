@@ -1,5 +1,6 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import { useInfiniteQuery } from '@tanstack/react-query';
+import { Image } from 'expo-image';
 import type { FeedResponse } from '@momento/shared';
 import { apiService } from '@/services/api';
 import { useLocation } from '@/providers/LocationProvider';
@@ -23,9 +24,15 @@ interface UseFeedOptions {
   enabled?: boolean;
 }
 
+// Default fallback location (New York City) when device location is unavailable
+const DEFAULT_LOCATION = { latitude: 40.7128, longitude: -74.006 };
+
 export function useFeed(options: UseFeedOptions = {}) {
-  const { location } = useLocation();
+  const { location: deviceLocation } = useLocation();
   const { radiusKm, sort = 'smart', enabled = true } = options;
+
+  // Use device location if available, otherwise fall back to default
+  const location = deviceLocation ?? DEFAULT_LOCATION;
 
   /**
    * Cache the last radius tier that returned enough posts so subsequent
@@ -43,7 +50,7 @@ export function useFeed(options: UseFeedOptions = {}) {
       sort,
     ],
     queryFn: async ({ pageParam }) => {
-      if (!location) throw new Error('Location not available');
+      // location is always available (device or default fallback)
       const page = (pageParam as number) ?? 0;
 
       // Determine radius: use override or try auto-expanding
@@ -92,9 +99,25 @@ export function useFeed(options: UseFeedOptions = {}) {
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) =>
       lastPage.hasMore ? allPages.length : undefined,
-    enabled: enabled && location !== null,
+    enabled,
     staleTime: 30_000,
   });
+
+  // Prefetch next few images for faster rendering (limit to 5 at a time)
+  const prefetchedRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!query.data?.pages) return;
+    const urls = query.data.pages
+      .flatMap((page) => page.posts)
+      .map((post) => post.mediaUrl)
+      .filter((url): url is string => !!url && !url.endsWith('.mp4') && !url.endsWith('.mov') && !url.endsWith('.webm'))
+      .filter((url) => !prefetchedRef.current.has(url))
+      .slice(0, 5);
+    if (urls.length > 0) {
+      urls.forEach((url) => prefetchedRef.current.add(url));
+      Image.prefetch(urls);
+    }
+  }, [query.data?.pages]);
 
   /**
    * Pull-to-refresh handler: resets the cached radius so the expansion

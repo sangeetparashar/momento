@@ -63,38 +63,39 @@ export default function TabLayout() {
           backgroundColor: COLORS.background,
           borderTopColor: COLORS.border,
           borderTopWidth: 0.5,
-          height: 56 + bottomPadding,
-          paddingTop: 8,
+          height: 64 + bottomPadding,
+          paddingTop: 10,
           paddingBottom: bottomPadding,
         },
         tabBarShowLabel: false,
         tabBarActiveTintColor: COLORS.textPrimary,
         tabBarInactiveTintColor: COLORS.textTertiary,
         tabBarButton: (props) => <AnimatedTabButton {...props} />,
-        animation: 'fade',
+        animation: 'none',
+        sceneStyle: { backgroundColor: COLORS.background },
       }}
     >
       <Tabs.Screen
         name="home"
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size} color={color} />
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="home" size={28} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="globe" size={size} color={color} />
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="globe" size={28} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size} color={color} />
+          tabBarIcon: ({ color }) => (
+            <Ionicons name="person" size={28} color={color} />
           ),
         }}
       />

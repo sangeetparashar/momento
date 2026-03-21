@@ -7,20 +7,35 @@ import {
   Pressable,
   Share,
   ActivityIndicator,
+  RefreshControl,
+  ScrollView,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { Video, ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar, MomentoLogo } from '@/components/primitives';
 import { LikeButton, TickerBanner, BookmarkButton, FeedSkeleton, FeedAlgorithmModal } from '@/components/features';
 import { useFeed } from '@/hooks';
+import { useNotifications } from '@/providers/NotificationProvider';
 import type { FeedSortMode } from '@/hooks/useFeed';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo, formatNumber } from '@/utils/formatters';
-import { DUMMY_TRENDING_TOKENS, DUMMY_CREATORS_TO_WATCH } from '@momento/shared';
+import { DUMMY_TRENDING_TOKENS, DUMMY_CREATORS_TO_WATCH, PostType } from '@momento/shared';
 import type { PostWithCreator } from '@momento/shared';
+
+const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.webm'];
+
+function isVideoPost(post: PostWithCreator): boolean {
+  if (post.postType === PostType.VIDEO) return true;
+  if (post.mediaUrl) {
+    const url = post.mediaUrl.toLowerCase();
+    return VIDEO_EXTENSIONS.some((ext) => url.endsWith(ext));
+  }
+  return false;
+}
 
 // TickerBanner data
 const TRENDING_ITEMS = DUMMY_TRENDING_TOKENS.map((t) => ({
@@ -46,16 +61,21 @@ const SORT_ICONS: Record<FeedSortMode, keyof typeof Ionicons.glyphMap> = {
   following: 'people-outline',
 };
 
-function FeedPage({ post, screenWidth, pageHeight }: { post: PostWithCreator; screenWidth: number; pageHeight: number }) {
+const FeedPage = React.memo(function FeedPage({ post, screenWidth, pageHeight, isVisible }: { post: PostWithCreator; screenWidth: number; pageHeight: number; isVisible: boolean }) {
   const router = useRouter();
+  const videoRef = useRef<Video>(null);
+  const [isMuted, setIsMuted] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(true);
+  const isVideo = isVideoPost(post);
 
   const handleCreatorPress = useCallback(() => {
     router.push(`/creator/${post.creatorId}`);
   }, [post.creatorId, router]);
 
   const handlePostPress = useCallback(() => {
+    if (isVideo) return; // Video area handles its own taps
     router.push(`/post/${post.id}`);
-  }, [post.id, router]);
+  }, [post.id, router, isVideo]);
 
   const handleShare = useCallback(() => {
     Share.share({
@@ -63,17 +83,45 @@ function FeedPage({ post, screenWidth, pageHeight }: { post: PostWithCreator; sc
     }).catch(() => {});
   }, [post.caption, post.content]);
 
+  const handleVideoTap = useCallback(() => {
+    setIsPlaying((prev) => !prev);
+  }, []);
+
+  const handleMuteToggle = useCallback(() => {
+    setIsMuted((prev) => !prev);
+  }, []);
+
   return (
     <View style={[styles.page, { width: screenWidth, height: pageHeight }]}>
       {/* Full-screen media — contain to show full image */}
       <Pressable onPress={handlePostPress} style={styles.mediaContainer}>
-        {post.mediaUrl ? (
+        {post.mediaUrl && isVideo ? (
+          <Pressable onPress={handleVideoTap} style={styles.mediaContainer}>
+            <Video
+              ref={videoRef}
+              source={{ uri: post.mediaUrl }}
+              style={styles.fullImage}
+              shouldPlay={isVisible && isPlaying}
+              isMuted={isMuted}
+              isLooping
+              resizeMode={ResizeMode.CONTAIN}
+            />
+            {/* Play/Pause indicator */}
+            {!isPlaying && (
+              <View style={styles.videoPlayOverlay}>
+                <Ionicons name="play" size={48} color="rgba(255,255,255,0.8)" />
+              </View>
+            )}
+          </Pressable>
+        ) : post.mediaUrl ? (
           <Image
             source={{ uri: post.mediaUrl }}
             style={styles.fullImage}
             contentFit="contain"
             transition={200}
             placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
+            cachePolicy="disk"
+            recyclingKey={post.mediaUrl}
           />
         ) : (
           <View style={styles.textPostContainer}>
@@ -83,6 +131,17 @@ function FeedPage({ post, screenWidth, pageHeight }: { post: PostWithCreator; sc
           </View>
         )}
       </Pressable>
+
+      {/* Mute/Unmute toggle for video posts */}
+      {isVideo && post.mediaUrl && (
+        <Pressable onPress={handleMuteToggle} style={styles.muteButton} hitSlop={8}>
+          <Ionicons
+            name={isMuted ? 'volume-mute' : 'volume-high'}
+            size={20}
+            color={COLORS.textPrimary}
+          />
+        </Pressable>
+      )}
 
       {/* Right-side action buttons (TikTok-style) */}
       <View style={styles.actionsColumn}>
@@ -147,10 +206,11 @@ function FeedPage({ post, screenWidth, pageHeight }: { post: PostWithCreator; sc
       </View>
     </View>
   );
-}
+});
 
 export default function HomeScreen() {
   const router = useRouter();
+  const { unreadCount } = useNotifications();
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   const PAGE_HEIGHT = SCREEN_HEIGHT - HEADER_HEIGHT - TICKER_HEIGHT - TAB_BAR_HEIGHT;
   const [feedSort, setFeedSort] = useState<FeedSortMode>('smart');
@@ -198,9 +258,13 @@ export default function HomeScreen() {
   }).current;
 
   const renderItem = useCallback(
-    ({ item }: { item: PostWithCreator }) => <FeedPage post={item} screenWidth={SCREEN_WIDTH} pageHeight={PAGE_HEIGHT} />,
-    [SCREEN_WIDTH, PAGE_HEIGHT]
+    ({ item, index }: { item: PostWithCreator; index: number }) => (
+      <FeedPage post={item} screenWidth={SCREEN_WIDTH} pageHeight={PAGE_HEIGHT} isVisible={index === currentIndex} />
+    ),
+    [SCREEN_WIDTH, PAGE_HEIGHT, currentIndex]
   );
+
+  const extraData = currentIndex;
 
   const keyExtractor = useCallback(
     (item: PostWithCreator) => item.id,
@@ -220,6 +284,20 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
+      <ScrollView
+        style={styles.scrollContainer}
+        contentContainerStyle={styles.scrollContent}
+        scrollEnabled={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={feedQuery.isRefetching}
+            onRefresh={handleRefresh}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
+            progressBackgroundColor={COLORS.surfaceElevated}
+          />
+        }
+      >
       {/* Compact header */}
       <View style={styles.header}>
         {/* Algorithm button — left side */}
@@ -237,13 +315,34 @@ export default function HomeScreen() {
 
         <MomentoLogo size={28} />
 
-        <Pressable onPress={handleRefresh} style={styles.refreshButton} hitSlop={8}>
-          {feedQuery.isRefetching ? (
-            <ActivityIndicator size="small" color={COLORS.primary} />
-          ) : (
-            <Ionicons name="refresh" size={20} color={COLORS.textSecondary} />
-          )}
-        </Pressable>
+        <View style={styles.headerRight}>
+          <Pressable
+            onPress={() => router.push('/notifications')}
+            style={styles.bellButton}
+            hitSlop={8}
+          >
+            <Ionicons
+              name="notifications-outline"
+              size={20}
+              color={COLORS.textSecondary}
+            />
+            {unreadCount > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+
+          <Pressable onPress={handleRefresh} hitSlop={8}>
+            {feedQuery.isRefetching ? (
+              <ActivityIndicator size="small" color={COLORS.primary} />
+            ) : (
+              <Ionicons name="refresh" size={20} color={COLORS.textSecondary} />
+            )}
+          </Pressable>
+        </View>
       </View>
 
       {/* Ticker Banners */}
@@ -272,6 +371,7 @@ export default function HomeScreen() {
           <FlatList
             ref={flatListRef}
             data={posts}
+            extraData={extraData}
             renderItem={renderItem}
             keyExtractor={keyExtractor}
             horizontal
@@ -286,6 +386,7 @@ export default function HomeScreen() {
               offset: SCREEN_WIDTH * index,
               index,
             })}
+            removeClippedSubviews={true}
             initialNumToRender={2}
             maxToRenderPerBatch={3}
             windowSize={5}
@@ -307,6 +408,7 @@ export default function HomeScreen() {
         currentSort={feedSort}
         onSortChange={handleSortChange}
       />
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -315,6 +417,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  scrollContainer: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   header: {
     height: HEADER_HEIGHT,
@@ -340,10 +448,33 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  refreshButton: {
+  headerRight: {
     position: 'absolute',
     right: SPACING.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+  },
+  bellButton: {
+    position: 'relative',
     padding: SPACING.xs,
+  },
+  badge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: COLORS.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: COLORS.textPrimary,
   },
 
   // Ticker banners
@@ -374,6 +505,25 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.h2,
     color: COLORS.textPrimary,
     lineHeight: 34,
+  },
+
+  // Video controls
+  videoPlayOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.2)',
+  },
+  muteButton: {
+    position: 'absolute',
+    top: SPACING.md,
+    left: SPACING.md,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   // Right-side actions (TikTok style)
