@@ -18,3 +18,4 @@ export { useSwipeNavigation } from './useSwipeNavigation';
 export { useOnramp } from './useOnramp';
 export { useSwap } from './useSwap';
 export { useCoachMark } from './useCoachMark';
+export { useCreatorLeaderboard } from './useCreatorLeaderboard';

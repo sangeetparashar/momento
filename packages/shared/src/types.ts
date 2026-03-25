@@ -174,6 +174,23 @@ export interface SwapTransactionResponse {
   lastValidBlockHeight: number;
 }
 
+// Leaderboard types
+export interface CreatorLeaderboardEntry {
+  id: string;
+  username?: string;
+  displayName?: string;
+  avatarUrl?: string;
+  tokenSymbol?: string;
+  followerCount: number;
+  postCount: number;
+  topPostLikeCount: number;
+}
+
+export interface CreatorLeaderboardResponse {
+  trending: CreatorLeaderboardEntry[];
+  mostActive: CreatorLeaderboardEntry[];
+}
+
 // API Response types
 export interface FeedResponse {
   posts: PostWithCreator[];

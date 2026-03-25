@@ -6,106 +6,110 @@ import {
   Pressable,
   TextInput,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar } from '@/components/primitives';
 import { TickerBanner, ComingSoonModal } from '@/components/features';
+import { useCreatorLeaderboard } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
-import { formatCurrency, formatNumber } from '@/utils/formatters';
-import { DUMMY_TRENDING_TOKENS, DUMMY_CREATORS_TO_WATCH } from '@momento/shared';
+import { formatNumber } from '@/utils/formatters';
+import type { CreatorLeaderboardEntry } from '@momento/shared';
 
-type MarketTab = 'TRENDING' | '24H GAINERS' | 'TOP';
+type MarketTab = 'TRENDING' | 'MOST ACTIVE' | 'TOP';
 
-interface MarketToken {
+interface MarketCreator extends CreatorLeaderboardEntry {
   rank: number;
-  symbol: string;
-  name: string;
-  creatorName: string;
-  creatorAvatar?: string;
-  change24h: number;
-  marketCap: number;
-  price: number;
 }
-
-const TRENDING_ITEMS = DUMMY_TRENDING_TOKENS.map((t) => ({
-  symbol: t.symbol,
-  change: t.change,
-}));
-
-const CREATORS_ITEMS = DUMMY_CREATORS_TO_WATCH.map((t) => ({
-  symbol: t.symbol,
-  change: t.change,
-}));
-
-const DUMMY_MARKET_TOKENS: MarketToken[] = [
-  { rank: 1, symbol: 'DEEL', name: 'Deel Token', creatorName: 'Deel', change24h: 12.5, marketCap: 2500000, price: 4.25 },
-  { rank: 2, symbol: 'AURA', name: 'Aura Coin', creatorName: 'Aura', change24h: 24.1, marketCap: 1800000, price: 3.12 },
-  { rank: 3, symbol: 'NAAN', name: 'Naan Token', creatorName: 'Naan', change24h: 8.7, marketCap: 1500000, price: 2.80 },
-  { rank: 4, symbol: 'TASH', name: 'Tash Coin', creatorName: 'Tash', change24h: 45.2, marketCap: 1200000, price: 1.95 },
-  { rank: 5, symbol: 'TEAH', name: 'Teah Token', creatorName: 'Teah', change24h: 18.9, marketCap: 950000, price: 1.40 },
-  { rank: 6, symbol: 'TWSH', name: 'Twsh Coin', creatorName: 'Twsh', change24h: 7.3, marketCap: 800000, price: 0.98 },
-  { rank: 7, symbol: 'BELLE', name: 'Belle Token', creatorName: 'Belle', change24h: -3.2, marketCap: 650000, price: 0.75 },
-  { rank: 8, symbol: 'SEAM', name: 'Seam Coin', creatorName: 'Seam', change24h: -1.5, marketCap: 520000, price: 0.62 },
-  { rank: 9, symbol: 'CHCTS', name: 'Chcts Token', creatorName: 'Chcts', change24h: -2.1, marketCap: 400000, price: 0.45 },
-  { rank: 10, symbol: 'VIBE', name: 'Vibe Token', creatorName: 'Vibe', change24h: 5.8, marketCap: 350000, price: 0.38 },
-];
 
 export default function MarketScreen() {
   const router = useRouter();
+  const leaderboard = useCreatorLeaderboard();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<MarketTab>('TRENDING');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [showComingSoon, setShowComingSoon] = useState(false);
-  const [selectedToken, setSelectedToken] = useState<MarketToken | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [selectedCreator, setSelectedCreator] = useState<MarketCreator | null>(null);
 
   const handleRefresh = useCallback(() => {
-    setIsRefreshing(true);
-    setTimeout(() => setIsRefreshing(false), 500);
-  }, []);
+    leaderboard.refetch();
+  }, [leaderboard]);
 
   const handleBack = useCallback(() => {
     router.back();
   }, [router]);
 
-  const filteredTokens = useMemo(() => {
-    let tokens = [...DUMMY_MARKET_TOKENS];
+  // Derive ticker banner items from real data
+  const trendingItems = useMemo(() => {
+    if (!leaderboard.data?.trending) return [];
+    return leaderboard.data.trending.map((c) => ({
+      symbol: c.tokenSymbol || `$${c.username}`,
+      change: c.topPostLikeCount,
+    }));
+  }, [leaderboard.data?.trending]);
+
+  const creatorsItems = useMemo(() => {
+    if (!leaderboard.data?.mostActive) return [];
+    return leaderboard.data.mostActive.map((c) => ({
+      symbol: c.tokenSymbol || `$${c.username}`,
+      change: c.postCount,
+    }));
+  }, [leaderboard.data?.mostActive]);
+
+  // Build combined + deduplicated creator list for the main table
+  const allCreators = useMemo((): MarketCreator[] => {
+    if (!leaderboard.data) return [];
+    const seen = new Set<string>();
+    const combined: CreatorLeaderboardEntry[] = [];
+    for (const c of [...(leaderboard.data.trending || []), ...(leaderboard.data.mostActive || [])]) {
+      if (!seen.has(c.id)) {
+        seen.add(c.id);
+        combined.push(c);
+      }
+    }
+    return combined.map((c, i) => ({ ...c, rank: i + 1 }));
+  }, [leaderboard.data]);
+
+  const filteredCreators = useMemo(() => {
+    let creators = [...allCreators];
 
     // Filter by search
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
-      tokens = tokens.filter(
-        (t) =>
-          t.symbol.toLowerCase().includes(query) ||
-          t.name.toLowerCase().includes(query)
+      creators = creators.filter(
+        (c) =>
+          (c.tokenSymbol || '').toLowerCase().includes(query) ||
+          (c.username || '').toLowerCase().includes(query) ||
+          (c.displayName || '').toLowerCase().includes(query),
       );
     }
 
     // Sort by tab
     switch (activeTab) {
       case 'TRENDING':
-        tokens.sort((a, b) => Math.abs(b.change24h) - Math.abs(a.change24h));
+        creators.sort((a, b) => b.topPostLikeCount - a.topPostLikeCount);
         break;
-      case '24H GAINERS':
-        tokens.sort((a, b) => b.change24h - a.change24h);
+      case 'MOST ACTIVE':
+        creators.sort((a, b) => b.postCount - a.postCount);
         break;
       case 'TOP':
-        tokens.sort((a, b) => b.marketCap - a.marketCap);
+        creators.sort((a, b) => b.followerCount - a.followerCount);
         break;
     }
 
-    return tokens;
-  }, [searchQuery, activeTab]);
+    // Re-rank after sorting
+    return creators.map((c, i) => ({ ...c, rank: i + 1 }));
+  }, [allCreators, searchQuery, activeTab]);
 
-  const handleRowPress = useCallback((symbol: string) => {
-    setExpandedRow((prev) => (prev === symbol ? null : symbol));
+  const handleRowPress = useCallback((id: string) => {
+    setExpandedRow((prev) => (prev === id ? null : id));
   }, []);
 
-  const handleBuyPress = useCallback((token: MarketToken) => {
-    setSelectedToken(token);
+  const handleBuyPress = useCallback((creator: MarketCreator) => {
+    setSelectedCreator(creator);
     setShowComingSoon(true);
   }, []);
 
@@ -114,11 +118,7 @@ export default function MarketScreen() {
       {/* Nav Bar */}
       <View style={styles.navBar}>
         <Pressable onPress={handleBack} style={styles.backButton} hitSlop={8}>
-          <Ionicons
-            name="chevron-back"
-            size={28}
-            color={COLORS.textPrimary}
-          />
+          <Ionicons name="chevron-back" size={28} color={COLORS.textPrimary} />
         </Pressable>
         <Text style={styles.navTitle}>Market</Text>
         <View style={styles.navSpacer} />
@@ -128,7 +128,7 @@ export default function MarketScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
-            refreshing={isRefreshing}
+            refreshing={leaderboard.isRefetching}
             onRefresh={handleRefresh}
             tintColor={COLORS.textTertiary}
           />
@@ -136,166 +136,130 @@ export default function MarketScreen() {
       >
         {/* Search Bar */}
         <View style={styles.searchContainer}>
-          <Ionicons
-            name="search"
-            size={18}
-            color={COLORS.textTertiary}
-          />
+          <Ionicons name="search" size={18} color={COLORS.textTertiary} />
           <TextInput
             style={styles.searchInput}
             value={searchQuery}
             onChangeText={setSearchQuery}
-            placeholder="Search tokens..."
+            placeholder="Search creators..."
             placeholderTextColor={COLORS.textTertiary}
           />
           {searchQuery.length > 0 && (
             <Pressable onPress={() => setSearchQuery('')}>
-              <Ionicons
-                name="close-circle"
-                size={18}
-                color={COLORS.textTertiary}
-              />
+              <Ionicons name="close-circle" size={18} color={COLORS.textTertiary} />
             </Pressable>
           )}
         </View>
 
         {/* Ticker Banners */}
-        <TickerBanner title="TRENDING" items={TRENDING_ITEMS} />
-        <TickerBanner
-          title="CREATORS TO WATCH"
-          items={CREATORS_ITEMS}
-        />
+        {trendingItems.length > 0 && (
+          <TickerBanner title="TRENDING" items={trendingItems} valueSuffix=" likes" />
+        )}
+        {creatorsItems.length > 0 && (
+          <TickerBanner title="MOST ACTIVE" items={creatorsItems} valueSuffix=" posts" />
+        )}
 
         {/* Tab Filters */}
         <View style={styles.tabsContainer}>
-          {(['TRENDING', '24H GAINERS', 'TOP'] as MarketTab[]).map((tab) => (
+          {(['TRENDING', 'MOST ACTIVE', 'TOP'] as MarketTab[]).map((tab) => (
             <Pressable
               key={tab}
               onPress={() => setActiveTab(tab)}
-              style={[
-                styles.tabButton,
-                activeTab === tab && styles.tabButtonActive,
-              ]}
+              style={[styles.tabButton, activeTab === tab && styles.tabButtonActive]}
             >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === tab && styles.tabTextActive,
-                ]}
-              >
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
                 {tab}
               </Text>
             </Pressable>
           ))}
         </View>
 
-        {/* Token List */}
-        <View style={styles.tokenListContainer}>
-          {/* Header */}
-          <View style={styles.listHeaderRow}>
-            <Text style={[styles.listHeaderCell, styles.rankColumn]}>#</Text>
-            <Text style={[styles.listHeaderCell, styles.tokenColumn]}>
-              TOKEN
-            </Text>
-            <Text style={[styles.listHeaderCell, styles.changeColumn]}>
-              24HR
-            </Text>
-            <Text style={[styles.listHeaderCell, styles.mcapColumn]}>
-              MCAP
-            </Text>
+        {/* Loading state */}
+        {leaderboard.isLoading ? (
+          <View style={styles.loadingState}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
           </View>
+        ) : (
+          <View style={styles.tokenListContainer}>
+            {/* Header */}
+            <View style={styles.listHeaderRow}>
+              <Text style={[styles.listHeaderCell, styles.rankColumn]}>#</Text>
+              <Text style={[styles.listHeaderCell, styles.tokenColumn]}>CREATOR</Text>
+              <Text style={[styles.listHeaderCell, styles.changeColumn]}>TOP POST</Text>
+              <Text style={[styles.listHeaderCell, styles.mcapColumn]}>POSTS</Text>
+            </View>
 
-          {/* Rows */}
-          {filteredTokens.map((token) => (
-            <View key={token.symbol}>
-              <Pressable
-                onPress={() => handleRowPress(token.symbol)}
-                style={styles.tokenRow}
-              >
-                <Text style={[styles.rankText, styles.rankColumn]}>
-                  {token.rank}
-                </Text>
-                <View style={[styles.tokenColumn, styles.tokenInfo]}>
-                  <View style={styles.tokenAvatar}>
-                    <Text style={styles.tokenAvatarText}>
-                      {token.symbol.charAt(0)}
-                    </Text>
-                  </View>
-                  <View>
-                    <Text style={styles.tokenSymbol}>{token.symbol}</Text>
-                    <Text style={styles.tokenName} numberOfLines={1}>
-                      {token.name}
-                    </Text>
-                  </View>
-                </View>
-                <Text
-                  style={[
-                    styles.changeText,
-                    styles.changeColumn,
-                    {
-                      color:
-                        token.change24h >= 0
-                          ? COLORS.success
-                          : COLORS.error,
-                    },
-                  ]}
-                >
-                  {token.change24h >= 0 ? '+' : ''}
-                  {token.change24h.toFixed(1)}%
-                </Text>
-                <Text style={[styles.mcapText, styles.mcapColumn]}>
-                  {formatNumber(token.marketCap)}
-                </Text>
-              </Pressable>
-
-              {/* Expanded Row */}
-              {expandedRow === token.symbol && (
-                <View style={styles.expandedRow}>
-                  <Pressable
-                    style={styles.expandedCreator}
-                    onPress={() => router.push(`/creator/${token.symbol}`)}
-                  >
-                    <Avatar
-                      uri={token.creatorAvatar}
-                      name={token.creatorName}
-                      size="md"
-                    />
-                    <View style={styles.expandedCreatorInfo}>
-                      <Text style={styles.expandedCreatorName}>{token.creatorName}</Text>
-                      <Text style={styles.expandedPrice}>{formatCurrency(token.price)}</Text>
-                      <Text style={styles.expandedViewProfile}>View Profile →</Text>
+            {/* Rows */}
+            {filteredCreators.map((creator) => {
+              const symbol = creator.tokenSymbol || creator.username?.toUpperCase() || '?';
+              return (
+                <View key={creator.id}>
+                  <Pressable onPress={() => handleRowPress(creator.id)} style={styles.tokenRow}>
+                    <Text style={[styles.rankText, styles.rankColumn]}>{creator.rank}</Text>
+                    <View style={[styles.tokenColumn, styles.tokenInfo]}>
+                      <Avatar uri={creator.avatarUrl} name={creator.displayName || creator.username || '?'} size="sm" />
+                      <View>
+                        <Text style={styles.tokenSymbol}>${symbol}</Text>
+                        <Text style={styles.tokenName} numberOfLines={1}>
+                          {creator.displayName || creator.username || 'Creator'}
+                        </Text>
+                      </View>
                     </View>
+                    <Text style={[styles.changeText, styles.changeColumn, { color: COLORS.success }]}>
+                      {formatNumber(creator.topPostLikeCount)} likes
+                    </Text>
+                    <Text style={[styles.mcapText, styles.mcapColumn]}>
+                      {formatNumber(creator.postCount)}
+                    </Text>
                   </Pressable>
-                  <Pressable
-                    onPress={() => handleBuyPress(token)}
-                    style={styles.buyButton}
-                  >
-                    <Text style={styles.buyButtonText}>BUY</Text>
-                  </Pressable>
-                </View>
-              )}
-            </View>
-          ))}
 
-          {filteredTokens.length === 0 && (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyText}>No tokens found</Text>
-            </View>
-          )}
-        </View>
+                  {/* Expanded Row */}
+                  {expandedRow === creator.id && (
+                    <View style={styles.expandedRow}>
+                      <Pressable
+                        style={styles.expandedCreator}
+                        onPress={() => router.push(`/creator/${creator.id}`)}
+                      >
+                        <Avatar uri={creator.avatarUrl} name={creator.displayName || creator.username || '?'} size="md" />
+                        <View style={styles.expandedCreatorInfo}>
+                          <Text style={styles.expandedCreatorName}>
+                            {creator.displayName || creator.username}
+                          </Text>
+                          <Text style={styles.expandedFollowers}>
+                            {formatNumber(creator.followerCount)} followers
+                          </Text>
+                          <Text style={styles.expandedViewProfile}>View Profile →</Text>
+                        </View>
+                      </Pressable>
+                      <Pressable onPress={() => handleBuyPress(creator)} style={styles.buyButton}>
+                        <Text style={styles.buyButtonText}>BUY</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+
+            {filteredCreators.length === 0 && (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyText}>No creators found</Text>
+              </View>
+            )}
+          </View>
+        )}
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
       <ComingSoonModal
         visible={showComingSoon}
-        onClose={() => { setShowComingSoon(false); setSelectedToken(null); }}
+        onClose={() => { setShowComingSoon(false); setSelectedCreator(null); }}
         title="Trading Coming Soon!"
         message="Token trading will be available in the next update."
-        creator={selectedToken ? {
-          id: selectedToken.symbol,
-          displayName: selectedToken.creatorName,
-          avatarUrl: selectedToken.creatorAvatar,
+        creator={selectedCreator ? {
+          id: selectedCreator.id,
+          displayName: selectedCreator.displayName || selectedCreator.username,
+          avatarUrl: selectedCreator.avatarUrl,
           role: 'CREATOR',
         } : undefined}
       />
@@ -367,6 +331,10 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: COLORS.background,
   },
+  loadingState: {
+    paddingVertical: SPACING.xl * 3,
+    alignItems: 'center',
+  },
   tokenListContainer: {
     backgroundColor: COLORS.surface,
     borderRadius: RADII.lg,
@@ -405,7 +373,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   mcapColumn: {
-    flex: 1.2,
+    flex: 1,
     textAlign: 'right',
   },
   rankText: {
@@ -418,19 +386,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACING.sm,
   },
-  tokenAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.backgroundTertiary,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  tokenAvatarText: {
-    ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textPrimary,
-    fontWeight: '700',
-  },
   tokenSymbol: {
     ...TYPOGRAPHY.bodySmall,
     color: COLORS.textPrimary,
@@ -441,7 +396,7 @@ const styles = StyleSheet.create({
     color: COLORS.textTertiary,
   },
   changeText: {
-    ...TYPOGRAPHY.bodySmall,
+    ...TYPOGRAPHY.caption,
     fontWeight: '600',
   },
   mcapText: {
@@ -473,7 +428,7 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontWeight: '700',
   },
-  expandedPrice: {
+  expandedFollowers: {
     ...TYPOGRAPHY.bodySmall,
     color: COLORS.textSecondary,
     marginTop: 1,

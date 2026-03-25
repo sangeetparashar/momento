@@ -35,6 +35,8 @@ export const cacheKeys = {
 
   postComments: (postId: string, cursor?: string) =>
     `post:${postId}:comments:${cursor || 'first'}`,
+
+  creatorLeaderboard: () => 'creators:leaderboard',
 };
 
 // ─── TTLs (in seconds) ─────────────────────────────────────────────────────
@@ -48,6 +50,7 @@ export const cacheTTL = {
   walletBalance: 30,    // 30 seconds
   postDetail: 300,      // 5 minutes
   postComments: 60,     // 1 minute
+  creatorLeaderboard: 300, // 5 minutes
 };
 
 // ─── Cache Helpers ──────────────────────────────────────────────────────────

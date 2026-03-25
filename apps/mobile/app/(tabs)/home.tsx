@@ -17,13 +17,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar, MomentoLogo, CoachMark } from '@/components/primitives';
 import { LikeButton, TickerBanner, BookmarkButton, FeedSkeleton, FeedAlgorithmModal, SwipeIndicator } from '@/components/features';
-import { useFeed } from '@/hooks';
+import { useFeed, useCreatorLeaderboard } from '@/hooks';
 import { useNotifications } from '@/providers/NotificationProvider';
 import type { FeedSortMode } from '@/hooks/useFeed';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo, formatNumber } from '@/utils/formatters';
-import { DUMMY_TRENDING_TOKENS, DUMMY_CREATORS_TO_WATCH, PostType } from '@momento/shared';
+import { PostType } from '@momento/shared';
 import type { PostWithCreator } from '@momento/shared';
 
 const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.webm'];
@@ -36,17 +36,6 @@ function isVideoPost(post: PostWithCreator): boolean {
   }
   return false;
 }
-
-// TickerBanner data
-const TRENDING_ITEMS = DUMMY_TRENDING_TOKENS.map((t) => ({
-  symbol: t.symbol,
-  change: t.change,
-}));
-
-const CREATORS_ITEMS = DUMMY_CREATORS_TO_WATCH.map((t) => ({
-  symbol: t.symbol,
-  change: t.change,
-}));
 
 // Reserve space for header + tickers + tab bar
 const HEADER_HEIGHT = 44;
@@ -228,7 +217,25 @@ export default function HomeScreen() {
   const [showAlgoModal, setShowAlgoModal] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const feedQuery = useFeed({ sort: feedSort }, currentIndex);
+  const leaderboard = useCreatorLeaderboard();
   const flashListRef = useRef<FlashList<PostWithCreator>>(null);
+
+  // Derive ticker banner items from real creator data
+  const trendingItems = useMemo(() => {
+    if (!leaderboard.data?.trending) return [];
+    return leaderboard.data.trending.map((c) => ({
+      symbol: c.tokenSymbol || `$${c.username}`,
+      change: c.topPostLikeCount,
+    }));
+  }, [leaderboard.data?.trending]);
+
+  const creatorsItems = useMemo(() => {
+    if (!leaderboard.data?.mostActive) return [];
+    return leaderboard.data.mostActive.map((c) => ({
+      symbol: c.tokenSymbol || `$${c.username}`,
+      change: c.postCount,
+    }));
+  }, [leaderboard.data?.mostActive]);
 
   const posts = useMemo(() => {
     if (!feedQuery.data?.pages) return [];
@@ -358,16 +365,22 @@ export default function HomeScreen() {
 
       {/* Ticker Banners */}
       <View style={styles.tickerSection}>
-        <TickerBanner
-          title="TRENDING"
-          items={TRENDING_ITEMS}
-          onPress={handleTickerPress}
-        />
-        <TickerBanner
-          title="CREATORS TO WATCH"
-          items={CREATORS_ITEMS}
-          onPress={handleTickerPress}
-        />
+        {trendingItems.length > 0 && (
+          <TickerBanner
+            title="TRENDING"
+            items={trendingItems}
+            valueSuffix=" likes"
+            onPress={handleTickerPress}
+          />
+        )}
+        {creatorsItems.length > 0 && (
+          <TickerBanner
+            title="MOST ACTIVE"
+            items={creatorsItems}
+            valueSuffix=" posts"
+            onPress={handleTickerPress}
+          />
+        )}
       </View>
 
       {posts.length === 0 ? (
