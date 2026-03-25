@@ -20,7 +20,7 @@ import { truncateAddress } from '@/utils/formatters';
 import { ENV } from '@/config/env';
 import type { OnrampProvider } from '@momento/shared';
 
-type FundingMethod = 'picker' | 'transak' | 'stripe' | 'onchain';
+type FundingMethod = 'picker' | 'moonpay' | 'transak' | 'onchain';
 
 interface FundWalletModalProps {
   visible: boolean;
@@ -59,7 +59,7 @@ export function FundWalletModal({ visible, onClose }: FundWalletModalProps) {
             </Pressable>
           )}
           <Text style={styles.headerTitle}>
-            {method === 'picker' ? 'Fund Your Account' : method === 'onchain' ? 'On-Chain Transfer' : method === 'stripe' ? 'Buy via Stripe' : 'Buy via Transak'}
+            {method === 'picker' ? 'Fund Your Account' : method === 'onchain' ? 'On-Chain Transfer' : method === 'moonpay' ? 'Buy via MoonPay' : 'Buy via Transak'}
           </Text>
           {method !== 'picker' ? (
             <Pressable onPress={handleClose} hitSlop={12} style={styles.headerButton}>
@@ -73,9 +73,9 @@ export function FundWalletModal({ visible, onClose }: FundWalletModalProps) {
         {method === 'picker' && (
           <MethodPicker onSelect={setMethod} />
         )}
-        {(method === 'transak' || method === 'stripe') && (
+        {(method === 'moonpay' || method === 'transak') && (
           <OnrampWebView
-            provider={method === 'stripe' ? 'stripe' : 'transak'}
+            provider={method}
             onClose={handleClose}
           />
         )}
@@ -98,27 +98,27 @@ function MethodPicker({ onSelect }: { onSelect: (m: FundingMethod) => void }) {
         Choose how you'd like to add funds to your Solana wallet
       </Text>
 
-      <Pressable style={styles.methodCard} onPress={() => onSelect('transak')}>
-        <View style={[styles.methodIcon, { backgroundColor: '#4643E8' }]}>
+      <Pressable style={styles.methodCard} onPress={() => onSelect('moonpay')}>
+        <View style={[styles.methodIcon, { backgroundColor: '#7B61FF' }]}>
           <Ionicons name="card" size={24} color="#FFFFFF" />
         </View>
         <View style={styles.methodInfo}>
-          <Text style={styles.methodTitle}>Transak</Text>
+          <Text style={styles.methodTitle}>MoonPay</Text>
           <Text style={styles.methodDesc}>
-            Buy USDC with credit card, debit card, or bank transfer
+            Apple Pay, Google Pay, PayPal, Venmo, cards, or bank transfer
           </Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
       </Pressable>
 
-      <Pressable style={styles.methodCard} onPress={() => onSelect('stripe')}>
-        <View style={[styles.methodIcon, { backgroundColor: '#635BFF' }]}>
+      <Pressable style={styles.methodCard} onPress={() => onSelect('transak')}>
+        <View style={[styles.methodIcon, { backgroundColor: '#4643E8' }]}>
           <Ionicons name="logo-usd" size={24} color="#FFFFFF" />
         </View>
         <View style={styles.methodInfo}>
-          <Text style={styles.methodTitle}>Stripe</Text>
+          <Text style={styles.methodTitle}>Transak</Text>
           <Text style={styles.methodDesc}>
-            Buy USDC with card or Apple Pay via Stripe's secure checkout
+            Buy USDC with card, Apple Pay, or bank transfer. Lower fees.
           </Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
@@ -168,7 +168,7 @@ function OnrampWebView({
       if (
         url.includes('transak.com/complete') ||
         url.includes('status=completed') ||
-        url.includes('crypto.link.com/success')
+        url.includes('moonpay.com/transaction_receipt')
       ) {
         setTimeout(onClose, 2000);
       }
@@ -176,7 +176,7 @@ function OnrampWebView({
     [onClose]
   );
 
-  const providerLabel = provider === 'stripe' ? 'Stripe' : 'Transak';
+  const providerLabel = provider === 'moonpay' ? 'MoonPay' : 'Transak';
 
   return (
     <>
