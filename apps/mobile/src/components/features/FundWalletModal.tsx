@@ -6,6 +6,7 @@ import {
   Pressable,
   ActivityIndicator,
   Share,
+  ScrollView,
 } from 'react-native';
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import * as Clipboard from 'expo-clipboard';
@@ -16,11 +17,18 @@ import { useUserProfile } from '@/hooks/useUserProfile';
 import { useAuth } from '@/hooks/useAuth';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
-import { truncateAddress } from '@/utils/formatters';
 import { ENV } from '@/config/env';
 import type { OnrampProvider } from '@momento/shared';
 
-type FundingMethod = 'picker' | 'moonpay' | 'transak' | 'onchain';
+type FundingMethod = 'picker' | OnrampProvider | 'onchain';
+
+const HEADER_TITLES: Record<FundingMethod, string> = {
+  picker: 'Fund Your Account',
+  ramp: 'Buy USDC via Ramp',
+  moonpay: 'Buy USDC via MoonPay',
+  transak: 'Buy USDC via Transak',
+  onchain: 'Transfer from Wallet',
+};
 
 interface FundWalletModalProps {
   visible: boolean;
@@ -38,6 +46,8 @@ export function FundWalletModal({ visible, onClose }: FundWalletModalProps) {
   const handleBack = useCallback(() => {
     setMethod('picker');
   }, []);
+
+  const isWebView = method === 'ramp' || method === 'moonpay' || method === 'transak';
 
   return (
     <Modal
@@ -58,9 +68,7 @@ export function FundWalletModal({ visible, onClose }: FundWalletModalProps) {
               <Ionicons name="close" size={24} color={COLORS.textPrimary} />
             </Pressable>
           )}
-          <Text style={styles.headerTitle}>
-            {method === 'picker' ? 'Fund Your Account' : method === 'onchain' ? 'On-Chain Transfer' : method === 'moonpay' ? 'Buy via MoonPay' : 'Buy via Transak'}
-          </Text>
+          <Text style={styles.headerTitle}>{HEADER_TITLES[method]}</Text>
           {method !== 'picker' ? (
             <Pressable onPress={handleClose} hitSlop={12} style={styles.headerButton}>
               <Ionicons name="close" size={24} color={COLORS.textPrimary} />
@@ -70,18 +78,9 @@ export function FundWalletModal({ visible, onClose }: FundWalletModalProps) {
           )}
         </View>
 
-        {method === 'picker' && (
-          <MethodPicker onSelect={setMethod} />
-        )}
-        {(method === 'moonpay' || method === 'transak') && (
-          <OnrampWebView
-            provider={method}
-            onClose={handleClose}
-          />
-        )}
-        {method === 'onchain' && (
-          <OnChainTransfer onClose={handleClose} />
-        )}
+        {method === 'picker' && <MethodPicker onSelect={setMethod} />}
+        {isWebView && <OnrampWebView provider={method as OnrampProvider} onClose={handleClose} />}
+        {method === 'onchain' && <OnChainTransfer />}
       </View>
     </Modal>
   );
@@ -93,10 +92,28 @@ export function FundWalletModal({ visible, onClose }: FundWalletModalProps) {
 
 function MethodPicker({ onSelect }: { onSelect: (m: FundingMethod) => void }) {
   return (
-    <View style={styles.pickerContainer}>
+    <ScrollView style={styles.pickerContainer} contentContainerStyle={styles.pickerContent}>
       <Text style={styles.pickerSubtitle}>
-        Choose how you'd like to add funds to your Solana wallet
+        Choose how you'd like to add USDC to your Solana wallet
       </Text>
+
+      <Pressable style={styles.methodCard} onPress={() => onSelect('ramp')}>
+        <View style={[styles.methodIcon, { backgroundColor: '#21BF73' }]}>
+          <Ionicons name="flash" size={24} color="#FFFFFF" />
+        </View>
+        <View style={styles.methodInfo}>
+          <View style={styles.methodTitleRow}>
+            <Text style={styles.methodTitle}>Ramp</Text>
+            <View style={styles.recommendedBadge}>
+              <Text style={styles.recommendedText}>RECOMMENDED</Text>
+            </View>
+          </View>
+          <Text style={styles.methodDesc}>
+            Apple Pay, Google Pay, card, or bank transfer. Lowest fees.
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
+      </Pressable>
 
       <Pressable style={styles.methodCard} onPress={() => onSelect('moonpay')}>
         <View style={[styles.methodIcon, { backgroundColor: '#7B61FF' }]}>
@@ -105,7 +122,7 @@ function MethodPicker({ onSelect }: { onSelect: (m: FundingMethod) => void }) {
         <View style={styles.methodInfo}>
           <Text style={styles.methodTitle}>MoonPay</Text>
           <Text style={styles.methodDesc}>
-            Apple Pay, Google Pay, PayPal, Venmo, cards, or bank transfer
+            Apple Pay, Google Pay, PayPal, Venmo, card, or bank transfer
           </Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
@@ -118,7 +135,7 @@ function MethodPicker({ onSelect }: { onSelect: (m: FundingMethod) => void }) {
         <View style={styles.methodInfo}>
           <Text style={styles.methodTitle}>Transak</Text>
           <Text style={styles.methodDesc}>
-            Buy USDC with card, Apple Pay, or bank transfer. Lower fees.
+            Apple Pay, Google Pay, card, or bank transfer. Lite KYC available.
           </Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
@@ -129,7 +146,7 @@ function MethodPicker({ onSelect }: { onSelect: (m: FundingMethod) => void }) {
           <Ionicons name="wallet" size={24} color="#FFFFFF" />
         </View>
         <View style={styles.methodInfo}>
-          <Text style={styles.methodTitle}>On-Chain Transfer</Text>
+          <Text style={styles.methodTitle}>Transfer from Wallet</Text>
           <Text style={styles.methodDesc}>
             Send SOL or USDC from Phantom, Solflare, or any Solana wallet
           </Text>
@@ -140,16 +157,22 @@ function MethodPicker({ onSelect }: { onSelect: (m: FundingMethod) => void }) {
       <View style={styles.pickerFooter}>
         <Ionicons name="shield-checkmark" size={14} color={COLORS.textTertiary} />
         <Text style={styles.pickerFooterText}>
-          Funds are sent directly to your Solana wallet. Third-party providers may charge a small fee.
+          All purchases deliver USDC on the Solana network directly to your wallet. Third-party providers may charge a small fee.
         </Text>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Onramp WebView (Transak or Stripe)
+// Onramp WebView (Ramp, MoonPay, or Transak)
 // ---------------------------------------------------------------------------
+
+const PROVIDER_LABELS: Record<OnrampProvider, string> = {
+  ramp: 'Ramp',
+  moonpay: 'MoonPay',
+  transak: 'Transak',
+};
 
 function OnrampWebView({
   provider,
@@ -158,7 +181,7 @@ function OnrampWebView({
   provider: OnrampProvider;
   onClose: () => void;
 }) {
-  const { data, isLoading, error } = useOnramp(provider, 'USDC', true);
+  const { data, isLoading, error } = useOnramp(provider, true);
   const [webViewLoading, setWebViewLoading] = useState(true);
   const webViewRef = useRef<WebView>(null);
 
@@ -168,7 +191,8 @@ function OnrampWebView({
       if (
         url.includes('transak.com/complete') ||
         url.includes('status=completed') ||
-        url.includes('moonpay.com/transaction_receipt')
+        url.includes('moonpay.com/transaction_receipt') ||
+        url.includes('rampnetwork.com/success')
       ) {
         setTimeout(onClose, 2000);
       }
@@ -176,15 +200,14 @@ function OnrampWebView({
     [onClose]
   );
 
-  const providerLabel = provider === 'moonpay' ? 'MoonPay' : 'Transak';
+  const label = PROVIDER_LABELS[provider];
 
   return (
     <>
-      {/* Info Banner */}
       <View style={styles.infoBanner}>
         <Ionicons name="shield-checkmark" size={16} color={COLORS.primary} />
         <Text style={styles.infoText}>
-          Powered by {providerLabel}. USDC will be sent directly to your Solana wallet.
+          Powered by {label}. USDC on Solana will be sent directly to your wallet.
         </Text>
       </View>
 
@@ -241,7 +264,7 @@ function OnrampWebView({
 // On-Chain Transfer
 // ---------------------------------------------------------------------------
 
-function OnChainTransfer({ onClose }: { onClose: () => void }) {
+function OnChainTransfer() {
   const { walletAddress: clientWalletAddress } = useAuth();
   const { user: profile } = useUserProfile();
   const [copied, setCopied] = useState(false);
@@ -283,7 +306,7 @@ function OnChainTransfer({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <View style={styles.onchainContainer}>
+    <ScrollView style={styles.onchainContainer} contentContainerStyle={styles.onchainContent}>
       <View style={styles.onchainCard}>
         <Text style={styles.onchainLabel}>YOUR SOLANA WALLET ADDRESS</Text>
 
@@ -301,7 +324,7 @@ function OnChainTransfer({ onClose }: { onClose: () => void }) {
             <Ionicons
               name={copied ? 'checkmark-circle' : 'copy'}
               size={20}
-              color={copied ? COLORS.background : COLORS.background}
+              color={COLORS.background}
             />
             <Text style={styles.onchainButtonText}>
               {copied ? 'Copied!' : 'Copy Address'}
@@ -319,39 +342,20 @@ function OnChainTransfer({ onClose }: { onClose: () => void }) {
         <Text style={styles.instructionTitle}>How to transfer</Text>
 
         <View style={styles.step}>
-          <View style={styles.stepNumber}>
-            <Text style={styles.stepNumberText}>1</Text>
-          </View>
-          <Text style={styles.stepText}>
-            Copy your wallet address above
-          </Text>
+          <View style={styles.stepNumber}><Text style={styles.stepNumberText}>1</Text></View>
+          <Text style={styles.stepText}>Copy your wallet address above</Text>
         </View>
-
         <View style={styles.step}>
-          <View style={styles.stepNumber}>
-            <Text style={styles.stepNumberText}>2</Text>
-          </View>
-          <Text style={styles.stepText}>
-            Open Phantom, Solflare, or any Solana wallet
-          </Text>
+          <View style={styles.stepNumber}><Text style={styles.stepNumberText}>2</Text></View>
+          <Text style={styles.stepText}>Open Phantom, Solflare, or any Solana wallet</Text>
         </View>
-
         <View style={styles.step}>
-          <View style={styles.stepNumber}>
-            <Text style={styles.stepNumberText}>3</Text>
-          </View>
-          <Text style={styles.stepText}>
-            Send SOL or USDC to the address above
-          </Text>
+          <View style={styles.stepNumber}><Text style={styles.stepNumberText}>3</Text></View>
+          <Text style={styles.stepText}>Send SOL or USDC to the address above</Text>
         </View>
-
         <View style={styles.step}>
-          <View style={styles.stepNumber}>
-            <Text style={styles.stepNumberText}>4</Text>
-          </View>
-          <Text style={styles.stepText}>
-            Your balance will update automatically
-          </Text>
+          <View style={styles.stepNumber}><Text style={styles.stepNumberText}>4</Text></View>
+          <Text style={styles.stepText}>Your balance will update automatically</Text>
         </View>
       </View>
 
@@ -361,7 +365,7 @@ function OnChainTransfer({ onClose }: { onClose: () => void }) {
           Make sure to send on the Solana {network} network. Sending on the wrong network may result in lost funds.
         </Text>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -399,8 +403,11 @@ const styles = StyleSheet.create({
   // Method Picker
   pickerContainer: {
     flex: 1,
+  },
+  pickerContent: {
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.lg,
+    paddingBottom: SPACING.xxxl,
   },
   pickerSubtitle: {
     ...TYPOGRAPHY.body,
@@ -430,6 +437,12 @@ const styles = StyleSheet.create({
     marginLeft: SPACING.md,
     marginRight: SPACING.sm,
   },
+  methodTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: 2,
+  },
   methodTitle: {
     ...TYPOGRAPHY.body,
     color: COLORS.textPrimary,
@@ -440,6 +453,20 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.caption,
     color: COLORS.textSecondary,
     lineHeight: 18,
+  },
+  recommendedBadge: {
+    backgroundColor: COLORS.primaryMuted,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: RADII.sm,
+    marginBottom: 2,
+  },
+  recommendedText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.primary,
+    fontWeight: '800',
+    fontSize: 9,
+    letterSpacing: 0.5,
   },
   pickerFooter: {
     flexDirection: 'row',
@@ -455,7 +482,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 
-  // Info Banner (shared by WebView screens)
+  // Info Banner
   infoBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -472,13 +499,8 @@ const styles = StyleSheet.create({
   },
 
   // WebView
-  webViewContainer: {
-    flex: 1,
-  },
-  webView: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
+  webViewContainer: { flex: 1 },
+  webView: { flex: 1, backgroundColor: COLORS.background },
   webViewOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
@@ -521,10 +543,11 @@ const styles = StyleSheet.create({
   },
 
   // On-Chain Transfer
-  onchainContainer: {
-    flex: 1,
+  onchainContainer: { flex: 1 },
+  onchainContent: {
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.xl,
+    paddingBottom: SPACING.xxxl,
   },
   onchainCard: {
     backgroundColor: COLORS.surface,
@@ -565,9 +588,7 @@ const styles = StyleSheet.create({
     borderRadius: RADII.full,
     gap: SPACING.xs,
   },
-  onchainButtonSuccess: {
-    backgroundColor: COLORS.success,
-  },
+  onchainButtonSuccess: { backgroundColor: COLORS.success },
   onchainButtonText: {
     ...TYPOGRAPHY.body,
     color: COLORS.background,
@@ -592,9 +613,7 @@ const styles = StyleSheet.create({
   },
 
   // Instructions
-  onchainInstructions: {
-    marginTop: SPACING.xl,
-  },
+  onchainInstructions: { marginTop: SPACING.xl },
   instructionTitle: {
     ...TYPOGRAPHY.body,
     color: COLORS.textPrimary,

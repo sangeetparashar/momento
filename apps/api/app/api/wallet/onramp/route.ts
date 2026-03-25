@@ -5,56 +5,51 @@ import { readLimiter, applyRateLimit } from '@/lib/ratelimit';
 /**
  * Supported fiat onramp providers.
  */
-const PROVIDERS = ['transak', 'moonpay'] as const;
+const PROVIDERS = ['ramp', 'moonpay', 'transak'] as const;
 type OnrampProvider = (typeof PROVIDERS)[number];
 
 /**
- * Supported stablecoins for onramp. USDC is the default.
+ * Supported stablecoins for onramp. USDC is the default and primary coin.
  */
 const SUPPORTED_COINS: Record<string, { cryptoCurrency: string; network: string }> = {
   USDC: { cryptoCurrency: 'USDC', network: 'solana' },
-  USDT: { cryptoCurrency: 'USDT', network: 'solana' },
 };
 
 /**
- * Builds a Transak onramp URL for the given wallet and coin.
+ * Builds a Ramp Network hosted onramp URL.
+ *
+ * Ramp has the lowest compliance burden (0.49-2.9% fees), supports
+ * Apple Pay, Google Pay, cards, and bank transfers across 150+ countries.
+ * Asset code format: SOLANA_USDC
  */
-function buildTransakUrl(walletAddress: string, coin: string): string {
-  const apiKey = process.env.TRANSAK_API_KEY;
-  const env = process.env.TRANSAK_ENVIRONMENT || 'STAGING';
+function buildRampUrl(walletAddress: string): string {
+  const apiKey = process.env.RAMP_API_KEY || '';
+  const env = process.env.RAMP_ENVIRONMENT || 'sandbox';
 
   const base =
-    env === 'PRODUCTION'
-      ? 'https://global.transak.com'
-      : 'https://global-stg.transak.com';
-
-  const config = SUPPORTED_COINS[coin] || SUPPORTED_COINS.USDC;
+    env === 'production'
+      ? 'https://app.rampnetwork.com'
+      : 'https://app.demo.rampnetwork.com';
 
   const params = new URLSearchParams({
-    apiKey: apiKey || 'b98281c0-e5cd-4a54-b333-91bdd648be73', // Transak test key
-    environment: env,
-    cryptoCurrencyCode: config.cryptoCurrency,
-    network: config.network,
-    walletAddress,
-    defaultCryptoCurrency: config.cryptoCurrency,
-    defaultNetwork: config.network,
-    disableWalletAddressForm: 'true',
-    hideMenu: 'true',
-    themeColor: '00FF88',
-    productsAvailed: 'BUY',
+    hostApiKey: apiKey,
+    hostAppName: 'Momento',
+    swapAsset: 'SOLANA_USDC',
+    userAddress: walletAddress,
+    defaultAsset: 'SOLANA_USDC',
+    fiatCurrency: 'USD',
   });
 
   return `${base}?${params.toString()}`;
 }
 
 /**
- * Builds a MoonPay onramp URL for the given wallet and coin.
+ * Builds a MoonPay onramp URL.
  *
  * MoonPay supports Apple Pay, Google Pay, PayPal, Venmo, cards, and bank
- * transfers across 180+ countries. Currency codes use the format
- * `usdc_sol` for USDC on Solana.
+ * transfers across 180+ countries. Currency code: usdc_sol.
  */
-function buildMoonPayUrl(walletAddress: string, coin: string): string {
+function buildMoonPayUrl(walletAddress: string): string {
   const apiKey = process.env.MOONPAY_API_KEY;
   const env = process.env.MOONPAY_ENVIRONMENT || 'sandbox';
 
@@ -63,12 +58,9 @@ function buildMoonPayUrl(walletAddress: string, coin: string): string {
       ? 'https://buy.moonpay.com'
       : 'https://buy-sandbox.moonpay.com';
 
-  // MoonPay currency codes: usdc_sol (USDC on Solana), usdt_sol (USDT on Solana)
-  const currencyCode = coin === 'USDT' ? 'usdt_sol' : 'usdc_sol';
-
   const params = new URLSearchParams({
-    apiKey: apiKey || 'pk_test_123', // replace with real key
-    currencyCode,
+    apiKey: apiKey || 'pk_test_123',
+    currencyCode: 'usdc_sol',
     walletAddress,
     baseCurrencyCode: 'usd',
     colorCode: '#00FF88',
@@ -79,13 +71,44 @@ function buildMoonPayUrl(walletAddress: string, coin: string): string {
 }
 
 /**
+ * Builds a Transak onramp URL.
+ *
+ * Transak supports Apple Pay, Google Pay, cards, and bank transfers.
+ * Lower fees (1-5%) with Lite KYC in some regions.
+ */
+function buildTransakUrl(walletAddress: string): string {
+  const apiKey = process.env.TRANSAK_API_KEY;
+  const env = process.env.TRANSAK_ENVIRONMENT || 'STAGING';
+
+  const base =
+    env === 'PRODUCTION'
+      ? 'https://global.transak.com'
+      : 'https://global-stg.transak.com';
+
+  const params = new URLSearchParams({
+    apiKey: apiKey || 'b98281c0-e5cd-4a54-b333-91bdd648be73',
+    environment: env,
+    cryptoCurrencyCode: 'USDC',
+    network: 'solana',
+    walletAddress,
+    defaultCryptoCurrency: 'USDC',
+    defaultNetwork: 'solana',
+    disableWalletAddressForm: 'true',
+    hideMenu: 'true',
+    themeColor: '00FF88',
+    productsAvailed: 'BUY',
+  });
+
+  return `${base}?${params.toString()}`;
+}
+
+/**
  * GET /api/wallet/onramp
  *
- * Returns a URL to open in a WebView for fiat → stablecoin onramp.
+ * Returns a URL to open in a WebView for fiat → USDC on Solana.
  *
  * Query params:
- *   - provider: 'transak' | 'moonpay' (default: 'moonpay')
- *   - coin: 'USDC' | 'USDT' (default: 'USDC')
+ *   - provider: 'ramp' | 'moonpay' | 'transak' (default: 'ramp')
  */
 export async function GET(request: NextRequest) {
   try {
@@ -102,8 +125,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const provider = (searchParams.get('provider') || 'moonpay') as OnrampProvider;
-    const coin = (searchParams.get('coin') || 'USDC').toUpperCase();
+    const provider = (searchParams.get('provider') || 'ramp') as OnrampProvider;
 
     if (!PROVIDERS.includes(provider)) {
       return NextResponse.json(
@@ -112,24 +134,25 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    if (!SUPPORTED_COINS[coin]) {
-      return NextResponse.json(
-        { success: false, error: `Unsupported coin. Use: ${Object.keys(SUPPORTED_COINS).join(', ')}` },
-        { status: 400 }
-      );
+    let url: string;
+    switch (provider) {
+      case 'ramp':
+        url = buildRampUrl(user.walletAddress);
+        break;
+      case 'moonpay':
+        url = buildMoonPayUrl(user.walletAddress);
+        break;
+      case 'transak':
+        url = buildTransakUrl(user.walletAddress);
+        break;
     }
-
-    const url =
-      provider === 'transak'
-        ? buildTransakUrl(user.walletAddress, coin)
-        : buildMoonPayUrl(user.walletAddress, coin);
 
     return NextResponse.json({
       success: true,
       data: {
         url,
         provider,
-        coin,
+        coin: 'USDC',
         walletAddress: user.walletAddress,
       },
     });

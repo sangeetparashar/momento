@@ -147,8 +147,8 @@ export interface PortfolioPoint {
 }
 
 // Onramp types
-export type OnrampProvider = 'moonpay' | 'transak';
-export type OnrampCoin = 'USDC' | 'USDT';
+export type OnrampProvider = 'ramp' | 'moonpay' | 'transak';
+export type OnrampCoin = 'USDC';
 
 export interface OnrampUrlResponse {
   url: string;

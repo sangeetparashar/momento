@@ -1,16 +1,14 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   StyleSheet,
   Modal,
   Pressable,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
+  ActivityIndicator,
 } from 'react-native';
+import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/primitives';
-import { ComingSoonModal } from './ComingSoonModal';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 
@@ -19,293 +17,146 @@ interface SwapModalProps {
   onClose: () => void;
 }
 
-interface TokenSelection {
-  symbol: string;
-  name: string;
-  balance: string;
-}
-
-const DEFAULT_SELL_TOKEN: TokenSelection = {
-  symbol: 'SOL',
-  name: 'Solana',
-  balance: '0.00',
-};
-
-const DEFAULT_BUY_TOKEN: TokenSelection = {
-  symbol: 'USDC',
-  name: 'USD Coin',
-  balance: '0.00',
-};
+/**
+ * Jupiter-powered token swap modal.
+ *
+ * Opens Jupiter's hosted swap interface (jup.ag) in a WebView, pre-configured
+ * to swap SOL → USDC. Jupiter handles wallet connection, routing, and
+ * execution natively in their UI.
+ */
+const JUPITER_SWAP_URL = 'https://jup.ag/swap/SOL-USDC';
 
 export function SwapModal({ visible, onClose }: SwapModalProps) {
-  const [sellAmount, setSellAmount] = useState('');
-  const [buyAmount, setBuyAmount] = useState('');
-  const [sellToken] = useState<TokenSelection>(DEFAULT_SELL_TOKEN);
-  const [buyToken] = useState<TokenSelection>(DEFAULT_BUY_TOKEN);
-  const [showComingSoon, setShowComingSoon] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const webViewRef = useRef<WebView>(null);
 
-  const handleSwapPress = useCallback(() => {
-    setShowComingSoon(true);
-  }, []);
-
-  const handleSellAmountChange = useCallback((text: string) => {
-    setSellAmount(text);
-    const num = parseFloat(text);
-    if (!isNaN(num)) {
-      setBuyAmount((num * 150.25).toFixed(2));
-    } else {
-      setBuyAmount('');
-    }
-  }, []);
+  const handleClose = useCallback(() => {
+    setLoading(true);
+    onClose();
+  }, [onClose]);
 
   return (
-    <>
-      <Modal
-        visible={visible}
-        transparent
-        animationType="slide"
-        onRequestClose={onClose}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.overlay}
-        >
-          <Pressable style={styles.backdrop} onPress={onClose} />
-          <View style={styles.sheet}>
-            {/* Header */}
-            <View style={styles.header}>
-              <View style={styles.handle} />
-              <Text style={styles.title}>Swap</Text>
-              <Pressable onPress={onClose} style={styles.closeButton}>
-                <Ionicons name="close" size={24} color={COLORS.textSecondary} />
-              </Pressable>
-            </View>
-
-            {/* SELL Section */}
-            <View style={styles.tokenSection}>
-              <Text style={styles.sectionLabel}>SELL</Text>
-              <View style={styles.tokenRow}>
-                <Pressable style={styles.tokenSelector}>
-                  <View style={styles.tokenIcon}>
-                    <Text style={styles.tokenIconText}>
-                      {sellToken.symbol.charAt(0)}
-                    </Text>
-                  </View>
-                  <Text style={styles.tokenSymbol}>{sellToken.symbol}</Text>
-                  <Ionicons
-                    name="chevron-down"
-                    size={16}
-                    color={COLORS.textSecondary}
-                  />
-                </Pressable>
-                <TextInput
-                  style={styles.amountInput}
-                  value={sellAmount}
-                  onChangeText={handleSellAmountChange}
-                  placeholder="0.00"
-                  placeholderTextColor={COLORS.textTertiary}
-                  keyboardType="decimal-pad"
-                />
-              </View>
-              <Text style={styles.balanceText}>
-                Balance: {sellToken.balance} {sellToken.symbol}
-              </Text>
-            </View>
-
-            {/* Swap Icon */}
-            <View style={styles.swapIconContainer}>
-              <Pressable style={styles.swapIconButton}>
-                <Ionicons
-                  name="swap-vertical"
-                  size={24}
-                  color={COLORS.primary}
-                />
-              </Pressable>
-            </View>
-
-            {/* BUY Section */}
-            <View style={styles.tokenSection}>
-              <Text style={styles.sectionLabel}>BUY</Text>
-              <View style={styles.tokenRow}>
-                <Pressable style={styles.tokenSelector}>
-                  <View style={[styles.tokenIcon, styles.buyTokenIcon]}>
-                    <Text style={styles.tokenIconText}>
-                      {buyToken.symbol.charAt(0)}
-                    </Text>
-                  </View>
-                  <Text style={styles.tokenSymbol}>{buyToken.symbol}</Text>
-                  <Ionicons
-                    name="chevron-down"
-                    size={16}
-                    color={COLORS.textSecondary}
-                  />
-                </Pressable>
-                <TextInput
-                  style={styles.amountInput}
-                  value={buyAmount}
-                  onChangeText={setBuyAmount}
-                  placeholder="0.00"
-                  placeholderTextColor={COLORS.textTertiary}
-                  keyboardType="decimal-pad"
-                  editable={false}
-                />
-              </View>
-              <Text style={styles.balanceText}>
-                Balance: {buyToken.balance} {buyToken.symbol}
-              </Text>
-            </View>
-
-            {/* Swap Button */}
-            <Pressable
-              onPress={handleSwapPress}
-              style={[
-                styles.swapButton,
-                !sellAmount && styles.swapButtonDisabled,
-              ]}
-            >
-              <Text style={styles.swapButtonText}>SWAP</Text>
-            </Pressable>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={handleClose}
+    >
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Pressable onPress={handleClose} hitSlop={12} style={styles.closeButton}>
+            <Ionicons name="close" size={24} color={COLORS.textPrimary} />
+          </Pressable>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>Swap</Text>
+            <Text style={styles.headerSubtitle}>Powered by Jupiter</Text>
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
+          <View style={styles.headerRight} />
+        </View>
 
-      <ComingSoonModal
-        visible={showComingSoon}
-        onClose={() => setShowComingSoon(false)}
-        title="Swap Coming Soon!"
-        message="Token swaps will be available in the next update. Stay tuned!"
-      />
-    </>
+        {/* Info Banner */}
+        <View style={styles.infoBanner}>
+          <Ionicons name="swap-horizontal" size={16} color={COLORS.primary} />
+          <Text style={styles.infoText}>
+            Swap any Solana token. Connect your wallet in Jupiter to execute trades.
+          </Text>
+        </View>
+
+        {/* WebView */}
+        <View style={styles.webViewContainer}>
+          {loading && (
+            <View style={styles.loadingOverlay}>
+              <ActivityIndicator size="large" color={COLORS.primary} />
+              <Text style={styles.loadingText}>Loading Jupiter...</Text>
+            </View>
+          )}
+          <WebView
+            ref={webViewRef}
+            source={{ uri: JUPITER_SWAP_URL }}
+            style={styles.webView}
+            onLoadEnd={() => setLoading(false)}
+            javaScriptEnabled
+            domStorageEnabled
+            startInLoadingState={false}
+            scalesPageToFit
+            allowsInlineMediaPlayback
+            originWhitelist={['*']}
+          />
+        </View>
+      </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  container: {
     flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  sheet: {
-    backgroundColor: COLORS.surface,
-    borderTopLeftRadius: RADII.xl,
-    borderTopRightRadius: RADII.xl,
-    paddingHorizontal: SPACING.lg,
-    paddingBottom: SPACING.xl + 20,
+    backgroundColor: COLORS.background,
   },
   header: {
-    alignItems: 'center',
-    paddingVertical: SPACING.md,
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: COLORS.border,
-    marginBottom: SPACING.sm,
-  },
-  title: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
-  },
-  closeButton: {
-    position: 'absolute',
-    right: 0,
-    top: SPACING.md,
-    padding: SPACING.xs,
-  },
-  tokenSection: {
-    backgroundColor: COLORS.background,
-    borderRadius: RADII.lg,
-    padding: SPACING.md,
-    marginVertical: SPACING.xs,
-  },
-  sectionLabel: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.textTertiary,
-    letterSpacing: 1,
-    marginBottom: SPACING.sm,
-  },
-  tokenRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
   },
-  tokenSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    backgroundColor: COLORS.backgroundTertiary,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: SPACING.xs,
-    borderRadius: RADII.full,
-  },
-  tokenIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#9945FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  buyTokenIcon: {
-    backgroundColor: '#2775CA',
-  },
-  tokenIconText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  tokenSymbol: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textPrimary,
-    fontWeight: '700',
-  },
-  amountInput: {
-    ...TYPOGRAPHY.h2,
-    color: COLORS.textPrimary,
-    textAlign: 'right',
-    flex: 1,
-    marginLeft: SPACING.md,
-    padding: 0,
-  },
-  balanceText: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textTertiary,
-    marginTop: SPACING.xs,
-  },
-  swapIconContainer: {
-    alignItems: 'center',
-    zIndex: 1,
-    marginVertical: -SPACING.sm,
-  },
-  swapIconButton: {
+  closeButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.surface,
-    borderWidth: 3,
-    borderColor: COLORS.background,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  swapButton: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.md,
     borderRadius: RADII.full,
+  },
+  headerCenter: {
     alignItems: 'center',
-    marginTop: SPACING.lg,
   },
-  swapButtonDisabled: {
-    opacity: 0.5,
+  headerTitle: {
+    ...TYPOGRAPHY.h3,
+    color: COLORS.textPrimary,
+    fontWeight: '700',
   },
-  swapButtonText: {
+  headerSubtitle: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  headerRight: {
+    width: 40,
+  },
+  infoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primaryMuted,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  infoText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    flex: 1,
+    fontSize: 12,
+  },
+  webViewContainer: {
+    flex: 1,
+  },
+  webView: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    zIndex: 1,
+  },
+  loadingText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.background,
-    fontWeight: '800',
-    letterSpacing: 1,
-    fontSize: 18,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.sm,
   },
 });
