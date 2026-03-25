@@ -13,6 +13,7 @@ export { ProfileSkeleton } from './ProfileSkeleton';
 export { BookmarkButton } from './BookmarkButton';
 export { FollowingModal } from './FollowingModal';
 export { FeedAlgorithmModal } from './FeedAlgorithmModal';
+export { FundWalletModal } from './FundWalletModal';
 export { PostDetailSkeleton } from './PostDetailSkeleton';
 export { UserProfileSkeleton } from './UserProfileSkeleton';
 export { WalletSkeleton } from './WalletSkeleton';
