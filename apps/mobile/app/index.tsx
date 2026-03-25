@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useRouter, useNavigationContainerRef } from 'expo-router';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
+import { useFeed } from '@/hooks';
 import { apiService } from '@/services/api';
 import { Text, MomentoLogo } from '@/components/primitives';
 import { COLORS, SPACING } from '@/styles/theme';
@@ -27,8 +28,15 @@ export default function IndexScreen() {
   const queryClient = useQueryClient();
   const { isReady, user: authUser } = useAuth();
   const [navReady, setNavReady] = useState(false);
+  const navigatedRef = useRef(false);
 
-  // Fetch full profile to check completeness (only when authenticated)
+  // Prefetch feed immediately — runs in parallel with auth init.
+  // The feed API works without auth, so this starts loading content
+  // while Privy is still initializing. By the time we navigate to home,
+  // the first page is already in the React Query cache.
+  useFeed();
+
+  // Fetch full profile in parallel with feed (only when authenticated)
   const profileQuery = useQuery<User>({
     queryKey: ['userProfile'],
     queryFn: () => apiService.get<User>('/users/me'),
@@ -41,17 +49,17 @@ export default function IndexScreen() {
       setNavReady(true);
       return;
     }
-    // Poll briefly for navigation readiness
     const timer = setTimeout(() => setNavReady(true), 100);
     return () => clearTimeout(timer);
   }, [rootNav]);
 
   useEffect(() => {
-    if (!isReady || !navReady) return;
+    if (!isReady || !navReady || navigatedRef.current) return;
 
     // Not authenticated — go straight to home feed (feed loads without auth).
     // The home screen shows an auth-gate overlay prompting sign-in.
     if (!authUser) {
+      navigatedRef.current = true;
       router.replace('/(tabs)/home');
       return;
     }
@@ -59,6 +67,7 @@ export default function IndexScreen() {
     // Wait for profile data before deciding route
     if (profileQuery.isLoading) return;
 
+    navigatedRef.current = true;
     queryClient.invalidateQueries();
 
     if (profileQuery.data && !isProfileComplete(profileQuery.data)) {

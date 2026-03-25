@@ -1,8 +1,7 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
-  FlatList,
   useWindowDimensions,
   Pressable,
   Share,
@@ -12,6 +11,7 @@ import {
   TouchableOpacity,
   Alert,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { Video, ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
@@ -72,6 +72,17 @@ const FeedPage = React.memo(function FeedPage({ post, screenWidth, pageHeight, i
   const [isMuted, setIsMuted] = useState(true);
   const [isPlaying, setIsPlaying] = useState(true);
   const isVideo = isVideoPost(post);
+
+  // Unload video memory when scrolling offscreen to prevent memory buildup
+  useEffect(() => {
+    if (!isVideo || !videoRef.current) return;
+    if (!isVisible) {
+      videoRef.current.stopAsync().catch(() => {});
+      videoRef.current.unloadAsync().catch(() => {});
+    } else {
+      videoRef.current.loadAsync({ uri: post.mediaUrl! }, { shouldPlay: true, isMuted, isLooping: true }).catch(() => {});
+    }
+  }, [isVisible, isVideo, post.mediaUrl, isMuted]);
 
   const handleCreatorPress = useCallback(() => {
     router.push(`/creator/${post.creatorId}`);
@@ -270,9 +281,9 @@ export default function HomeScreen() {
   const PAGE_HEIGHT = SCREEN_HEIGHT - HEADER_HEIGHT - TICKER_HEIGHT - TAB_BAR_HEIGHT;
   const [feedSort, setFeedSort] = useState<FeedSortMode>('smart');
   const [showAlgoModal, setShowAlgoModal] = useState(false);
-  const feedQuery = useFeed({ sort: feedSort });
-  const flatListRef = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const feedQuery = useFeed({ sort: feedSort }, currentIndex);
+  const flashListRef = useRef<FlashList<PostWithCreator>>(null);
 
   const posts = useMemo(() => {
     if (!feedQuery.data?.pages) return [];
@@ -296,7 +307,7 @@ export default function HomeScreen() {
   const handleSortChange = useCallback((sort: FeedSortMode) => {
     setFeedSort(sort);
     // Scroll back to start when sort changes
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    flashListRef.current?.scrollToOffset({ offset: 0, animated: false });
     setCurrentIndex(0);
   }, []);
 
@@ -423,8 +434,8 @@ export default function HomeScreen() {
         </View>
       ) : (
         <>
-          <FlatList
-            ref={flatListRef}
+          <FlashList
+            ref={flashListRef}
             data={posts}
             extraData={extraData}
             renderItem={renderItem}
@@ -436,15 +447,8 @@ export default function HomeScreen() {
             onEndReachedThreshold={0.5}
             onViewableItemsChanged={onViewableItemsChanged}
             viewabilityConfig={viewabilityConfig}
-            getItemLayout={(_, index) => ({
-              length: SCREEN_WIDTH,
-              offset: SCREEN_WIDTH * index,
-              index,
-            })}
-            removeClippedSubviews={true}
-            initialNumToRender={2}
-            maxToRenderPerBatch={3}
-            windowSize={5}
+            estimatedItemSize={SCREEN_WIDTH}
+            drawDistance={SCREEN_WIDTH * 2}
           />
 
           {/* Page indicator */}
