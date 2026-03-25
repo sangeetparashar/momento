@@ -157,6 +157,23 @@ export interface OnrampUrlResponse {
   walletAddress: string;
 }
 
+// Swap types
+export interface SwapQuote {
+  inputMint: string;
+  outputMint: string;
+  inAmount: string;
+  outAmount: string;
+  otherAmountThreshold: string;
+  priceImpactPct: string;
+  platformFee?: { amount: string; feeBps: number };
+  raw: any;
+}
+
+export interface SwapTransactionResponse {
+  swapTransaction: string;
+  lastValidBlockHeight: number;
+}
+
 // API Response types
 export interface FeedResponse {
   posts: PostWithCreator[];

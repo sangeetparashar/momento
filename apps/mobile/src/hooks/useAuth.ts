@@ -44,8 +44,7 @@ const GUEST_AUTH = {
   getAccessToken: async () => null,
   walletAddress: null as string | null,
   walletStatus: 'disconnected' as string,
-  fundWallet: async () => {},
-  canFund: false,
+  getWalletProvider: async () => null as any,
 };
 
 /**
@@ -127,6 +126,26 @@ export function useAuth() {
       ? solanaWallet.wallets[0].address
       : null;
 
+  /**
+   * Returns the Privy Solana provider for signing transactions.
+   * The provider supports signAndSendTransaction with both legacy
+   * Transaction and VersionedTransaction objects.
+   */
+  const getWalletProvider = async () => {
+    if (
+      solanaWallet.status !== 'connected' ||
+      !solanaWallet.wallets?.length
+    ) {
+      return null;
+    }
+    try {
+      return await solanaWallet.wallets[0].getProvider();
+    } catch (err: any) {
+      console.error('[useAuth] getProvider failed:', err?.message);
+      return null;
+    }
+  };
+
   return {
     isReady: privy.isReady,
     user: privy.user,
@@ -137,7 +156,6 @@ export function useAuth() {
     getAccessToken: async () => null, // handled by AuthBridge
     walletAddress,
     walletStatus: solanaWallet.status,
-    fundWallet: async () => {},
-    canFund: false,
+    getWalletProvider,
   };
 }
