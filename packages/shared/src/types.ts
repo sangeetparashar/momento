@@ -146,6 +146,17 @@ export interface PortfolioPoint {
   tokens: number; // token value usd
 }
 
+// Onramp types
+export type OnrampProvider = 'transak' | 'moonpay';
+export type OnrampCoin = 'USDC' | 'USDT';
+
+export interface OnrampUrlResponse {
+  url: string;
+  provider: OnrampProvider;
+  coin: string;
+  walletAddress: string;
+}
+
 // API Response types
 export interface FeedResponse {
   posts: PostWithCreator[];

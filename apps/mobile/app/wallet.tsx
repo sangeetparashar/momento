@@ -17,6 +17,7 @@ import {
   PortfolioChart,
   SwapModal,
   ComingSoonModal,
+  FundWalletModal,
 } from '@/components/features';
 import { useWalletBalance, useSwipeNavigation } from '@/hooks';
 import { useUserProfile } from '@/hooks/useUserProfile';
@@ -38,9 +39,10 @@ export default function WalletScreen() {
   const walletQuery = useWalletBalance();
   const balance = walletQuery.data;
   const { user: profile } = useUserProfile();
-  const { walletAddress: clientWalletAddress, fundWallet, canFund } = useAuth();
+  const { walletAddress: clientWalletAddress } = useAuth();
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [showComingSoon, setShowComingSoon] = useState(false);
+  const [showFundModal, setShowFundModal] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // Prefer the client-side wallet address (from Privy SDK), fall back to server profile
@@ -62,19 +64,9 @@ export default function WalletScreen() {
     setShowSwapModal(true);
   }, []);
 
-  const handleBuyCrypto = useCallback(async () => {
-    if (canFund) {
-      try {
-        await fundWallet('native-currency');
-      } catch (err: any) {
-        if (!err?.message?.includes('cancelled')) {
-          console.error('[Wallet] Fund error:', err?.message);
-        }
-      }
-    } else {
-      setShowComingSoon(true);
-    }
-  }, [canFund, fundWallet]);
+  const handleBuyCrypto = useCallback(() => {
+    setShowFundModal(true);
+  }, []);
 
   const handleCopyAddress = useCallback(async () => {
     if (!walletAddress) return;
@@ -295,6 +287,10 @@ export default function WalletScreen() {
       <ComingSoonModal
         visible={showComingSoon}
         onClose={() => setShowComingSoon(false)}
+      />
+      <FundWalletModal
+        visible={showFundModal}
+        onClose={() => setShowFundModal(false)}
       />
       </Animated.View>
     </SafeAreaView>

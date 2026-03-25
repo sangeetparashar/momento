@@ -15,3 +15,4 @@ export { usePriceHistory } from './usePriceHistory';
 export { useSearch } from './useSearch';
 export { useProfileComplete } from './useProfileComplete';
 export { useSwipeNavigation } from './useSwipeNavigation';
+export { useOnramp } from './useOnramp';
