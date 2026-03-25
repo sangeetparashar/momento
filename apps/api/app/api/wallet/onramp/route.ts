@@ -5,7 +5,7 @@ import { readLimiter, applyRateLimit } from '@/lib/ratelimit';
 /**
  * Supported fiat onramp providers.
  */
-const PROVIDERS = ['transak', 'moonpay'] as const;
+const PROVIDERS = ['transak', 'stripe'] as const;
 type OnrampProvider = (typeof PROVIDERS)[number];
 
 /**
@@ -48,28 +48,57 @@ function buildTransakUrl(walletAddress: string, coin: string): string {
 }
 
 /**
- * Builds a MoonPay onramp URL for the given wallet and coin.
+ * Builds a Stripe hosted crypto onramp URL.
+ *
+ * Uses the Stripe-hosted standalone approach which generates a redirect URL
+ * to crypto.link.com. The user completes the purchase there and funds are
+ * sent to their Solana wallet.
+ *
+ * When STRIPE_CRYPTO_SECRET_KEY is set, creates a session via the API for
+ * full customization (wallet pre-fill). Otherwise falls back to the
+ * client-side URL generation approach via the standalone page.
  */
-function buildMoonPayUrl(walletAddress: string, coin: string): string {
-  const apiKey = process.env.MOONPAY_API_KEY;
-  const env = process.env.MOONPAY_ENVIRONMENT || 'sandbox';
+async function buildStripeUrl(walletAddress: string, coin: string): Promise<string> {
+  const secretKey = process.env.STRIPE_CRYPTO_SECRET_KEY;
+  const destinationCurrency = coin.toLowerCase(); // 'usdc'
 
-  const base =
-    env === 'production'
-      ? 'https://buy.moonpay.com'
-      : 'https://buy-sandbox.moonpay.com';
+  // If we have a secret key, create a session via the Stripe API
+  if (secretKey) {
+    const response = await fetch('https://api.stripe.com/v1/crypto/onramp_sessions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${secretKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        'transaction_details[destination_currency]': destinationCurrency,
+        'transaction_details[destination_network]': 'solana',
+        'transaction_details[wallet_address]': walletAddress,
+        'customer_ip_address': '0.0.0.0', // Will be overridden by Stripe
+      }).toString(),
+    });
 
-  const currencyCode = coin === 'USDT' ? 'usdt_sol' : 'usdc_sol';
+    const session = await response.json();
 
+    if (session.error) {
+      console.error('Stripe onramp session error:', session.error);
+      throw new Error(session.error.message || 'Failed to create Stripe session');
+    }
+
+    if (session.redirect_url) {
+      return session.redirect_url;
+    }
+  }
+
+  // Fallback: build a standalone hosted URL (no secret key needed)
   const params = new URLSearchParams({
-    apiKey: apiKey || 'pk_test_key', // placeholder for sandbox
-    currencyCode,
-    walletAddress,
-    colorCode: '#00FF88',
-    showWalletAddressForm: 'false',
+    destination_currency: destinationCurrency,
+    destination_network: 'solana',
+    destination_currencies: destinationCurrency,
+    destination_networks: 'solana',
   });
 
-  return `${base}?${params.toString()}`;
+  return `https://crypto.link.com?${params.toString()}`;
 }
 
 /**
@@ -78,7 +107,7 @@ function buildMoonPayUrl(walletAddress: string, coin: string): string {
  * Returns a URL to open in a WebView for fiat → stablecoin onramp.
  *
  * Query params:
- *   - provider: 'transak' | 'moonpay' (default: 'transak')
+ *   - provider: 'transak' | 'stripe' (default: 'transak')
  *   - coin: 'USDC' | 'USDT' (default: 'USDC')
  */
 export async function GET(request: NextRequest) {
@@ -113,10 +142,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const url =
-      provider === 'moonpay'
-        ? buildMoonPayUrl(user.walletAddress, coin)
-        : buildTransakUrl(user.walletAddress, coin);
+    let url: string;
+    if (provider === 'stripe') {
+      url = await buildStripeUrl(user.walletAddress, coin);
+    } else {
+      url = buildTransakUrl(user.walletAddress, coin);
+    }
 
     return NextResponse.json({
       success: true,

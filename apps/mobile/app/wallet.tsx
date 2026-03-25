@@ -269,8 +269,8 @@ export default function WalletScreen() {
       <View style={styles.swapButtonContainer}>
         <View style={styles.bottomButtons}>
           <Pressable onPress={handleBuyCrypto} style={styles.buyButton}>
-            <Ionicons name="card-outline" size={20} color={COLORS.background} />
-            <Text style={styles.buyButtonText}>BUY CRYPTO</Text>
+            <Ionicons name="wallet-outline" size={20} color={COLORS.background} />
+            <Text style={styles.buyButtonText}>FUND ACCOUNT</Text>
           </Pressable>
           <Pressable onPress={handleSwapPress} style={styles.swapButton}>
             <Ionicons name="swap-horizontal" size={20} color={COLORS.background} />
