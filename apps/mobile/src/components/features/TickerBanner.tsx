@@ -20,12 +20,14 @@ interface TickerBannerProps {
   title: string;
   items: TickerItem[];
   onPress?: () => void;
+  /** When set, displays value as "{change}{valueSuffix}" instead of percentage */
+  valueSuffix?: string;
 }
 
 const ITEM_WIDTH = 120;
 const SCROLL_SPEED = 30000;
 
-export function TickerBanner({ title, items, onPress }: TickerBannerProps) {
+export function TickerBanner({ title, items, onPress, valueSuffix }: TickerBannerProps) {
   const translateX = useSharedValue(0);
   const [measured, setMeasured] = useState(false);
 
@@ -66,11 +68,12 @@ export function TickerBanner({ title, items, onPress }: TickerBannerProps) {
               <Text
                 style={[
                   styles.change,
-                  { color: item.change >= 0 ? COLORS.success : COLORS.error },
+                  { color: valueSuffix ? COLORS.textSecondary : item.change >= 0 ? COLORS.success : COLORS.error },
                 ]}
               >
-                {item.change >= 0 ? '+' : ''}
-                {item.change.toFixed(1)}%
+                {valueSuffix
+                  ? `${item.change}${valueSuffix}`
+                  : `${item.change >= 0 ? '+' : ''}${item.change.toFixed(1)}%`}
               </Text>
             </View>
           ))}

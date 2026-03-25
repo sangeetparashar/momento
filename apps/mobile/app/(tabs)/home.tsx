@@ -1,8 +1,7 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
-  FlatList,
   useWindowDimensions,
   Pressable,
   Share,
@@ -10,20 +9,21 @@ import {
   RefreshControl,
   ScrollView,
 } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { Video, ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Text, Avatar, MomentoLogo } from '@/components/primitives';
-import { LikeButton, TickerBanner, BookmarkButton, FeedSkeleton, FeedAlgorithmModal } from '@/components/features';
-import { useFeed } from '@/hooks';
+import { Text, Avatar, MomentoLogo, CoachMark } from '@/components/primitives';
+import { LikeButton, TickerBanner, BookmarkButton, FeedSkeleton, FeedAlgorithmModal, SwipeIndicator } from '@/components/features';
+import { useFeed, useCreatorLeaderboard } from '@/hooks';
 import { useNotifications } from '@/providers/NotificationProvider';
 import type { FeedSortMode } from '@/hooks/useFeed';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo, formatNumber } from '@/utils/formatters';
-import { DUMMY_TRENDING_TOKENS, DUMMY_CREATORS_TO_WATCH, PostType } from '@momento/shared';
+import { PostType } from '@momento/shared';
 import type { PostWithCreator } from '@momento/shared';
 
 const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.webm'];
@@ -36,17 +36,6 @@ function isVideoPost(post: PostWithCreator): boolean {
   }
   return false;
 }
-
-// TickerBanner data
-const TRENDING_ITEMS = DUMMY_TRENDING_TOKENS.map((t) => ({
-  symbol: t.symbol,
-  change: t.change,
-}));
-
-const CREATORS_ITEMS = DUMMY_CREATORS_TO_WATCH.map((t) => ({
-  symbol: t.symbol,
-  change: t.change,
-}));
 
 // Reserve space for header + tickers + tab bar
 const HEADER_HEIGHT = 44;
@@ -67,6 +56,17 @@ const FeedPage = React.memo(function FeedPage({ post, screenWidth, pageHeight, i
   const [isMuted, setIsMuted] = useState(true);
   const [isPlaying, setIsPlaying] = useState(true);
   const isVideo = isVideoPost(post);
+
+  // Unload video memory when scrolling offscreen to prevent memory buildup
+  useEffect(() => {
+    if (!isVideo || !videoRef.current) return;
+    if (!isVisible) {
+      videoRef.current.stopAsync().catch(() => {});
+      videoRef.current.unloadAsync().catch(() => {});
+    } else {
+      videoRef.current.loadAsync({ uri: post.mediaUrl! }, { shouldPlay: true, isMuted, isLooping: true }).catch(() => {});
+    }
+  }, [isVisible, isVideo, post.mediaUrl, isMuted]);
 
   const handleCreatorPress = useCallback(() => {
     router.push(`/creator/${post.creatorId}`);
@@ -215,9 +215,27 @@ export default function HomeScreen() {
   const PAGE_HEIGHT = SCREEN_HEIGHT - HEADER_HEIGHT - TICKER_HEIGHT - TAB_BAR_HEIGHT;
   const [feedSort, setFeedSort] = useState<FeedSortMode>('smart');
   const [showAlgoModal, setShowAlgoModal] = useState(false);
-  const feedQuery = useFeed({ sort: feedSort });
-  const flatListRef = useRef<FlatList>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const feedQuery = useFeed({ sort: feedSort }, currentIndex);
+  const leaderboard = useCreatorLeaderboard();
+  const flashListRef = useRef<FlashList<PostWithCreator>>(null);
+
+  // Derive ticker banner items from real creator data
+  const trendingItems = useMemo(() => {
+    if (!leaderboard.data?.trending) return [];
+    return leaderboard.data.trending.map((c) => ({
+      symbol: c.tokenSymbol || `$${c.username}`,
+      change: c.topPostLikeCount,
+    }));
+  }, [leaderboard.data?.trending]);
+
+  const creatorsItems = useMemo(() => {
+    if (!leaderboard.data?.mostActive) return [];
+    return leaderboard.data.mostActive.map((c) => ({
+      symbol: c.tokenSymbol || `$${c.username}`,
+      change: c.postCount,
+    }));
+  }, [leaderboard.data?.mostActive]);
 
   const posts = useMemo(() => {
     if (!feedQuery.data?.pages) return [];
@@ -241,7 +259,7 @@ export default function HomeScreen() {
   const handleSortChange = useCallback((sort: FeedSortMode) => {
     setFeedSort(sort);
     // Scroll back to start when sort changes
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    flashListRef.current?.scrollToOffset({ offset: 0, animated: false });
     setCurrentIndex(0);
   }, []);
 
@@ -347,16 +365,22 @@ export default function HomeScreen() {
 
       {/* Ticker Banners */}
       <View style={styles.tickerSection}>
-        <TickerBanner
-          title="TRENDING"
-          items={TRENDING_ITEMS}
-          onPress={handleTickerPress}
-        />
-        <TickerBanner
-          title="CREATORS TO WATCH"
-          items={CREATORS_ITEMS}
-          onPress={handleTickerPress}
-        />
+        {trendingItems.length > 0 && (
+          <TickerBanner
+            title="TRENDING"
+            items={trendingItems}
+            valueSuffix=" likes"
+            onPress={handleTickerPress}
+          />
+        )}
+        {creatorsItems.length > 0 && (
+          <TickerBanner
+            title="MOST ACTIVE"
+            items={creatorsItems}
+            valueSuffix=" posts"
+            onPress={handleTickerPress}
+          />
+        )}
       </View>
 
       {posts.length === 0 ? (
@@ -368,8 +392,8 @@ export default function HomeScreen() {
         </View>
       ) : (
         <>
-          <FlatList
-            ref={flatListRef}
+          <FlashList
+            ref={flashListRef}
             data={posts}
             extraData={extraData}
             renderItem={renderItem}
@@ -381,15 +405,8 @@ export default function HomeScreen() {
             onEndReachedThreshold={0.5}
             onViewableItemsChanged={onViewableItemsChanged}
             viewabilityConfig={viewabilityConfig}
-            getItemLayout={(_, index) => ({
-              length: SCREEN_WIDTH,
-              offset: SCREEN_WIDTH * index,
-              index,
-            })}
-            removeClippedSubviews={true}
-            initialNumToRender={2}
-            maxToRenderPerBatch={3}
-            windowSize={5}
+            estimatedItemSize={SCREEN_WIDTH}
+            drawDistance={SCREEN_WIDTH * 2}
           />
 
           {/* Page indicator */}
@@ -409,6 +426,19 @@ export default function HomeScreen() {
         onSortChange={handleSortChange}
       />
       </ScrollView>
+
+      {/* Swipe indicator — shows once on first visit */}
+      {posts.length > 1 && <SwipeIndicator />}
+
+      {/* Wallet funding nudge — shows if user skipped funding screen */}
+      <CoachMark
+        hintId="wallet_fund"
+        text="Fund your account to start trading creator tokens"
+        position="bottom"
+        onDismiss={() => router.push('/wallet')}
+      >
+        <View />
+      </CoachMark>
     </SafeAreaView>
   );
 }

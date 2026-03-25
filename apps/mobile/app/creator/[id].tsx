@@ -13,7 +13,7 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { Text, Avatar } from '@/components/primitives';
+import { Text, Avatar, CoachMark } from '@/components/primitives';
 import { ComingSoonModal, CreatorProfileSkeleton } from '@/components/features';
 import { useCreatorProfile } from '@/hooks';
 import { apiService } from '@/services/api';
@@ -315,9 +315,15 @@ export default function CreatorScreen() {
                 {isFollowing ? 'FOLLOWING' : 'FOLLOW'}
               </Text>
             </Pressable>
-            <Pressable onPress={handleBuy} style={styles.buyButton}>
-              <Text style={styles.buyButtonText}>BUY</Text>
-            </Pressable>
+            <CoachMark
+              hintId="creator_token"
+              text="Buy this creator's token to support them"
+              position="top"
+            >
+              <Pressable onPress={handleBuy} style={styles.buyButton}>
+                <Text style={styles.buyButtonText}>BUY</Text>
+              </Pressable>
+            </CoachMark>
           </View>
 
           {/* Posts Grid */}

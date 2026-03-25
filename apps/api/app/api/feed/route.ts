@@ -8,6 +8,9 @@ const DEFAULT_RADIUS_KM = 50;
 const PAGE_SIZE = 20;
 /** How many raw posts to fetch for the ranking pool */
 const RANKING_POOL_SIZE = 200;
+/** Auto-expanding radius tiers (km) when expandRadius=true */
+const RADIUS_TIERS_KM = [5, 10, 25, 50, 100];
+const DEFAULT_MIN_POSTS = 3;
 
 /**
  * Feed sort modes:
@@ -84,7 +87,11 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const lat = parseFloat(searchParams.get('lat') || '0');
     const lng = parseFloat(searchParams.get('lng') || '0');
-    const radiusKm = parseInt(searchParams.get('radius') || String(DEFAULT_RADIUS_KM), 10);
+    const requestedRadiusKm = searchParams.has('radius')
+      ? parseInt(searchParams.get('radius')!, 10)
+      : null;
+    const expandRadius = searchParams.get('expandRadius') === 'true';
+    const minPosts = parseInt(searchParams.get('minPosts') || String(DEFAULT_MIN_POSTS), 10);
     const page = Math.max(0, parseInt(searchParams.get('page') || '0', 10));
     const sortParam = (searchParams.get('sort') || 'smart') as SortMode;
     const sort: SortMode = SORT_MODES.has(sortParam) ? sortParam : 'smart';
@@ -94,6 +101,24 @@ export async function GET(request: NextRequest) {
         { success: false, error: 'Latitude and longitude are required' },
         { status: 400 }
       );
+    }
+
+    // Determine the radius(es) to query.
+    // If expandRadius=true, the server tries increasing radius tiers
+    // until minPosts are found — replacing the client-side waterfall.
+    let radiusKm = requestedRadiusKm ?? DEFAULT_RADIUS_KM;
+    if (expandRadius && page === 0 && !requestedRadiusKm) {
+      for (const tier of RADIUS_TIERS_KM) {
+        const count = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
+          `SELECT COUNT(*) as count FROM "posts" p
+           WHERE p."location" IS NOT NULL
+             AND ST_DWithin(p."location", ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)`,
+          lng, lat, tier * 1000,
+        );
+        const postCount = Number(count[0]?.count ?? 0);
+        radiusKm = tier;
+        if (postCount >= minPosts) break;
+      }
     }
 
     const radiusMeters = radiusKm * 1000;
@@ -221,6 +246,7 @@ export async function GET(request: NextRequest) {
         page,
         hasMore,
         sort,
+        radiusKm,
       },
     });
   } catch (error) {

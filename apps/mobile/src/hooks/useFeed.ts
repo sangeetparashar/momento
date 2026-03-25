@@ -5,14 +5,6 @@ import type { FeedResponse } from '@momento/shared';
 import { apiService } from '@/services/api';
 import { useLocation } from '@/providers/LocationProvider';
 
-/**
- * Radius tiers for auto-expanding search (in km).
- * If a tier returns fewer than MIN_POSTS results and there are more tiers,
- * the hook automatically advances to the next radius.
- */
-const RADIUS_TIERS_KM = [5, 10, 25, 50, 100] as const;
-const MIN_POSTS = 3;
-
 export type FeedSortMode = 'smart' | 'recent' | 'popular' | 'nearby' | 'following';
 
 interface UseFeedOptions {
@@ -27,7 +19,7 @@ interface UseFeedOptions {
 // Default fallback location (New York City) when device location is unavailable
 const DEFAULT_LOCATION = { latitude: 40.7128, longitude: -74.006 };
 
-export function useFeed(options: UseFeedOptions = {}) {
+export function useFeed(options: UseFeedOptions = {}, currentIndex = 0) {
   const { location: deviceLocation } = useLocation();
   const { radiusKm, sort = 'smart', enabled = true } = options;
 
@@ -35,11 +27,11 @@ export function useFeed(options: UseFeedOptions = {}) {
   const location = deviceLocation ?? DEFAULT_LOCATION;
 
   /**
-   * Cache the last radius tier that returned enough posts so subsequent
-   * fetches (pagination, background refetches) skip the smaller tiers.
-   * Reset to null only on explicit pull-to-refresh.
+   * Cache the resolved radius from the server so subsequent pagination
+   * uses the same radius (avoids re-expanding on page 2+).
+   * Reset on pull-to-refresh.
    */
-  const lastSuccessfulRadius = useRef<number | null>(null);
+  const resolvedRadiusRef = useRef<number | null>(null);
 
   const query = useInfiniteQuery<FeedResponse>({
     queryKey: [
@@ -50,51 +42,35 @@ export function useFeed(options: UseFeedOptions = {}) {
       sort,
     ],
     queryFn: async ({ pageParam }) => {
-      // location is always available (device or default fallback)
       const page = (pageParam as number) ?? 0;
 
-      // Determine radius: use override or try auto-expanding
-      let currentRadius = radiusKm ?? RADIUS_TIERS_KM[0];
-      let response: FeedResponse | null = null;
+      // Build query params — let the server handle radius expansion
+      const params: Record<string, string | number | boolean | undefined> = {
+        lat: location?.latitude,
+        lng: location?.longitude,
+        sort,
+        page,
+      };
 
       if (radiusKm !== undefined) {
-        // Fixed radius — just fetch
-        response = await apiService.get<FeedResponse>('/feed', {
-          lat: location?.latitude,
-          lng: location?.longitude,
-          radius: currentRadius,
-          sort,
-          page,
-        });
+        // User set a fixed radius
+        params.radius = radiusKm;
+      } else if (page > 0 && resolvedRadiusRef.current) {
+        // Paginating — reuse the radius the server resolved on page 0
+        params.radius = resolvedRadiusRef.current;
       } else {
-        // Auto-expanding radius — start from cached tier if available
-        const startTierIndex = lastSuccessfulRadius.current
-          ? RADIUS_TIERS_KM.indexOf(lastSuccessfulRadius.current as (typeof RADIUS_TIERS_KM)[number])
-          : 0;
-        const startIndex = startTierIndex >= 0 ? startTierIndex : 0;
-
-        for (let i = startIndex; i < RADIUS_TIERS_KM.length; i++) {
-          const tier = RADIUS_TIERS_KM[i];
-          currentRadius = tier;
-          response = await apiService.get<FeedResponse>('/feed', {
-            lat: location?.latitude,
-            lng: location?.longitude,
-            radius: tier,
-            sort,
-            page,
-          });
-
-          // If we have enough posts or paginating, stop expanding
-          if (response.posts.length >= MIN_POSTS || page > 0) {
-            break;
-          }
-        }
-
-        // Cache the winning tier for future fetches
-        lastSuccessfulRadius.current = currentRadius;
+        // First page, no fixed radius — tell server to auto-expand
+        params.expandRadius = true;
       }
 
-      return response!;
+      const response = await apiService.get<FeedResponse>('/feed', params);
+
+      // Cache the server-resolved radius for subsequent pages
+      if ((response as any).radiusKm) {
+        resolvedRadiusRef.current = (response as any).radiusKm;
+      }
+
+      return response;
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) =>
@@ -103,28 +79,29 @@ export function useFeed(options: UseFeedOptions = {}) {
     staleTime: 30_000,
   });
 
-  // Prefetch next few images for faster rendering (limit to 5 at a time)
+  // Prefetch images ahead of the current scroll position (5 ahead of currentIndex)
   const prefetchedRef = useRef(new Set<string>());
   useEffect(() => {
     if (!query.data?.pages) return;
-    const urls = query.data.pages
-      .flatMap((page) => page.posts)
+    const allPosts = query.data.pages.flatMap((page) => page.posts);
+    // Prefetch the next 5 images starting from the post after currentIndex
+    const upcoming = allPosts.slice(currentIndex + 1, currentIndex + 6);
+    const urls = upcoming
       .map((post) => post.mediaUrl)
       .filter((url): url is string => !!url && !url.endsWith('.mp4') && !url.endsWith('.mov') && !url.endsWith('.webm'))
-      .filter((url) => !prefetchedRef.current.has(url))
-      .slice(0, 5);
+      .filter((url) => !prefetchedRef.current.has(url));
     if (urls.length > 0) {
       urls.forEach((url) => prefetchedRef.current.add(url));
       Image.prefetch(urls);
     }
-  }, [query.data?.pages]);
+  }, [query.data?.pages, currentIndex]);
 
   /**
-   * Pull-to-refresh handler: resets the cached radius so the expansion
-   * starts fresh from the smallest tier, then refetches.
+   * Pull-to-refresh handler: resets the cached radius so the server
+   * re-expands from the smallest tier, then refetches.
    */
   const refreshFeed = useCallback(async () => {
-    lastSuccessfulRadius.current = null;
+    resolvedRadiusRef.current = null;
     await query.refetch();
   }, [query]);
 

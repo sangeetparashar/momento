@@ -9,8 +9,21 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
+    "splash": {
+      "backgroundColor": "#0D0D0D",
+      "image": "./assets/icon.png",
+      "resizeMode": "contain"
+    },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#0D0D0D",
+          "image": "./assets/icon.png",
+          "imageWidth": 200
+        }
+      ],
       [
         "expo-location",
         {

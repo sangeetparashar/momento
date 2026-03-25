@@ -23,7 +23,8 @@ export default function LoginScreen() {
       }
       await auth.login();
       queryClient.invalidateQueries();
-      router.replace('/(tabs)/home');
+      // Route back to index — it handles profile check → funding → home
+      router.replace('/');
     } catch (error: any) {
       Alert.alert('Login Error', error?.message || String(error));
     }
@@ -37,20 +38,11 @@ export default function LoginScreen() {
       }
       await auth.login();
       queryClient.invalidateQueries();
-      router.replace('/(tabs)/home');
+      router.replace('/');
     } catch (error: any) {
       Alert.alert('Login Error', error?.message || String(error));
     }
   }, [auth, router, isPrivyAvailable, queryClient]);
-
-  // In Expo Go, add a "Preview Mode" button to skip login
-  const handlePreview = useCallback(() => {
-    Alert.alert(
-      'Preview Mode',
-      'You are browsing without signing in. Some features may be limited.',
-      [{ text: 'Continue', onPress: () => router.replace('/(tabs)/home') }]
-    );
-  }, [router]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -76,12 +68,6 @@ export default function LoginScreen() {
           <TouchableOpacity onPress={handleLogin} style={styles.loginLink} activeOpacity={0.7}>
             <Text style={styles.loginText}>OR LOGIN</Text>
           </TouchableOpacity>
-
-          {!isPrivyAvailable && (
-            <TouchableOpacity onPress={handlePreview} style={styles.previewLink} activeOpacity={0.7}>
-              <Text style={styles.previewText}>PREVIEW MODE (EXPO GO)</Text>
-            </TouchableOpacity>
-          )}
         </View>
       </View>
     </SafeAreaView>
@@ -102,14 +88,6 @@ const styles = StyleSheet.create({
   },
   logoContainer: {
     alignItems: 'center',
-  },
-  logo: {
-    ...TYPOGRAPHY.h1,
-    color: COLORS.textPrimary,
-    fontSize: 32,
-    letterSpacing: 10,
-    fontWeight: '800',
-    textAlign: 'center',
   },
   subtitle: {
     ...TYPOGRAPHY.label,
@@ -148,20 +126,6 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.body,
     color: COLORS.textSecondary,
     letterSpacing: 2,
-    fontWeight: '600',
-  },
-  previewLink: {
-    marginTop: SPACING.lg,
-    paddingVertical: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    borderRadius: RADII.full,
-  },
-  previewText: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.primary,
-    letterSpacing: 1,
     fontWeight: '600',
   },
 });
