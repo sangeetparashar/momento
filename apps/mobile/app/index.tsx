@@ -5,6 +5,7 @@ import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { useFeed } from '@/hooks';
 import { apiService } from '@/services/api';
+import { getOnboardingState } from '@/services/onboardingStorage';
 import { Text, MomentoLogo } from '@/components/primitives';
 import { COLORS, SPACING } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -56,11 +57,10 @@ export default function IndexScreen() {
   useEffect(() => {
     if (!isReady || !navReady || navigatedRef.current) return;
 
-    // Not authenticated — go straight to home feed (feed loads without auth).
-    // The home screen shows an auth-gate overlay prompting sign-in.
+    // Not authenticated — force login. App is unusable without auth.
     if (!authUser) {
       navigatedRef.current = true;
-      router.replace('/(tabs)/home');
+      router.replace('/login');
       return;
     }
 
@@ -70,11 +70,20 @@ export default function IndexScreen() {
     navigatedRef.current = true;
     queryClient.invalidateQueries();
 
+    // Incomplete profile → force setup (no skip allowed)
     if (profileQuery.data && !isProfileComplete(profileQuery.data)) {
       router.replace('/setup-profile');
-    } else {
-      router.replace('/(tabs)/home');
+      return;
     }
+
+    // Profile complete — check if they've seen the funding screen
+    getOnboardingState().then((state) => {
+      if (!state.hasSeenFundingScreen) {
+        router.replace('/fund-wallet-onboarding');
+      } else {
+        router.replace('/(tabs)/home');
+      }
+    });
   }, [isReady, authUser, router, navReady, queryClient, profileQuery.isLoading, profileQuery.data]);
 
   return (

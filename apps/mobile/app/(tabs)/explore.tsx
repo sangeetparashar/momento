@@ -14,7 +14,7 @@ import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Text, Avatar } from '@/components/primitives';
+import { Text, Avatar, CoachMark } from '@/components/primitives';
 import { ExploreSkeleton } from '@/components/features';
 import { useFeed, useNearbyCreators, useSearch, useSwipeNavigation } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
@@ -384,6 +384,11 @@ export default function ExploreScreen() {
       </View>
 
       {/* Search Bar */}
+      <CoachMark
+        hintId="explore_search"
+        text="Search for creators, tokens, or posts"
+        position="bottom"
+      >
       <View style={styles.searchContainer}>
         <View style={styles.searchBar}>
           <Ionicons name="search" size={18} color={COLORS.textTertiary} />
@@ -409,6 +414,7 @@ export default function ExploreScreen() {
           )}
         </View>
       </View>
+      </CoachMark>
 
       {/* Segmented Toggle */}
       <View style={styles.toggleContainer}>

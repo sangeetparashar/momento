@@ -20,3 +20,4 @@ export { WalletSkeleton } from './WalletSkeleton';
 export { FollowingListSkeleton } from './FollowingListSkeleton';
 export { ChartSkeleton } from './ChartSkeleton';
 export { FavoritesSkeleton } from './FavoritesSkeleton';
+export { SwipeIndicator } from './SwipeIndicator';

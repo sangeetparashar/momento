@@ -104,7 +104,8 @@ export default function SetupProfileScreen() {
           if (from === 'profile') {
             router.back();
           } else {
-            router.replace('/(tabs)/home');
+            // Route to funding onboarding before home
+            router.replace('/fund-wallet-onboarding');
           }
         },
         onError: (err: Error) => {
@@ -113,14 +114,6 @@ export default function SetupProfileScreen() {
       },
     );
   }, [username, displayName, avatarUri, socials, hasSocialLink, updateProfile, router]);
-
-  const handleSkip = useCallback(() => {
-    if (from === 'profile') {
-      router.back();
-    } else {
-      router.replace('/(tabs)/home');
-    }
-  }, [router, from]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -137,7 +130,7 @@ export default function SetupProfileScreen() {
           <View style={styles.header}>
             <Text style={styles.title}>Set Up Your Profile</Text>
             <Text style={styles.subtitle}>
-              Let others know who you are. Add a photo, username, and at least one social link.
+              Complete your profile to get started. Add a photo, username, and at least one social link.
             </Text>
           </View>
 
@@ -222,9 +215,6 @@ export default function SetupProfileScreen() {
             ) : (
               <Text style={styles.saveButtonText}>Continue</Text>
             )}
-          </Pressable>
-          <Pressable onPress={handleSkip} style={styles.skipButton} hitSlop={8}>
-            <Text style={styles.skipText}>Skip for now</Text>
           </Pressable>
         </View>
       </KeyboardAvoidingView>
@@ -363,14 +353,5 @@ const styles = StyleSheet.create({
     color: COLORS.background,
     fontWeight: '800',
     fontSize: 16,
-  },
-  skipButton: {
-    alignItems: 'center',
-    paddingVertical: SPACING.sm,
-  },
-  skipText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textTertiary,
-    fontWeight: '600',
   },
 });

@@ -8,3 +8,4 @@ export { Skeleton, SkeletonText } from './Skeleton';
 export { AnimatedPressable } from './AnimatedPressable';
 export { MomentoLogo } from './MomentoLogo';
 export { LoadingView } from './LoadingView';
+export { CoachMark } from './CoachMark';

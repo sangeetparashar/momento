@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Image } from 'expo-image';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { Text, Avatar } from '@/components/primitives';
+import { Text, Avatar, CoachMark } from '@/components/primitives';
 import {
   ComingSoonModal,
   SettingsSheet,
@@ -510,6 +510,11 @@ export default function ProfileScreen() {
             {renderSocialLinks()}
 
             {/* Action buttons */}
+            <CoachMark
+              hintId="profile_edit"
+              text="Tap to customize your profile"
+              position="top"
+            >
             <View style={styles.actionRow}>
               <Pressable
                 style={styles.actionButton}
@@ -538,6 +543,7 @@ export default function ProfileScreen() {
                 />
               </Pressable>
             </View>
+            </CoachMark>
 
             {/* Content sections */}
             {isCreator ? renderCreatorContent() : renderUserContent()}

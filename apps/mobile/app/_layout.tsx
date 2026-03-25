@@ -40,7 +40,8 @@ export default function RootLayout() {
                   }}
                 >
                   <Stack.Screen name="index" />
-                  <Stack.Screen name="login" options={{ animation: 'fade' }} />
+                  <Stack.Screen name="login" options={{ animation: 'fade', gestureEnabled: false }} />
+                  <Stack.Screen name="fund-wallet-onboarding" options={{ animation: 'fade', gestureEnabled: false }} />
                   <Stack.Screen name="(tabs)" />
                   <Stack.Screen
                     name="creator/[id]"
