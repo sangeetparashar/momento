@@ -49,9 +49,10 @@ export default function IndexScreen() {
   useEffect(() => {
     if (!isReady || !navReady) return;
 
+    // Not authenticated — go straight to home feed (feed loads without auth).
+    // The home screen shows an auth-gate overlay prompting sign-in.
     if (!authUser) {
-      queryClient.clear();
-      router.replace('/login');
+      router.replace('/(tabs)/home');
       return;
     }
 

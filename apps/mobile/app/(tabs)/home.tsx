@@ -9,15 +9,20 @@ import {
   ActivityIndicator,
   RefreshControl,
   ScrollView,
+  TouchableOpacity,
+  Alert,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Video, ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar, MomentoLogo } from '@/components/primitives';
 import { LikeButton, TickerBanner, BookmarkButton, FeedSkeleton, FeedAlgorithmModal } from '@/components/features';
 import { useFeed } from '@/hooks';
+import { useAuth } from '@/hooks/useAuth';
+import { usePrivyGuard } from '@/providers/PrivyGuard';
 import { useNotifications } from '@/providers/NotificationProvider';
 import type { FeedSortMode } from '@/hooks/useFeed';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
@@ -208,9 +213,59 @@ const FeedPage = React.memo(function FeedPage({ post, screenWidth, pageHeight, i
   );
 });
 
+/**
+ * Auth gate overlay — shown on the home feed when the user is not signed in.
+ * The feed is fully visible and scrollable behind this overlay to give users
+ * a taste of the content before they commit to signing up.
+ */
+function AuthGateOverlay() {
+  const auth = useAuth();
+  const { isPrivyAvailable } = usePrivyGuard();
+  const router = useRouter();
+  const queryClient = useQueryClient();
+
+  const handleSignIn = useCallback(async () => {
+    try {
+      if (!isPrivyAvailable) {
+        Alert.alert('Dev Build Required', 'Privy auth requires a development build.');
+        return;
+      }
+      await auth.login();
+      queryClient.invalidateQueries();
+    } catch (error: any) {
+      Alert.alert('Login Error', error?.message || String(error));
+    }
+  }, [auth, isPrivyAvailable, queryClient]);
+
+  const handlePreview = useCallback(() => {
+    // Dismiss handled by parent — this is a no-op for "continue browsing"
+  }, []);
+
+  return (
+    <View style={authGateStyles.overlay}>
+      <View style={authGateStyles.card}>
+        <MomentoLogo size={40} showText />
+        <Text style={authGateStyles.title}>Join Momento</Text>
+        <Text style={authGateStyles.subtitle}>
+          Sign in to like, comment, follow creators, and access your wallet.
+        </Text>
+        <TouchableOpacity onPress={handleSignIn} style={authGateStyles.signInButton} activeOpacity={0.7}>
+          <Text style={authGateStyles.signInText}>SIGN IN</Text>
+        </TouchableOpacity>
+        {!isPrivyAvailable && (
+          <TouchableOpacity onPress={handlePreview} style={authGateStyles.previewLink} activeOpacity={0.7}>
+            <Text style={authGateStyles.previewText}>PREVIEW MODE (EXPO GO)</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+}
+
 export default function HomeScreen() {
   const router = useRouter();
   const { unreadCount } = useNotifications();
+  const { user: authUser } = useAuth();
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
   const PAGE_HEIGHT = SCREEN_HEIGHT - HEADER_HEIGHT - TICKER_HEIGHT - TAB_BAR_HEIGHT;
   const [feedSort, setFeedSort] = useState<FeedSortMode>('smart');
@@ -409,6 +464,9 @@ export default function HomeScreen() {
         onSortChange={handleSortChange}
       />
       </ScrollView>
+
+      {/* Auth gate overlay — visible when user is not signed in */}
+      {!authUser && <AuthGateOverlay />}
     </SafeAreaView>
   );
 }
@@ -636,5 +694,74 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.bodySmall,
     color: COLORS.textTertiary,
     marginTop: SPACING.xs,
+  },
+});
+
+const authGateStyles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'flex-end',
+    backgroundColor: 'transparent',
+    // Allow touches to pass through to feed above the card
+    pointerEvents: 'box-none',
+  },
+  card: {
+    backgroundColor: COLORS.surface,
+    borderTopLeftRadius: RADII.xl,
+    borderTopRightRadius: RADII.xl,
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.xl,
+    paddingBottom: SPACING.xl + 20,
+    alignItems: 'center',
+    // Slight shadow to separate from feed
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 16,
+    pointerEvents: 'auto',
+  },
+  title: {
+    ...TYPOGRAPHY.h3,
+    color: COLORS.textPrimary,
+    fontWeight: '800',
+    marginTop: SPACING.md,
+  },
+  subtitle: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: SPACING.sm,
+    marginBottom: SPACING.lg,
+    lineHeight: 20,
+  },
+  signInButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.xl,
+    borderRadius: RADII.full,
+    width: '100%',
+    alignItems: 'center',
+  },
+  signInText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.background,
+    fontWeight: '800',
+    letterSpacing: 2,
+    fontSize: 16,
+  },
+  previewLink: {
+    marginTop: SPACING.md,
+    paddingVertical: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    borderRadius: RADII.full,
+  },
+  previewText: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.primary,
+    letterSpacing: 1,
+    fontWeight: '600',
   },
 });

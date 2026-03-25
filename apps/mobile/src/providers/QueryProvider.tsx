@@ -40,7 +40,7 @@ export function QueryProvider({ children }: QueryProviderProps) {
           shouldDehydrateQuery: (query) => {
             // Only persist feed, profile, and creator queries
             const key = String(query.queryKey[0]);
-            return ['userProfile', 'creator', 'creators', 'walletBalance'].includes(key);
+            return ['feed', 'userProfile', 'creator', 'creators', 'walletBalance'].includes(key);
           },
         },
       }}
