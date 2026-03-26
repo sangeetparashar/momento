@@ -22,8 +22,9 @@ import {
   ProfileSkeleton,
   FollowingModal,
   FavoritesSkeleton,
+  FundWalletModal,
 } from '@/components/features';
-import { useUserProfile, useSavedPosts, useProfileComplete, useSwipeNavigation } from '@/hooks';
+import { useUserProfile, useSavedPosts, useProfileComplete, useSwipeNavigation, useWalletBalance } from '@/hooks';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/providers/NotificationProvider';
 import { apiService } from '@/services/api';
@@ -61,9 +62,11 @@ export default function ProfileScreen() {
   const ITEM_WIDTH = useMemo(() => (SCREEN_WIDTH - SPACING.md * 2 - COLUMN_GAP) / 2, [SCREEN_WIDTH]);
   const auth = useAuth();
   const { user, isLoading, refetch } = useUserProfile();
+  const { data: walletBalance } = useWalletBalance();
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showFollowing, setShowFollowing] = useState(false);
+  const [showFundModal, setShowFundModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const isCreator = user?.role === UserRole.CREATOR;
@@ -545,6 +548,15 @@ export default function ProfileScreen() {
             </View>
             </CoachMark>
 
+            {/* Fund wallet CTA — shown when balance is near zero */}
+            {walletBalance && walletBalance.totalValueUsd < 1 && (
+              <Pressable style={styles.fundCta} onPress={() => setShowFundModal(true)}>
+                <Ionicons name="wallet-outline" size={20} color={COLORS.primary} />
+                <Text style={styles.fundCtaText}>Fund your wallet to start trading</Text>
+                <Ionicons name="chevron-forward" size={16} color={COLORS.textSecondary} />
+              </Pressable>
+            )}
+
             {/* Content sections */}
             {isCreator ? renderCreatorContent() : renderUserContent()}
 
@@ -567,6 +579,10 @@ export default function ProfileScreen() {
         visible={showFollowing}
         onClose={() => setShowFollowing(false)}
       />
+      <FundWalletModal
+        visible={showFundModal}
+        onClose={() => setShowFundModal(false)}
+      />
       </Animated.View>
     </SafeAreaView>
   );
@@ -579,6 +595,23 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 100,
+  },
+  fundCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.md,
+    padding: SPACING.md,
+    borderRadius: RADII.lg,
+    borderWidth: 1,
+    borderColor: COLORS.primary + '30',
+    gap: SPACING.sm,
+  },
+  fundCtaText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textPrimary,
+    flex: 1,
   },
 
   // Header bar

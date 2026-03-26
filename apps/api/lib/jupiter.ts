@@ -69,8 +69,12 @@ export async function getSwapQuote(params: {
     outputMint,
     amount,
     slippageBps: slippageBps.toString(),
-    platformFeeBps: platformFeeBps.toString(),
   });
+
+  // Only add platform fee when a fee wallet is configured
+  if (getFeeWallet()) {
+    queryParams.set('platformFeeBps', platformFeeBps.toString());
+  }
 
   const response = await fetch(
     `${JUPITER_API_BASE}/quote?${queryParams.toString()}`,
@@ -78,9 +82,12 @@ export async function getSwapQuote(params: {
   );
 
   if (!response.ok) {
-    const error = await response.text();
-    console.error('[Jupiter] Quote error:', response.status, error);
-    throw new Error(`Jupiter quote failed: ${response.status}`);
+    const errorBody = await response.text();
+    console.error('[Jupiter] Quote error:', response.status, errorBody);
+    // Parse Jupiter error for user-friendly message
+    let detail = '';
+    try { detail = JSON.parse(errorBody)?.error || errorBody; } catch { detail = errorBody; }
+    throw new Error(detail || `Jupiter quote failed: ${response.status}`);
   }
 
   const data = await response.json();

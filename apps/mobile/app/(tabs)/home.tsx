@@ -16,7 +16,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar, MomentoLogo, CoachMark } from '@/components/primitives';
-import { LikeButton, TickerBanner, BookmarkButton, FeedSkeleton, FeedAlgorithmModal, SwipeIndicator } from '@/components/features';
+import { LikeButton, TickerBanner, BookmarkButton, FeedSkeleton, FeedAlgorithmModal, SwipeIndicator, FundWalletModal } from '@/components/features';
 import { useFeed, useCreatorLeaderboard } from '@/hooks';
 import { useNotifications } from '@/providers/NotificationProvider';
 import type { FeedSortMode } from '@/hooks/useFeed';
@@ -215,6 +215,7 @@ export default function HomeScreen() {
   const PAGE_HEIGHT = SCREEN_HEIGHT - HEADER_HEIGHT - TICKER_HEIGHT - TAB_BAR_HEIGHT;
   const [feedSort, setFeedSort] = useState<FeedSortMode>('smart');
   const [showAlgoModal, setShowAlgoModal] = useState(false);
+  const [showFundModal, setShowFundModal] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const feedQuery = useFeed({ sort: feedSort }, currentIndex);
   const leaderboard = useCreatorLeaderboard();
@@ -389,6 +390,10 @@ export default function HomeScreen() {
           <Text style={styles.emptySubtext}>
             Follow creators to see their posts here
           </Text>
+          <Pressable style={styles.fundButton} onPress={() => setShowFundModal(true)}>
+            <Ionicons name="wallet-outline" size={18} color={COLORS.background} />
+            <Text style={styles.fundButtonText}>Fund Your Wallet</Text>
+          </Pressable>
         </View>
       ) : (
         <>
@@ -402,7 +407,7 @@ export default function HomeScreen() {
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             onEndReached={handleEndReached}
-            onEndReachedThreshold={0.5}
+            onEndReachedThreshold={10}
             onViewableItemsChanged={onViewableItemsChanged}
             viewabilityConfig={viewabilityConfig}
             estimatedItemSize={SCREEN_WIDTH}
@@ -439,6 +444,8 @@ export default function HomeScreen() {
       >
         <View />
       </CoachMark>
+
+      <FundWalletModal visible={showFundModal} onClose={() => setShowFundModal(false)} />
     </SafeAreaView>
   );
 }
@@ -666,5 +673,20 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.bodySmall,
     color: COLORS.textTertiary,
     marginTop: SPACING.xs,
+  },
+  fundButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderRadius: RADII.full,
+    marginTop: SPACING.lg,
+  },
+  fundButtonText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.background,
+    fontWeight: '700',
   },
 });

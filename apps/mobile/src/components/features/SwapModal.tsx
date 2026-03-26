@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text } from '@/components/primitives';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -44,6 +45,7 @@ const TOKENS: TokenInfo[] = [
  * → reviews output amount → signs transaction with Privy embedded wallet.
  */
 export function SwapModal({ visible, onClose }: SwapModalProps) {
+  const insets = useSafeAreaInsets();
   const { walletAddress } = useAuth();
   const { quote, status, error, fetchQuote, executeSwap, reset } = useSwap();
 
@@ -137,7 +139,7 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
       presentationStyle="pageSheet"
       onRequestClose={handleClose}
     >
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         {/* Header */}
         <View style={styles.header}>
           <Pressable onPress={handleClose} hitSlop={12} style={styles.closeButton}>

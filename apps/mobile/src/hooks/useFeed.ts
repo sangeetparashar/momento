@@ -73,6 +73,15 @@ export function useFeed(options: UseFeedOptions = {}, currentIndex = 0) {
     staleTime: 30_000,
   });
 
+  // Auto-prefetch next page after current page loads (TikTok-style)
+  const pageCount = query.data?.pages?.length ?? 0;
+  useEffect(() => {
+    if (pageCount > 0 && query.hasNextPage && !query.isFetchingNextPage) {
+      const timer = setTimeout(() => query.fetchNextPage(), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [pageCount, query.hasNextPage, query.isFetchingNextPage]);
+
   // Prefetch images ahead of the current scroll position (5 ahead of currentIndex)
   const prefetchedRef = useRef(new Set<string>());
   useEffect(() => {

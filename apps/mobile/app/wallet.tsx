@@ -18,6 +18,7 @@ import {
   SwapModal,
   ComingSoonModal,
   FundWalletModal,
+  ChartSkeleton,
 } from '@/components/features';
 import { useWalletBalance, useSwipeNavigation } from '@/hooks';
 import { useUserProfile } from '@/hooks/useUserProfile';
@@ -259,8 +260,12 @@ export default function WalletScreen() {
           </View>
         )}
 
-        {/* Portfolio Chart — Real SOL price history */}
-        <PortfolioChart solBalance={balance?.solBalance} />
+        {/* Portfolio Chart — skeleton until balance data is ready */}
+        {walletQuery.isLoading ? (
+          <ChartSkeleton />
+        ) : (
+          <PortfolioChart solBalance={balance?.solBalance} />
+        )}
 
         <View style={styles.bottomSpacer} />
       </ScrollView>

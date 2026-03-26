@@ -109,6 +109,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   tickerContainer: {
+    height: 24,
     overflow: 'hidden',
   },
   tickerRow: {

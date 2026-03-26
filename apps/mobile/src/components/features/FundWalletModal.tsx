@@ -9,7 +9,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { WebView, WebViewNavigation } from 'react-native-webview';
-// Note: expo-clipboard requires native rebuild; using RN Clipboard instead
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/primitives';
 import { useOnramp } from '@/hooks/useOnramp';
@@ -36,6 +36,7 @@ interface FundWalletModalProps {
 }
 
 export function FundWalletModal({ visible, onClose }: FundWalletModalProps) {
+  const insets = useSafeAreaInsets();
   const [method, setMethod] = useState<FundingMethod>('picker');
 
   const handleClose = useCallback(() => {
@@ -56,7 +57,7 @@ export function FundWalletModal({ visible, onClose }: FundWalletModalProps) {
       presentationStyle="pageSheet"
       onRequestClose={handleClose}
     >
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         {/* Header */}
         <View style={styles.header}>
           {method !== 'picker' ? (
@@ -279,14 +280,10 @@ function OnChainTransfer() {
 
   const handleCopy = useCallback(async () => {
     if (!walletAddress) return;
-    // expo-clipboard native module may not be in current build; use Share as fallback
     try {
-      const { default: ExpoClipboard } = await import('expo-clipboard');
-      await ExpoClipboard.setStringAsync(walletAddress);
-    } catch {
-      await Share.share({ message: walletAddress });
-      return;
-    }
+      // Use Share API as clipboard — avoids expo-clipboard native module dependency
+      await Share.share({ message: walletAddress, title: 'Wallet Address' });
+    } catch {}
     setCopied(true);
     setTimeout(() => setCopied(false), 3000);
   }, [walletAddress]);

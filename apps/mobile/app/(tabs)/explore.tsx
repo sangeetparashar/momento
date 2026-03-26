@@ -15,7 +15,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar, CoachMark } from '@/components/primitives';
-import { ExploreSkeleton } from '@/components/features';
+import { ExploreSkeleton, FundWalletModal } from '@/components/features';
 import { useFeed, useNearbyCreators, useSearch, useSwipeNavigation } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -246,6 +246,7 @@ export default function ExploreScreen() {
   const feedQuery = useFeed();
   const creatorsQuery = useNearbyCreators();
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showFundModal, setShowFundModal] = useState(false);
 
   // Sub-tab swipe between CREATORS ↔ POSTS
   const subTabTouch = useRef<{ x: number; y: number; time: number } | null>(null);
@@ -553,6 +554,10 @@ export default function ExploreScreen() {
                     ? 'No creators nearby'
                     : 'Nothing to explore yet'}
                 </Text>
+                <Pressable style={styles.fundButton} onPress={() => setShowFundModal(true)}>
+                  <Ionicons name="wallet-outline" size={18} color={COLORS.background} />
+                  <Text style={styles.fundButtonText}>Fund Your Wallet</Text>
+                </Pressable>
               </View>
             }
           />
@@ -560,6 +565,8 @@ export default function ExploreScreen() {
       )}
       </View>
       </Animated.View>
+
+      <FundWalletModal visible={showFundModal} onClose={() => setShowFundModal(false)} />
     </SafeAreaView>
   );
 }
@@ -786,5 +793,20 @@ const styles = StyleSheet.create({
     color: COLORS.textTertiary,
     textAlign: 'center',
     paddingHorizontal: SPACING.xl,
+  },
+  fundButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderRadius: RADII.full,
+    marginTop: SPACING.lg,
+  },
+  fundButtonText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.background,
+    fontWeight: '700',
   },
 });

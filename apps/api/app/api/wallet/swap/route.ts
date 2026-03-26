@@ -47,9 +47,10 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     if (error instanceof Response) return error;
-    console.error('[Swap] Quote error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch swap quote';
+    console.error('[Swap] Quote error:', message);
     return NextResponse.json(
-      { success: false, error: 'Failed to fetch swap quote' },
+      { success: false, error: message },
       { status: 500 }
     );
   }
