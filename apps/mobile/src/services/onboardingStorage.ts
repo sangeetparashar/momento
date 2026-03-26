@@ -1,6 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const STORAGE_KEY = '@momento/onboarding';
+const STORAGE_KEY_PREFIX = '@momento/onboarding';
+
+/** Current user ID — set via setOnboardingUser() when auth state changes. */
+let currentUserId: string | null = null;
+
+function getStorageKey(): string {
+  return currentUserId
+    ? `${STORAGE_KEY_PREFIX}/${currentUserId}`
+    : STORAGE_KEY_PREFIX;
+}
+
+/**
+ * Call this when the authenticated user changes (login/logout).
+ * This ensures onboarding state is scoped per-user.
+ */
+export function setOnboardingUser(userId: string | null): void {
+  currentUserId = userId;
+}
 
 export interface OnboardingState {
   dismissedHints: string[];
@@ -15,7 +32,7 @@ const DEFAULT_STATE: OnboardingState = {
 
 export async function getOnboardingState(): Promise<OnboardingState> {
   try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    const raw = await AsyncStorage.getItem(getStorageKey());
     if (!raw) return { ...DEFAULT_STATE };
     return { ...DEFAULT_STATE, ...JSON.parse(raw) };
   } catch {
@@ -24,7 +41,7 @@ export async function getOnboardingState(): Promise<OnboardingState> {
 }
 
 async function saveState(state: OnboardingState): Promise<void> {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  await AsyncStorage.setItem(getStorageKey(), JSON.stringify(state));
 }
 
 export async function dismissHint(hintId: string): Promise<void> {
@@ -47,5 +64,5 @@ export async function markFundingScreenSeen(): Promise<void> {
 }
 
 export async function resetOnboarding(): Promise<void> {
-  await AsyncStorage.removeItem(STORAGE_KEY);
+  await AsyncStorage.removeItem(getStorageKey());
 }

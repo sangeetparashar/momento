@@ -47,6 +47,10 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     if (error instanceof Response) return error;
+    // requireAuth throws a Response but instanceof can fail across realms
+    if (error && typeof error === 'object' && 'status' in error && 'body' in error) {
+      return error as Response;
+    }
     const message = error instanceof Error ? error.message : 'Failed to fetch swap quote';
     console.error('[Swap] Quote error:', message);
     return NextResponse.json(

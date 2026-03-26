@@ -9,7 +9,10 @@
  * trading creator tokens with the platform fee flowing to Momento.
  */
 
-const JUPITER_API_BASE = 'https://api.jup.ag/swap/v1';
+// Use lite-api (free, no API key required). Upgrade to api.jup.ag with API key for higher limits.
+const JUPITER_API_BASE = process.env.JUPITER_API_KEY
+  ? 'https://api.jup.ag/swap/v1'
+  : 'https://lite-api.jup.ag/swap/v1';
 
 /** Well-known Solana token mints */
 export const TOKEN_MINTS = {

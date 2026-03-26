@@ -5,7 +5,7 @@ import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { useFeed } from '@/hooks';
 import { apiService } from '@/services/api';
-import { getOnboardingState } from '@/services/onboardingStorage';
+import { getOnboardingState, setOnboardingUser } from '@/services/onboardingStorage';
 import { Text, MomentoLogo } from '@/components/primitives';
 import { COLORS, SPACING } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -53,6 +53,11 @@ export default function IndexScreen() {
     const timer = setTimeout(() => setNavReady(true), 100);
     return () => clearTimeout(timer);
   }, [rootNav]);
+
+  // Scope onboarding storage to the current user
+  useEffect(() => {
+    setOnboardingUser(authUser?.id ?? null);
+  }, [authUser?.id]);
 
   useEffect(() => {
     if (!isReady || !navReady || navigatedRef.current) return;
