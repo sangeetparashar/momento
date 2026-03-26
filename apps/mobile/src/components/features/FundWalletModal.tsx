@@ -9,7 +9,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { WebView, WebViewNavigation } from 'react-native-webview';
-import * as Clipboard from 'expo-clipboard';
+// Note: expo-clipboard requires native rebuild; using RN Clipboard instead
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/primitives';
 import { useOnramp } from '@/hooks/useOnramp';
@@ -279,7 +279,14 @@ function OnChainTransfer() {
 
   const handleCopy = useCallback(async () => {
     if (!walletAddress) return;
-    await Clipboard.setStringAsync(walletAddress);
+    // expo-clipboard native module may not be in current build; use Share as fallback
+    try {
+      const { default: ExpoClipboard } = await import('expo-clipboard');
+      await ExpoClipboard.setStringAsync(walletAddress);
+    } catch {
+      await Share.share({ message: walletAddress });
+      return;
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 3000);
   }, [walletAddress]);

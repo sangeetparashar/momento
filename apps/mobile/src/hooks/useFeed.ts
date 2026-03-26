@@ -16,15 +16,9 @@ interface UseFeedOptions {
   enabled?: boolean;
 }
 
-// Default fallback location (New York City) when device location is unavailable
-const DEFAULT_LOCATION = { latitude: 40.7128, longitude: -74.006 };
-
 export function useFeed(options: UseFeedOptions = {}, currentIndex = 0) {
-  const { location: deviceLocation } = useLocation();
+  const { location } = useLocation();
   const { radiusKm, sort = 'smart', enabled = true } = options;
-
-  // Use device location if available, otherwise fall back to default
-  const location = deviceLocation ?? DEFAULT_LOCATION;
 
   /**
    * Cache the resolved radius from the server so subsequent pagination
@@ -75,7 +69,7 @@ export function useFeed(options: UseFeedOptions = {}, currentIndex = 0) {
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) =>
       lastPage.hasMore ? allPages.length : undefined,
-    enabled,
+    enabled: enabled && !!location,
     staleTime: 30_000,
   });
 

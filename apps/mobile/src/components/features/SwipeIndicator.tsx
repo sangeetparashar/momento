@@ -27,6 +27,10 @@ export function SwipeIndicator({ onDismiss }: { onDismiss?: () => void }) {
   const { visible, dismiss } = useCoachMark('home_swipe');
   const translateX = useSharedValue(0);
 
+  const handStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
   useEffect(() => {
     if (!visible) return;
     // Animate hand icon: slide left 40px and back, repeating
@@ -49,10 +53,6 @@ export function SwipeIndicator({ onDismiss }: { onDismiss?: () => void }) {
     dismiss();
     onDismiss?.();
   };
-
-  const handStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-  }));
 
   return (
     <AnimatedPressable

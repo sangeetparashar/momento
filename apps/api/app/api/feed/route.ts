@@ -9,7 +9,7 @@ const PAGE_SIZE = 20;
 /** How many raw posts to fetch for the ranking pool */
 const RANKING_POOL_SIZE = 200;
 /** Auto-expanding radius tiers (km) when expandRadius=true */
-const RADIUS_TIERS_KM = [5, 10, 25, 50, 100];
+const RADIUS_TIERS_KM = [50, 100, 250, 500, 1000];
 const DEFAULT_MIN_POSTS = 3;
 
 /**
