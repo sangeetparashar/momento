@@ -73,25 +73,12 @@ export function useFeed(options: UseFeedOptions = {}, currentIndex = 0) {
     staleTime: 30_000,
   });
 
-  // Auto-prefetch page 2 after the first page loads (TikTok-style)
-  // Only prefetch once — subsequent pages are fetched via onEndReached.
-  const pageCount = query.data?.pages?.length ?? 0;
-  const hasPrefetched = useRef(false);
-  useEffect(() => {
-    if (pageCount === 1 && !hasPrefetched.current && query.hasNextPage && !query.isFetchingNextPage) {
-      hasPrefetched.current = true;
-      const timer = setTimeout(() => query.fetchNextPage(), 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [pageCount, query.hasNextPage, query.isFetchingNextPage]);
-
-  // Prefetch images ahead of the current scroll position (5 ahead of currentIndex)
+  // Prefetch images ahead of the current scroll position (2 ahead of currentIndex)
   const prefetchedRef = useRef(new Set<string>());
   useEffect(() => {
     if (!query.data?.pages) return;
     const allPosts = query.data.pages.flatMap((page) => page.posts);
-    // Prefetch the next 5 images starting from the post after currentIndex
-    const upcoming = allPosts.slice(currentIndex + 1, currentIndex + 6);
+    const upcoming = allPosts.slice(currentIndex + 1, currentIndex + 3);
     const urls = upcoming
       .map((post) => post.mediaUrl)
       .filter((url): url is string => !!url && !url.endsWith('.mp4') && !url.endsWith('.mov') && !url.endsWith('.webm'))
@@ -108,7 +95,6 @@ export function useFeed(options: UseFeedOptions = {}, currentIndex = 0) {
    */
   const refreshFeed = useCallback(async () => {
     resolvedRadiusRef.current = null;
-    hasPrefetched.current = false;
     await query.refetch();
   }, [query]);
 

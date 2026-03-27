@@ -407,11 +407,11 @@ export default function HomeScreen() {
             pagingEnabled
             showsHorizontalScrollIndicator={false}
             onEndReached={handleEndReached}
-            onEndReachedThreshold={3}
+            onEndReachedThreshold={0.5}
             onViewableItemsChanged={onViewableItemsChanged}
             viewabilityConfig={viewabilityConfig}
             estimatedItemSize={SCREEN_WIDTH}
-            drawDistance={SCREEN_WIDTH * 2}
+            drawDistance={SCREEN_WIDTH}
           />
 
           {/* Page indicator */}

@@ -5,7 +5,7 @@ import { getOrSetCache, cacheKeys, cacheTTL } from '@/lib/redis';
 import { readLimiter, applyRateLimit } from '@/lib/ratelimit';
 
 const DEFAULT_RADIUS_KM = 50;
-const PAGE_SIZE = 30;
+const PAGE_SIZE = 15;
 /** How many raw posts to fetch for the ranking pool */
 const RANKING_POOL_SIZE = 200;
 /** Auto-expanding radius tiers (km) when expandRadius=true */
