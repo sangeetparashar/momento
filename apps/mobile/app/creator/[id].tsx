@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar, CoachMark } from '@/components/primitives';
 import { ComingSoonModal, CreatorProfileSkeleton } from '@/components/features';
 import { useCreatorProfile } from '@/hooks';
+import { useUserProfile } from '@/hooks/useUserProfile';
 import { apiService } from '@/services/api';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -50,7 +51,16 @@ export default function CreatorScreen() {
   const { width: SCREEN_WIDTH } = useWindowDimensions();
   const ITEM_WIDTH = useMemo(() => (SCREEN_WIDTH - SPACING.md * 2 - COLUMN_GAP) / 2, [SCREEN_WIDTH]);
   const { profile, isLoading, isFollowing, toggleFollow } = useCreatorProfile(id);
+  const { user: currentUser } = useUserProfile();
   const [showComingSoon, setShowComingSoon] = useState(false);
+  const isOwnProfile = !!currentUser?.id && !!profile?.id && currentUser.id === profile.id;
+
+  // Redirect to own profile tab if viewing yourself
+  useEffect(() => {
+    if (isOwnProfile) {
+      router.replace('/(tabs)/profile');
+    }
+  }, [isOwnProfile, router]);
 
   const postsQuery = useInfiniteQuery({
     queryKey: ['creator', id, 'posts'],
@@ -297,34 +307,36 @@ export default function CreatorScreen() {
             </View>
           </View>
 
-          {/* Action Buttons */}
-          <View style={styles.actionButtons}>
-            <Pressable
-              onPress={toggleFollow}
-              style={[
-                styles.followButton,
-                isFollowing && styles.followingButton,
-              ]}
-            >
-              <Text
+          {/* Action Buttons — hidden on own profile */}
+          {!isOwnProfile && (
+            <View style={styles.actionButtons}>
+              <Pressable
+                onPress={toggleFollow}
                 style={[
-                  styles.followButtonText,
-                  isFollowing && styles.followingButtonText,
+                  styles.followButton,
+                  isFollowing && styles.followingButton,
                 ]}
               >
-                {isFollowing ? 'FOLLOWING' : 'FOLLOW'}
-              </Text>
-            </Pressable>
-            <CoachMark
-              hintId="creator_token"
-              text="Buy this creator's token to support them"
-              position="top"
-            >
-              <Pressable onPress={handleBuy} style={styles.buyButton}>
-                <Text style={styles.buyButtonText}>BUY</Text>
+                <Text
+                  style={[
+                    styles.followButtonText,
+                    isFollowing && styles.followingButtonText,
+                  ]}
+                >
+                  {isFollowing ? 'FOLLOWING' : 'FOLLOW'}
+                </Text>
               </Pressable>
-            </CoachMark>
-          </View>
+              <CoachMark
+                hintId="creator_token"
+                text="Buy this creator's token to support them"
+                position="top"
+              >
+                <Pressable onPress={handleBuy} style={styles.buyButton}>
+                  <Text style={styles.buyButtonText}>BUY</Text>
+                </Pressable>
+              </CoachMark>
+            </View>
+          )}
 
           {/* Posts Grid */}
           <View style={styles.postsSection}>

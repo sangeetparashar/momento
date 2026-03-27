@@ -14,11 +14,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/primitives';
 import {
-  PortfolioChart,
   SwapModal,
   ComingSoonModal,
   FundWalletModal,
-  ChartSkeleton,
 } from '@/components/features';
 import { useWalletBalance, useSwipeNavigation } from '@/hooks';
 import { useUserProfile } from '@/hooks/useUserProfile';
@@ -258,13 +256,6 @@ export default function WalletScreen() {
                 </Pressable>
               ))}
           </View>
-        )}
-
-        {/* Portfolio Chart — skeleton until balance data is ready */}
-        {walletQuery.isLoading ? (
-          <ChartSkeleton />
-        ) : (
-          <PortfolioChart solBalance={balance?.solBalance} />
         )}
 
         <View style={styles.bottomSpacer} />

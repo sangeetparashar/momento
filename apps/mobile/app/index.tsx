@@ -29,19 +29,18 @@ export default function IndexScreen() {
   const queryClient = useQueryClient();
   const { isReady, user: authUser } = useAuth();
   const [navReady, setNavReady] = useState(false);
-  const navigatedRef = useRef(false);
+  const navigatedForUserRef = useRef<string | null>(null);
 
   // Prefetch feed immediately — runs in parallel with auth init.
-  // The feed API works without auth, so this starts loading content
-  // while Privy is still initializing. By the time we navigate to home,
-  // the first page is already in the React Query cache.
   useFeed();
 
-  // Fetch full profile in parallel with feed (only when authenticated)
+  // Fetch full profile in parallel with feed (only when authenticated).
+  // Key includes authUser.id so switching users gets a fresh fetch.
   const profileQuery = useQuery<User>({
-    queryKey: ['userProfile'],
+    queryKey: ['userProfile', authUser?.id],
     queryFn: () => apiService.get<User>('/users/me'),
     enabled: !!authUser,
+    staleTime: 0, // Always re-fetch on mount after user switch
   });
 
   // Wait for the navigation container to be ready before navigating
@@ -54,17 +53,30 @@ export default function IndexScreen() {
     return () => clearTimeout(timer);
   }, [rootNav]);
 
-  // Scope onboarding storage to the current user
+  // Reset navigation state and caches when user changes (login/logout/switch)
   useEffect(() => {
-    setOnboardingUser(authUser?.id ?? null);
-  }, [authUser?.id]);
+    const userId = authUser?.id ?? null;
+    setOnboardingUser(userId);
+
+    // If user changed, reset so routing logic runs again for the new user
+    if (navigatedForUserRef.current !== userId) {
+      navigatedForUserRef.current = null;
+      // Clear stale profile data from previous user
+      queryClient.removeQueries({ queryKey: ['userProfile'] });
+    }
+  }, [authUser?.id, queryClient]);
 
   useEffect(() => {
-    if (!isReady || !navReady || navigatedRef.current) return;
+    if (!isReady || !navReady) return;
 
-    // Not authenticated — force login. App is unusable without auth.
+    const currentUserId = authUser?.id ?? 'guest';
+
+    // Already navigated for this specific user — don't re-navigate
+    if (navigatedForUserRef.current === currentUserId) return;
+
+    // Not authenticated — force login
     if (!authUser) {
-      navigatedRef.current = true;
+      navigatedForUserRef.current = currentUserId;
       router.replace('/login');
       return;
     }
@@ -72,8 +84,7 @@ export default function IndexScreen() {
     // Wait for profile data before deciding route
     if (profileQuery.isLoading) return;
 
-    navigatedRef.current = true;
-    queryClient.invalidateQueries();
+    navigatedForUserRef.current = currentUserId;
 
     // Incomplete profile → force setup (no skip allowed)
     if (profileQuery.data && !isProfileComplete(profileQuery.data)) {
