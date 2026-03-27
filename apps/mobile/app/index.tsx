@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useRouter, useNavigationContainerRef } from 'expo-router';
-import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { useFeed } from '@/hooks';
 import { apiService } from '@/services/api';
@@ -26,7 +26,6 @@ function isProfileComplete(user: User): boolean {
 export default function IndexScreen() {
   const router = useRouter();
   const rootNav = useNavigationContainerRef();
-  const queryClient = useQueryClient();
   const { isReady, user: authUser } = useAuth();
   const [navReady, setNavReady] = useState(false);
   const navigatedForUserRef = useRef<string | null>(null);
@@ -53,18 +52,19 @@ export default function IndexScreen() {
     return () => clearTimeout(timer);
   }, [rootNav]);
 
-  // Reset navigation state and caches when user changes (login/logout/switch)
+  // Reset navigation state when user changes (login/logout/switch).
+  // The profile query key includes authUser.id, so each user gets its own cache — no need to cancel/clear.
+  const prevUserRef = useRef<string | null>(null);
   useEffect(() => {
     const userId = authUser?.id ?? null;
     setOnboardingUser(userId);
 
-    // If user changed, reset so routing logic runs again for the new user
-    if (navigatedForUserRef.current !== userId) {
+    if (prevUserRef.current !== userId) {
+      prevUserRef.current = userId;
+      // Reset so routing logic runs again for the new user
       navigatedForUserRef.current = null;
-      // Clear stale profile data from previous user
-      queryClient.removeQueries({ queryKey: ['userProfile'] });
     }
-  }, [authUser?.id, queryClient]);
+  }, [authUser?.id]);
 
   useEffect(() => {
     if (!isReady || !navReady) return;
@@ -100,7 +100,7 @@ export default function IndexScreen() {
         router.replace('/(tabs)/home');
       }
     });
-  }, [isReady, authUser, router, navReady, queryClient, profileQuery.isLoading, profileQuery.data]);
+  }, [isReady, authUser, router, navReady, profileQuery.isLoading, profileQuery.data]);
 
   return (
     <View style={styles.container}>

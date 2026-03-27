@@ -117,7 +117,7 @@ export function useAuth() {
       console.log('[useAuth] Wallet address:', solanaWallet.wallets[0].address);
     }
     if (solanaWallet.status === 'error') {
-      console.error('[useAuth] Wallet error:', (solanaWallet as any).error);
+      console.warn('[useAuth] Wallet error (transient on cold start):', (solanaWallet as any).error);
     }
   }, [solanaWallet.status]);
 

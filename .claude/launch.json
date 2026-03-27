@@ -11,8 +11,8 @@
     {
       "name": "mobile-web",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["expo", "start", "--web", "--port", "8081"],
-      "port": 8081,
+      "runtimeArgs": ["expo", "start", "--web", "--port", "8082"],
+      "port": 8082,
       "cwd": "apps/mobile"
     },
     {
