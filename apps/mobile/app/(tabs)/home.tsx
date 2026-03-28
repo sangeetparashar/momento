@@ -2,12 +2,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   View,
   StyleSheet,
-  useWindowDimensions,
   Pressable,
   Share,
   ActivityIndicator,
-  RefreshControl,
-  ScrollView,
+  LayoutChangeEvent,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -242,15 +240,20 @@ const FeedPage = React.memo(function FeedPage({ post, screenWidth, pageHeight, i
 export default function HomeScreen() {
   const router = useRouter();
   const { unreadCount } = useNotifications();
-  const insets = useSafeAreaInsets();
-  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
-  // Dynamic tab bar height: 64 base + bottom safe area (mirrors _layout.tsx line 77)
-  const tabBarHeight = 64 + Math.max(insets.bottom, 12);
   const [feedSort, setFeedSort] = useState<FeedSortMode>('smart');
   const [sortLoaded, setSortLoaded] = useState(false);
   const [showAlgoModal, setShowAlgoModal] = useState(false);
   const [showFundModal, setShowFundModal] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
+  // Measure the actual FlashList container height via onLayout — foolproof
+  const [listHeight, setListHeight] = useState(0);
+  const [listWidth, setListWidth] = useState(0);
+
+  const handleListContainerLayout = useCallback((e: LayoutChangeEvent) => {
+    const { width, height } = e.nativeEvent.layout;
+    setListHeight(height);
+    setListWidth(width);
+  }, []);
 
   // Restore saved feed algorithm preference
   useEffect(() => {
@@ -284,12 +287,6 @@ export default function HomeScreen() {
       change: c.postCount,
     }));
   }, [leaderboard.data?.mostActive]);
-
-  // Dynamic ticker height: only count space if tickers actually render
-  const hasTickers = trendingItems.length > 0 || creatorsItems.length > 0;
-  const tickerHeight = hasTickers ? TICKER_HEIGHT : 0;
-  // Accurate page height: screen - safeAreaTop - header - tickers - tabBar
-  const PAGE_HEIGHT = SCREEN_HEIGHT - insets.top - HEADER_HEIGHT - tickerHeight - tabBarHeight;
 
   const posts = useMemo(() => {
     if (!feedQuery.data?.pages) return [];
@@ -333,9 +330,9 @@ export default function HomeScreen() {
 
   const renderItem = useCallback(
     ({ item, index }: { item: PostWithCreator; index: number }) => (
-      <FeedPage post={item} screenWidth={SCREEN_WIDTH} pageHeight={PAGE_HEIGHT} isVisible={index === currentIndex} />
+      <FeedPage post={item} screenWidth={listWidth} pageHeight={listHeight} isVisible={index === currentIndex} />
     ),
-    [SCREEN_WIDTH, PAGE_HEIGHT, currentIndex]
+    [listWidth, listHeight, currentIndex]
   );
 
   const extraData = currentIndex;
@@ -358,20 +355,6 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView
-        style={styles.scrollContainer}
-        contentContainerStyle={styles.scrollContent}
-        scrollEnabled={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={feedQuery.isRefetching}
-            onRefresh={handleRefresh}
-            tintColor={COLORS.primary}
-            colors={[COLORS.primary]}
-            progressBackgroundColor={COLORS.surfaceElevated}
-          />
-        }
-      >
       {/* Compact header */}
       <View style={styles.header}>
         {/* Algorithm button — left side */}
@@ -439,44 +422,47 @@ export default function HomeScreen() {
         )}
       </View>
 
-      {posts.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyText}>No posts yet</Text>
-          <Text style={styles.emptySubtext}>
-            Follow creators to see their posts here
-          </Text>
-          <Pressable style={styles.fundButton} onPress={() => setShowFundModal(true)}>
-            <Ionicons name="wallet-outline" size={18} color={COLORS.background} />
-            <Text style={styles.fundButtonText}>Fund Your Wallet</Text>
-          </Pressable>
-        </View>
-      ) : (
-        <>
-          <FlashList
-            ref={flashListRef}
-            data={posts}
-            extraData={extraData}
-            renderItem={renderItem}
-            keyExtractor={keyExtractor}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            onEndReached={handleEndReached}
-            onEndReachedThreshold={0.5}
-            onViewableItemsChanged={onViewableItemsChanged}
-            viewabilityConfig={viewabilityConfig}
-            estimatedItemSize={SCREEN_WIDTH}
-            drawDistance={SCREEN_WIDTH}
-          />
-
-          {/* Page indicator */}
-          <View style={styles.pageIndicator}>
-            <Text style={styles.pageText}>
-              {currentIndex + 1} / {posts.length}
+      {/* FlashList container — flex:1 fills remaining space, onLayout measures it */}
+      <View style={styles.listContainer} onLayout={handleListContainerLayout}>
+        {posts.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>No posts yet</Text>
+            <Text style={styles.emptySubtext}>
+              Follow creators to see their posts here
             </Text>
+            <Pressable style={styles.fundButton} onPress={() => setShowFundModal(true)}>
+              <Ionicons name="wallet-outline" size={18} color={COLORS.background} />
+              <Text style={styles.fundButtonText}>Fund Your Wallet</Text>
+            </Pressable>
           </View>
-        </>
-      )}
+        ) : listHeight > 0 ? (
+          <>
+            <FlashList
+              ref={flashListRef}
+              data={posts}
+              extraData={extraData}
+              renderItem={renderItem}
+              keyExtractor={keyExtractor}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onEndReached={handleEndReached}
+              onEndReachedThreshold={0.5}
+              onViewableItemsChanged={onViewableItemsChanged}
+              viewabilityConfig={viewabilityConfig}
+              estimatedItemSize={listWidth}
+              drawDistance={listWidth}
+            />
+
+            {/* Page indicator */}
+            <View style={styles.pageIndicator}>
+              <Text style={styles.pageText}>
+                {currentIndex + 1} / {posts.length}
+              </Text>
+            </View>
+          </>
+        ) : null}
+      </View>
 
       {/* Feed Algorithm Modal */}
       <FeedAlgorithmModal
@@ -485,7 +471,6 @@ export default function HomeScreen() {
         currentSort={feedSort}
         onSortChange={handleSortChange}
       />
-      </ScrollView>
 
       {/* Swipe indicator — shows once on first visit */}
       {posts.length > 1 && <SwipeIndicator />}
@@ -510,11 +495,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  scrollContainer: {
+  listContainer: {
     flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
   },
   header: {
     height: HEADER_HEIGHT,
@@ -715,7 +697,7 @@ const styles = StyleSheet.create({
   // Page indicator
   pageIndicator: {
     position: 'absolute',
-    top: HEADER_HEIGHT + TICKER_HEIGHT + SPACING.sm,
+    top: SPACING.sm,
     alignSelf: 'center',
     backgroundColor: 'rgba(0,0,0,0.5)',
     paddingHorizontal: SPACING.md,

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -7,8 +7,9 @@ import {
   Linking,
   ActivityIndicator,
   Share,
-  Animated,
+  RefreshControl,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,31 +19,62 @@ import {
   ComingSoonModal,
   FundWalletModal,
 } from '@/components/features';
-import { useWalletBalance, useSwipeNavigation } from '@/hooks';
+import { useWalletBalance } from '@/hooks';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useAuth } from '@/hooks/useAuth';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatCurrency, formatPercentage, truncateAddress } from '@/utils/formatters';
 import { ENV } from '@/config/env';
+import { usePressLogger } from '@/utils/pressLogger';
 import type { TokenHolding } from '@momento/shared';
 
-function getSolscanUrl(address: string): string {
+/** Locally-stored transaction record */
+interface TxRecord {
+  signature: string;
+  type: 'swap';
+  label: string;
+  timestamp: number;
+}
+
+const TX_STORAGE_KEY = 'momento_recent_txs';
+const MAX_TX_RECORDS = 20;
+
+function getSolscanUrl(address: string, type: 'account' | 'tx' = 'account'): string {
   const cluster = ENV.SOLANA_NETWORK === 'devnet' ? '?cluster=devnet' : '';
-  return `https://solscan.io/account/${address}${cluster}`;
+  return `https://solscan.io/${type}/${address}${cluster}`;
 }
 
 export default function WalletScreen() {
   const router = useRouter();
-  const { translateX, onTouchStart, onTouchEnd } = useSwipeNavigation({ currentScreen: '/wallet' });
   const walletQuery = useWalletBalance();
   const balance = walletQuery.data;
+  const { startFastPolling } = walletQuery;
   const { user: profile } = useUserProfile();
   const { walletAddress: clientWalletAddress } = useAuth();
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [showFundModal, setShowFundModal] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [recentTxs, setRecentTxs] = useState<TxRecord[]>([]);
+  const logPress = usePressLogger('Wallet');
+
+  // Load recent transactions from local storage + start fast polling after modals close
+  useEffect(() => {
+    AsyncStorage.getItem(TX_STORAGE_KEY)
+      .then(raw => {
+        if (raw) setRecentTxs(JSON.parse(raw));
+      })
+      .catch(() => {});
+    // When swap/fund modal closes, poll aggressively for 60s to catch the update
+    if (!showSwapModal && !showFundModal) {
+      startFastPolling();
+    }
+  }, [showSwapModal, showFundModal]);
+
+  const handlePullRefresh = useCallback(() => {
+    walletQuery.refetch();
+  }, [walletQuery]);
 
   // Prefer the client-side wallet address (from Privy SDK), fall back to server profile
   const walletAddress =
@@ -87,8 +119,7 @@ export default function WalletScreen() {
   const isPositive = change24h >= 0;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <Animated.View style={[{ flex: 1 }, { transform: [{ translateX }] }]}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <Pressable onPress={handleBack} hitSlop={8}>
@@ -111,6 +142,15 @@ export default function WalletScreen() {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={walletQuery.isRefetching}
+            onRefresh={handlePullRefresh}
+            tintColor="#00FF88"
+            colors={['#00FF88']}
+            progressBackgroundColor="#242424"
+          />
+        }
       >
         {/* Wallet Address Card */}
         {walletAddress ? (
@@ -258,17 +298,51 @@ export default function WalletScreen() {
           </View>
         )}
 
+        {/* Recent Transactions */}
+        {recentTxs.length > 0 && (
+          <View style={styles.txSection}>
+            <Text style={styles.txSectionTitle}>Recent Transactions</Text>
+            {recentTxs.slice(0, 10).map(tx => (
+              <Pressable
+                key={tx.signature}
+                style={styles.txRow}
+                onPress={() => Linking.openURL(getSolscanUrl(tx.signature, 'tx'))}
+              >
+                <View style={styles.txLeft}>
+                  <View style={styles.txIcon}>
+                    <Ionicons name="swap-horizontal" size={16} color={COLORS.primary} />
+                  </View>
+                  <View>
+                    <Text style={styles.txLabel}>{tx.label}</Text>
+                    <Text style={styles.txTime}>
+                      {new Date(tx.timestamp).toLocaleDateString(undefined, {
+                        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                      })}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.txRight}>
+                  <Text style={styles.txSig} numberOfLines={1}>
+                    {tx.signature.slice(0, 8)}...
+                  </Text>
+                  <Ionicons name="open-outline" size={12} color={COLORS.textTertiary} />
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        )}
+
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
       {/* Fixed Bottom Buttons */}
       <View style={styles.swapButtonContainer}>
         <View style={styles.bottomButtons}>
-          <Pressable onPress={handleBuyCrypto} style={styles.buyButton}>
+          <Pressable onPress={() => { logPress('FUND_ACCOUNT'); handleBuyCrypto(); }} style={styles.buyButton} hitSlop={8}>
             <Ionicons name="wallet-outline" size={20} color={COLORS.background} />
             <Text style={styles.buyButtonText}>FUND ACCOUNT</Text>
           </Pressable>
-          <Pressable onPress={handleSwapPress} style={styles.swapButton}>
+          <Pressable onPress={() => { logPress('SWAP'); handleSwapPress(); }} style={styles.swapButton} hitSlop={8}>
             <Ionicons name="swap-horizontal" size={20} color={COLORS.background} />
             <Text style={styles.swapButtonText}>SWAP</Text>
           </Pressable>
@@ -288,7 +362,6 @@ export default function WalletScreen() {
         visible={showFundModal}
         onClose={() => setShowFundModal(false)}
       />
-      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -470,6 +543,67 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.caption,
     color: COLORS.textSecondary,
     marginTop: 2,
+  },
+  // Recent Transactions
+  txSection: {
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.md,
+  },
+  txSectionTitle: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.textTertiary,
+    letterSpacing: 1,
+    marginBottom: SPACING.sm,
+    textTransform: 'uppercase',
+    fontSize: 11,
+  },
+  txRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.surface,
+    borderRadius: RADII.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.xs,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  txLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    flex: 1,
+  },
+  txIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.primaryMuted,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  txLabel: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textPrimary,
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  txTime: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textTertiary,
+    fontSize: 11,
+    marginTop: 1,
+  },
+  txRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  txSig: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textTertiary,
+    fontFamily: 'monospace',
+    fontSize: 11,
   },
   bottomSpacer: {
     height: SPACING.xl,
