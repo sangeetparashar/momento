@@ -75,7 +75,7 @@ export function useAuth() {
       creatingRef.current = false;
     },
     onCreateWalletError: (error: Error) => {
-      console.error('[useAuth] Solana wallet creation failed:', error.message);
+      console.warn('[useAuth] Solana wallet creation failed:', error.message);
       creatingRef.current = false;
     },
   });
@@ -100,7 +100,7 @@ export function useAuth() {
           if (err?.message?.includes('already exists')) {
             console.log('[useAuth] Wallet already exists — skipping creation');
           } else {
-            console.error('[useAuth] Wallet create() rejected:', err?.message || err);
+            console.warn('[useAuth] Wallet create() rejected:', err?.message || err);
           }
           creatingRef.current = false;
         });
@@ -141,7 +141,7 @@ export function useAuth() {
     try {
       return await solanaWallet.wallets[0].getProvider();
     } catch (err: any) {
-      console.error('[useAuth] getProvider failed:', err?.message);
+      console.warn('[useAuth] getProvider failed:', err?.message);
       return null;
     }
   };

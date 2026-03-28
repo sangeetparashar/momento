@@ -89,6 +89,15 @@ export function useFeed(options: UseFeedOptions = {}, currentIndex = 0) {
     }
   }, [query.data?.pages, currentIndex]);
 
+  // Prefetch page 2 after initial load so it's ready before the user scrolls far.
+  // Only fires once (when we have exactly 1 page) to avoid cascading fetches.
+  useEffect(() => {
+    if (query.data?.pages?.length === 1 && query.hasNextPage && !query.isFetchingNextPage) {
+      const timer = setTimeout(() => query.fetchNextPage(), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [query.data?.pages?.length]);
+
   /**
    * Pull-to-refresh handler: resets the cached radius so the server
    * re-expands from the smallest tier, then refetches.
