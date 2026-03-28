@@ -71,14 +71,83 @@ function buildMoonPayUrl(walletAddress: string): string {
 }
 
 /**
- * Builds a Transak onramp URL.
+ * Transak Secure Widget URL integration (2-step flow).
  *
- * Transak supports Apple Pay, Google Pay, cards, and bank transfers.
- * Lower fees (1-5%) with Lite KYC in some regions.
+ * Step 1: Exchange API Key + API Secret for an access token (cached 6 days).
+ * Step 2: Use access token to create a single-use widget URL (valid 5 min).
+ *
+ * Direct URL params are deprecated — Transak now requires server-side
+ * widget URL creation via their API gateway.
  */
-function buildTransakUrl(walletAddress: string): string {
-  const apiKey = process.env.TRANSAK_API_KEY;
+
+// In-memory cache for the Transak access token (valid 7 days, we cache 6)
+let _transakAccessToken: string | null = null;
+let _transakTokenExpiry = 0;
+
+function getTransakConfig() {
   const env = process.env.TRANSAK_ENVIRONMENT || 'STAGING';
+  const apiKey =
+    env === 'PRODUCTION'
+      ? process.env.TRANSAK_API_KEY || ''
+      : process.env.TRANSAK_API_KEY_STAGING || process.env.TRANSAK_API_KEY || '';
+  const apiSecret =
+    env === 'PRODUCTION'
+      ? process.env.TRANSAK_API_SECRET || ''
+      : process.env.TRANSAK_API_SECRET_STAGING || process.env.TRANSAK_API_SECRET || '';
+  const apiBase =
+    env === 'PRODUCTION'
+      ? 'https://api.transak.com'
+      : 'https://api-stg.transak.com';
+  const gatewayBase =
+    env === 'PRODUCTION'
+      ? 'https://api-gateway.transak.com'
+      : 'https://api-gateway-stg.transak.com';
+
+  return { env, apiKey, apiSecret, apiBase, gatewayBase };
+}
+
+async function getTransakAccessToken(): Promise<string> {
+  // Return cached token if still valid (with 1-day buffer)
+  if (_transakAccessToken && Date.now() < _transakTokenExpiry) {
+    return _transakAccessToken;
+  }
+
+  const { apiKey, apiSecret, apiBase } = getTransakConfig();
+  if (!apiKey || !apiSecret) {
+    throw new Error('Missing TRANSAK_API_KEY or TRANSAK_API_SECRET');
+  }
+
+  const res = await fetch(`${apiBase}/partners/api/v2/refresh-token`, {
+    method: 'POST',
+    headers: {
+      'api-secret': apiSecret,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ apiKey }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`Transak refresh-token failed (${res.status}): ${body}`);
+  }
+
+  const json = await res.json();
+  _transakAccessToken = json.data.accessToken;
+  // Cache for 6 days (token valid 7 days)
+  _transakTokenExpiry = Date.now() + 6 * 24 * 60 * 60 * 1000;
+
+  return _transakAccessToken!;
+}
+
+/**
+ * Build Transak widget URL via direct URL params (no 2-step API flow).
+ * The direct URL approach is simpler and more reliable — it only needs
+ * the API key, no secret or access token exchange.
+ *
+ * Falls back to the 2-step API flow only if needed for advanced features.
+ */
+function buildTransakDirectUrl(walletAddress: string): string {
+  const { env, apiKey } = getTransakConfig();
 
   const base =
     env === 'PRODUCTION'
@@ -86,20 +155,68 @@ function buildTransakUrl(walletAddress: string): string {
       : 'https://global-stg.transak.com';
 
   const params = new URLSearchParams({
-    apiKey: apiKey || 'b98281c0-e5cd-4a54-b333-91bdd648be73',
-    environment: env,
+    apiKey,
     cryptoCurrencyCode: 'USDC',
     network: 'solana',
     walletAddress,
     defaultCryptoCurrency: 'USDC',
-    defaultNetwork: 'solana',
+    fiatCurrency: 'USD',
+    productsAvailed: 'BUY',
     disableWalletAddressForm: 'true',
     hideMenu: 'true',
     themeColor: '00FF88',
-    productsAvailed: 'BUY',
   });
 
   return `${base}?${params.toString()}`;
+}
+
+async function buildTransakUrl(walletAddress: string): Promise<string> {
+  // Try the 2-step API flow first (better UX, pre-authenticated session)
+  try {
+    const { apiKey, gatewayBase } = getTransakConfig();
+    const accessToken = await getTransakAccessToken();
+
+    const res = await fetch(`${gatewayBase}/api/v2/auth/session`, {
+      method: 'POST',
+      headers: {
+        'access-token': accessToken,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        widgetParams: {
+          apiKey,
+          referrerDomain: 'momento-api-ten.vercel.app',
+          cryptoCurrencyCode: 'USDC',
+          network: 'solana',
+          walletAddress,
+          defaultCryptoCurrency: 'USDC',
+          fiatCurrency: 'USD',
+          productsAvailed: 'BUY',
+          disableWalletAddressForm: true,
+          hideMenu: true,
+          themeColor: '00FF88',
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      console.warn(`[Transak] 2-step API failed (${res.status}): ${body} — falling back to direct URL`);
+      // Clear cached token so next attempt re-authenticates
+      _transakAccessToken = null;
+      _transakTokenExpiry = 0;
+      return buildTransakDirectUrl(walletAddress);
+    }
+
+    const json = await res.json();
+    return json.data.widgetUrl;
+  } catch (err: any) {
+    console.warn('[Transak] 2-step API error:', err.message, '— falling back to direct URL');
+    // Clear cached token
+    _transakAccessToken = null;
+    _transakTokenExpiry = 0;
+    return buildTransakDirectUrl(walletAddress);
+  }
 }
 
 /**
@@ -143,7 +260,7 @@ export async function GET(request: NextRequest) {
         url = buildMoonPayUrl(user.walletAddress);
         break;
       case 'transak':
-        url = buildTransakUrl(user.walletAddress);
+        url = await buildTransakUrl(user.walletAddress);
         break;
     }
 

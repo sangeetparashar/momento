@@ -10,6 +10,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { Video, ResizeMode } from 'expo-av';
 import { useRouter } from 'expo-router';
@@ -43,8 +44,8 @@ function isVideoPost(post: PostWithCreator): boolean {
 const HEADER_HEIGHT = 44;
 const TICKER_HEIGHT = 72; // approx height for 2 ticker banners
 const TAB_BAR_HEIGHT = 80;
-const ACTION_BAR_HEIGHT = 52; // caption + action icons (NOT overlaid on media)
-const CREATOR_BAR_HEIGHT = 72; // creator info section at bottom
+const CREATOR_HEADER_HEIGHT = 52; // creator avatar + name at TOP of post
+const ACTION_BAR_HEIGHT = 64; // caption + action icons + buy button at bottom
 
 const SORT_ICONS: Record<FeedSortMode, keyof typeof Ionicons.glyphMap> = {
   smart: 'sparkles',
@@ -102,12 +103,46 @@ const FeedPage = React.memo(function FeedPage({ post, screenWidth, pageHeight, i
     setIsMuted((prev) => !prev);
   }, []);
 
+  // Explicit pixel heights — no flex, no ambiguity, no native view overflow
+  const mediaHeight = pageHeight - CREATOR_HEADER_HEIGHT - ACTION_BAR_HEIGHT;
+
   return (
     <View style={[styles.page, { width: screenWidth, height: pageHeight }]}>
-      {/* ── Media area — flex:1 fills remaining space, NO overlays on native views ── */}
+      {/* ── Creator header — TOP of post, tappable to open profile ── */}
+      <Pressable onPress={handleCreatorPress} style={styles.creatorHeader}>
+        <Avatar
+          uri={post.creator.avatarUrl}
+          name={post.creator.displayName || post.creator.username || '?'}
+          size="md"
+        />
+        <View style={styles.creatorHeaderInfo}>
+          <View style={styles.creatorHeaderNameRow}>
+            <Text style={styles.creatorHeaderName} numberOfLines={1}>
+              {post.creator.displayName || post.creator.username || 'Creator'}
+            </Text>
+            {(post.creator as any).kycStatus === 'VERIFIED' && (
+              <Ionicons name="checkmark-circle" size={14} color={COLORS.primary} />
+            )}
+          </View>
+          {post.creator.tokenSymbol && (
+            <Text style={styles.creatorHeaderToken}>{post.creator.tokenSymbol}</Text>
+          )}
+        </View>
+        <Pressable
+          onPress={() => followMutation.mutate()}
+          style={[styles.followBtn, isFollowing && styles.followBtnOutline]}
+          hitSlop={6}
+        >
+          <Text style={[styles.followBtnText, isFollowing && styles.followBtnTextOutline]}>
+            {isFollowing ? 'Following' : 'Follow'}
+          </Text>
+        </Pressable>
+      </Pressable>
+
+      {/* ── Media area — explicit height, no flex ── */}
       <Pressable
         onPress={isVideo ? handleVideoTap : handlePostPress}
-        style={styles.mediaSection}
+        style={[styles.mediaSection, { height: mediaHeight }]}
       >
         {post.mediaUrl && isVideo ? (
           <Video
@@ -137,87 +172,59 @@ const FeedPage = React.memo(function FeedPage({ post, screenWidth, pageHeight, i
         )}
       </Pressable>
 
-      {/* ── Action bar — caption + actions, BELOW media (no z-order issues) ── */}
+      {/* ── Action bar — caption, actions, buy button at BOTTOM ── */}
       <View style={styles.actionBar}>
-        <View style={styles.actionBarLeft}>
+        {/* Top row: caption + distance */}
+        <View style={styles.actionBarTop}>
           {post.caption ? (
-            <Text style={styles.actionBarCaption} numberOfLines={1}>{post.caption}</Text>
+            <Text style={styles.actionBarCaption} numberOfLines={2}>{post.caption}</Text>
           ) : null}
           {post.distanceMeters != null && (
             <Text style={styles.actionBarDistance}>
+              <Ionicons name="location-outline" size={11} color={COLORS.textTertiary} />
+              {' '}
               {post.distanceMeters < 1000
                 ? `${Math.round(post.distanceMeters)}m away`
                 : `${(post.distanceMeters / 1000).toFixed(1)}km away`}
             </Text>
           )}
         </View>
-        <View style={styles.actionBarRight}>
-          {isVideo && post.mediaUrl && (
-            <Pressable onPress={handleMuteToggle} style={styles.actionBarIcon} hitSlop={8}>
-              <Ionicons
-                name={isMuted ? 'volume-mute' : 'volume-high'}
-                size={20}
-                color={COLORS.textSecondary}
+
+        {/* Bottom row: action icons + buy */}
+        <View style={styles.actionBarBottom}>
+          <View style={styles.actionBarIcons}>
+            {isVideo && post.mediaUrl && (
+              <Pressable onPress={handleMuteToggle} style={styles.actionBarIcon} hitSlop={8}>
+                <Ionicons
+                  name={isMuted ? 'volume-mute' : 'volume-high'}
+                  size={22}
+                  color={COLORS.textSecondary}
+                />
+              </Pressable>
+            )}
+            <View style={styles.actionBarIcon}>
+              <LikeButton
+                postId={post.id}
+                initialLiked={post.isLiked}
+                initialCount={post.likeCount}
+                size={22}
               />
-            </Pressable>
-          )}
-          <View style={styles.actionBarIcon}>
-            <LikeButton
-              postId={post.id}
-              initialLiked={post.isLiked}
-              initialCount={post.likeCount}
-              size={20}
-            />
-          </View>
-          <Pressable onPress={handlePostPress} style={styles.actionBarIcon}>
-            <Ionicons name="chatbubble-outline" size={20} color={COLORS.textSecondary} />
-            {post.commentCount > 0 && (
-              <Text style={styles.actionBarCount}>{formatNumber(post.commentCount)}</Text>
-            )}
-          </Pressable>
-          <Pressable onPress={handleShare} style={styles.actionBarIcon}>
-            <Ionicons name="paper-plane-outline" size={20} color={COLORS.textSecondary} />
-          </Pressable>
-          <View style={styles.actionBarIcon}>
-            <BookmarkButton postId={post.id} initialSaved={post.isSaved} size={20} />
-          </View>
-        </View>
-      </View>
-
-      {/* ── Creator info bar (bottom, NOT overlaid) ── */}
-      <View style={styles.creatorSection}>
-        <Pressable onPress={handleCreatorPress} style={styles.creatorBarLeft}>
-          <Avatar
-            uri={post.creator.avatarUrl}
-            name={post.creator.displayName || post.creator.username || '?'}
-            size="sm"
-          />
-          <View style={styles.creatorNameCol}>
-            <View style={styles.creatorNameRow}>
-              <Text style={styles.creatorName} numberOfLines={1}>
-                {post.creator.displayName || post.creator.username || 'Creator'}
-              </Text>
-              {(post.creator as any).kycStatus === 'VERIFIED' && (
-                <Ionicons name="checkmark-circle" size={14} color={COLORS.primary} />
-              )}
             </View>
-            {post.creator.tokenSymbol && (
-              <Text style={styles.creatorToken}>{post.creator.tokenSymbol}</Text>
-            )}
+            <Pressable onPress={handlePostPress} style={styles.actionBarIcon}>
+              <Ionicons name="chatbubble-outline" size={22} color={COLORS.textSecondary} />
+              {post.commentCount > 0 && (
+                <Text style={styles.actionBarCount}>{formatNumber(post.commentCount)}</Text>
+              )}
+            </Pressable>
+            <Pressable onPress={handleShare} style={styles.actionBarIcon}>
+              <Ionicons name="paper-plane-outline" size={22} color={COLORS.textSecondary} />
+            </Pressable>
+            <View style={styles.actionBarIcon}>
+              <BookmarkButton postId={post.id} initialSaved={post.isSaved} size={22} />
+            </View>
           </View>
-        </Pressable>
-
-        <View style={styles.creatorBarRight}>
-          <Pressable
-            onPress={() => followMutation.mutate()}
-            style={[styles.creatorActionBtn, isFollowing && styles.creatorActionBtnOutline]}
-          >
-            <Text style={[styles.creatorActionText, isFollowing && styles.creatorActionTextOutline]}>
-              {isFollowing ? 'Following' : 'Follow'}
-            </Text>
-          </Pressable>
-          <Pressable onPress={() => setShowBuyModal(true)} style={styles.creatorBuyBtn}>
-            <Text style={styles.creatorBuyText}>Buy</Text>
+          <Pressable onPress={() => setShowBuyModal(true)} style={styles.buyBtn}>
+            <Text style={styles.buyBtnText}>Buy</Text>
           </Pressable>
         </View>
       </View>
@@ -240,10 +247,24 @@ export default function HomeScreen() {
   // Dynamic tab bar height: 64 base + bottom safe area (mirrors _layout.tsx line 77)
   const tabBarHeight = 64 + Math.max(insets.bottom, 12);
   const [feedSort, setFeedSort] = useState<FeedSortMode>('smart');
+  const [sortLoaded, setSortLoaded] = useState(false);
   const [showAlgoModal, setShowAlgoModal] = useState(false);
   const [showFundModal, setShowFundModal] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const feedQuery = useFeed({ sort: feedSort }, currentIndex);
+
+  // Restore saved feed algorithm preference
+  useEffect(() => {
+    AsyncStorage.getItem('momento_feed_sort')
+      .then((saved) => {
+        if (saved && ['smart', 'recent', 'popular', 'nearby', 'following'].includes(saved)) {
+          setFeedSort(saved as FeedSortMode);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setSortLoaded(true));
+  }, []);
+
+  const feedQuery = useFeed({ sort: feedSort, enabled: sortLoaded }, currentIndex);
   const leaderboard = useCreatorLeaderboard();
   const flashListRef = useRef<FlashList<PostWithCreator>>(null);
 
@@ -291,6 +312,8 @@ export default function HomeScreen() {
 
   const handleSortChange = useCallback((sort: FeedSortMode) => {
     setFeedSort(sort);
+    // Persist preference so it's remembered across sessions
+    AsyncStorage.setItem('momento_feed_sort', sort).catch(() => {});
     // Scroll back to start when sort changes
     flashListRef.current?.scrollToOffset({ offset: 0, animated: false });
     setCurrentIndex(0);
@@ -557,7 +580,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
   mediaSection: {
-    flex: 1,
     backgroundColor: COLORS.surface,
     overflow: 'hidden',
   },
@@ -578,35 +600,90 @@ const styles = StyleSheet.create({
     lineHeight: 34,
   },
 
-  // Action bar — sits BELOW media, no z-ordering conflicts with native views
-  actionBar: {
-    height: ACTION_BAR_HEIGHT,
+  // ── Creator header — TOP of post ──
+  creatorHeader: {
+    height: CREATOR_HEADER_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: SPACING.md,
-    backgroundColor: COLORS.backgroundTertiary,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: COLORS.border,
+    backgroundColor: COLORS.background,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: COLORS.border,
+    gap: SPACING.sm,
   },
-  actionBarLeft: {
+  creatorHeaderInfo: {
     flex: 1,
-    marginRight: SPACING.sm,
+  },
+  creatorHeaderNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  creatorHeaderName: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textPrimary,
+    fontWeight: '700',
+    fontSize: 15,
+    flexShrink: 1,
+  },
+  creatorHeaderToken: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    marginTop: 1,
+  },
+  followBtn: {
+    backgroundColor: COLORS.textPrimary,
+    paddingVertical: 6,
+    paddingHorizontal: SPACING.lg,
+    borderRadius: RADII.full,
+  },
+  followBtnOutline: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.textSecondary,
+  },
+  followBtnText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.background,
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  followBtnTextOutline: {
+    color: COLORS.textPrimary,
+  },
+
+  // ── Action bar — BOTTOM of post ──
+  actionBar: {
+    height: ACTION_BAR_HEIGHT,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    backgroundColor: COLORS.background,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.border,
+    justifyContent: 'center',
+  },
+  actionBarTop: {
+    marginBottom: SPACING.xs,
   },
   actionBarCaption: {
     ...TYPOGRAPHY.bodySmall,
     color: COLORS.textPrimary,
     fontSize: 13,
+    lineHeight: 18,
   },
   actionBarDistance: {
     ...TYPOGRAPHY.caption,
     color: COLORS.textTertiary,
     fontSize: 11,
-    marginTop: 1,
+    marginTop: 2,
   },
-  actionBarRight: {
+  actionBarBottom: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  actionBarIcons: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: SPACING.lg,
@@ -622,82 +699,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 11,
   },
-
-  // Creator info section — fixed at bottom, NOT overlaid on media
-  creatorSection: {
-    height: CREATOR_BAR_HEIGHT,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    backgroundColor: COLORS.background,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: COLORS.border,
+  buyBtn: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 7,
+    paddingHorizontal: SPACING.lg + 4,
+    borderRadius: RADII.full,
   },
-  creatorBarLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    flex: 1,
-    marginRight: SPACING.sm,
-  },
-  creatorNameCol: {
-    flexShrink: 1,
-  },
-  creatorNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  creatorName: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textPrimary,
+  buyBtnText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.background,
     fontWeight: '700',
     fontSize: 14,
-    flexShrink: 1,
-  },
-  creatorToken: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textSecondary,
-    fontSize: 11,
-    marginTop: 1,
-  },
-  creatorBarRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-  },
-  creatorActionBtn: {
-    backgroundColor: COLORS.textPrimary,
-    paddingVertical: 8,
-    paddingHorizontal: SPACING.md + 2,
-    borderRadius: RADII.full,
-  },
-  creatorActionBtnOutline: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: COLORS.textSecondary,
-  },
-  creatorActionText: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.background,
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  creatorActionTextOutline: {
-    color: COLORS.textPrimary,
-  },
-  creatorBuyBtn: {
-    backgroundColor: COLORS.primary,
-    paddingVertical: 8,
-    paddingHorizontal: SPACING.md + 2,
-    borderRadius: RADII.full,
-  },
-  creatorBuyText: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.background,
-    fontWeight: '700',
-    fontSize: 13,
   },
 
   // Page indicator

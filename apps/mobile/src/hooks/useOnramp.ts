@@ -15,7 +15,8 @@ export function useOnramp(provider: OnrampProvider = 'ramp', enabled = false) {
     queryFn: () =>
       apiService.get<OnrampUrlResponse>('/wallet/onramp', { provider }),
     enabled,
-    staleTime: 60_000,
-    retry: 1,
+    staleTime: 0, // Always fetch fresh — widget URLs are single-use/time-limited
+    gcTime: 0,
+    retry: 2,
   });
 }

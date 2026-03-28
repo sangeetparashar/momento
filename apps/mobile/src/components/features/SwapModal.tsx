@@ -7,15 +7,25 @@ import {
   ActivityIndicator,
   TextInput,
   ScrollView,
-  Alert,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import { Text } from '@/components/primitives';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSwap, TOKEN_MINTS } from '@/hooks/useSwap';
 import { useAuth } from '@/hooks/useAuth';
+import { useWalletBalance } from '@/hooks/useWalletBalance';
+
+const TX_STORAGE_KEY = 'momento_recent_txs';
+const MAX_TX_RECORDS = 20;
+
+const SOLSCAN_BASE = __DEV__
+  ? 'https://solscan.io'  // devnet: 'https://solscan.io' with ?cluster=devnet
+  : 'https://solscan.io';
 
 interface SwapModalProps {
   visible: boolean;
@@ -46,18 +56,48 @@ const TOKENS: TokenInfo[] = [
  */
 export function SwapModal({ visible, onClose }: SwapModalProps) {
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
   const { walletAddress } = useAuth();
   const { quote, status, error, fetchQuote, executeSwap, reset } = useSwap();
+  const balanceQuery = useWalletBalance(visible);
 
   const [inputToken, setInputToken] = useState<TokenInfo>(TOKENS[0]);
   const [outputToken, setOutputToken] = useState<TokenInfo>(TOKENS[1]);
   const [inputAmount, setInputAmount] = useState('');
   const [quoteTimer, setQuoteTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  // Success/error result state (replaces Alert.alert)
+  const [swapResult, setSwapResult] = useState<{
+    type: 'success' | 'error';
+    signature?: string;
+    message?: string;
+  } | null>(null);
+
+  // Get available balance for the input token
+  const availableBalance = (() => {
+    if (!balanceQuery.data) return null;
+    if (inputToken.symbol === 'SOL') {
+      // Reserve 0.01 SOL for fees
+      const raw = balanceQuery.data.solBalance ?? 0;
+      return Math.max(0, raw - 0.01);
+    }
+    const tokenHolding = balanceQuery.data.tokens?.find(
+      (t) => t.mint === inputToken.mint
+    );
+    return tokenHolding?.amount ?? 0;
+  })();
+
+  const handleMax = useCallback(() => {
+    if (availableBalance != null && availableBalance > 0) {
+      const precision = inputToken.symbol === 'SOL' ? 4 : 2;
+      setInputAmount(availableBalance.toFixed(precision));
+    }
+  }, [availableBalance, inputToken]);
 
   // Reset state when modal opens/closes
   useEffect(() => {
     if (!visible) {
       setInputAmount('');
+      setSwapResult(null);
       reset();
       if (quoteTimer) clearTimeout(quoteTimer);
     }
@@ -90,30 +130,59 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
     setInputToken(outputToken);
     setOutputToken(inputToken);
     setInputAmount('');
+    setSwapResult(null);
     reset();
   }, [inputToken, outputToken, reset]);
 
   const handleSwap = useCallback(async () => {
-    if (!walletAddress) {
-      Alert.alert('Wallet Not Connected', 'Please connect your wallet to swap tokens.');
-      return;
-    }
+    if (!walletAddress) return;
+    setSwapResult(null);
 
     const signature = await executeSwap();
     if (signature) {
-      Alert.alert('Swap Successful', `Transaction confirmed.\n\nSignature: ${signature.slice(0, 8)}...`, [
-        { text: 'Done', onPress: onClose },
-      ]);
+      setSwapResult({ type: 'success', signature });
+      // Force immediate balance refetch (not just invalidate — actually refetch)
+      queryClient.refetchQueries({ queryKey: ['walletBalance'] });
+      // Refetch again after on-chain finality (3s + 8s)
+      setTimeout(() => queryClient.refetchQueries({ queryKey: ['walletBalance'] }), 3000);
+      setTimeout(() => queryClient.refetchQueries({ queryKey: ['walletBalance'] }), 8000);
+
+      // Persist tx record for wallet history
+      try {
+        const raw = await AsyncStorage.getItem(TX_STORAGE_KEY);
+        const existing = raw ? JSON.parse(raw) : [];
+        const record = {
+          signature,
+          type: 'swap' as const,
+          label: `${inputAmount} ${inputToken.symbol} → ${outputAmount ?? '?'} ${outputToken.symbol}`,
+          timestamp: Date.now(),
+        };
+        const updated = [record, ...existing].slice(0, MAX_TX_RECORDS);
+        await AsyncStorage.setItem(TX_STORAGE_KEY, JSON.stringify(updated));
+      } catch {
+        // non-critical — don't block success flow
+      }
+    } else {
+      // error state is already set by useSwap hook
     }
-  }, [walletAddress, executeSwap, onClose]);
+  }, [walletAddress, executeSwap, queryClient]);
 
   const handleClose = useCallback(() => {
-    if (status === 'signing' || status === 'sending') {
-      Alert.alert('Transaction in Progress', 'Please wait for the transaction to complete.');
-      return;
-    }
+    if (status === 'signing' || status === 'sending') return;
     onClose();
   }, [status, onClose]);
+
+  const handleDone = useCallback(() => {
+    // Invalidate balance one more time on close
+    queryClient.invalidateQueries({ queryKey: ['walletBalance'] });
+    onClose();
+  }, [queryClient, onClose]);
+
+  const handleSwapAgain = useCallback(() => {
+    setInputAmount('');
+    setSwapResult(null);
+    reset();
+  }, [reset]);
 
   const outputAmount = quote
     ? (parseInt(quote.outAmount, 10) / 10 ** outputToken.decimals).toFixed(
@@ -130,7 +199,63 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
 
   const isQuoting = status === 'quoting';
   const isBusy = status === 'signing' || status === 'sending' || status === 'confirming';
-  const canSwap = quote && !isBusy && !isQuoting && parseFloat(inputAmount) > 0;
+  const inputNum = parseFloat(inputAmount) || 0;
+  const insufficientBalance = availableBalance != null && inputNum > availableBalance;
+  const canSwap = quote && !isBusy && !isQuoting && inputNum > 0 && !insufficientBalance;
+
+  // ─── Success screen ───
+  if (swapResult?.type === 'success') {
+    return (
+      <Modal
+        visible={visible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={handleDone}
+      >
+        <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+          <View style={styles.resultContainer}>
+            <View style={styles.successCircle}>
+              <Ionicons name="checkmark" size={48} color={COLORS.background} />
+            </View>
+            <Text style={styles.resultTitle}>Swap Successful</Text>
+            <Text style={styles.resultSubtitle}>
+              {inputAmount} {inputToken.symbol} → {outputAmount} {outputToken.symbol}
+            </Text>
+
+            {swapResult.signature && (
+              <Pressable
+                style={styles.signatureCard}
+                onPress={() => Linking.openURL(`${SOLSCAN_BASE}/tx/${swapResult.signature}`)}
+              >
+                <Text style={styles.signatureLabel}>Transaction Signature</Text>
+                <View style={styles.signatureRow}>
+                  <Text style={styles.signatureValue} numberOfLines={1}>
+                    {swapResult.signature}
+                  </Text>
+                  <Ionicons name="open-outline" size={14} color={COLORS.primary} />
+                </View>
+                <Text style={styles.signatureHint}>Tap to view on Solscan</Text>
+              </Pressable>
+            )}
+
+            <Text style={styles.resultHint}>
+              Your wallet balance will update momentarily.
+            </Text>
+
+            <View style={styles.resultActions}>
+              <Pressable onPress={handleSwapAgain} style={styles.secondaryButton}>
+                <Ionicons name="swap-vertical" size={18} color={COLORS.primary} />
+                <Text style={styles.secondaryButtonText}>Swap Again</Text>
+              </Pressable>
+              <Pressable onPress={handleDone} style={styles.primaryButton}>
+                <Text style={styles.primaryButtonText}>Done</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
 
   return (
     <Modal
@@ -159,7 +284,21 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
         >
           {/* Input Token */}
           <View style={styles.tokenCard}>
-            <Text style={styles.tokenLabel}>You pay</Text>
+            <View style={styles.tokenLabelRow}>
+              <Text style={styles.tokenLabel}>You pay</Text>
+              {availableBalance != null && (
+                <View style={styles.balanceRow}>
+                  <Text style={styles.balanceText}>
+                    Balance: {inputToken.symbol === 'SOL'
+                      ? availableBalance.toFixed(4)
+                      : availableBalance.toFixed(2)} {inputToken.symbol}
+                  </Text>
+                  <Pressable onPress={handleMax} hitSlop={8} style={styles.maxButton}>
+                    <Text style={styles.maxButtonText}>MAX</Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
             <View style={styles.tokenRow}>
               <View style={styles.tokenBadge}>
                 <Text style={styles.tokenIcon}>{inputToken.icon}</Text>
@@ -207,14 +346,6 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
           {/* Quote Details */}
           {quote && (
             <View style={styles.detailsCard}>
-              {platformFeeAmount && (
-                <View style={styles.detailRow}>
-                  <Text style={styles.detailLabel}>Platform fee (4%)</Text>
-                  <Text style={styles.detailValue}>
-                    {platformFeeAmount} {outputToken.symbol}
-                  </Text>
-                </View>
-              )}
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Price impact</Text>
                 <Text
@@ -239,43 +370,58 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
             </View>
           )}
 
+          {/* Transaction progress */}
+          {isBusy && (
+            <View style={styles.progressCard}>
+              <ActivityIndicator size="large" color={COLORS.primary} />
+              <Text style={styles.progressTitle}>
+                {status === 'signing'
+                  ? 'Signing Transaction'
+                  : status === 'sending'
+                  ? 'Sending Transaction'
+                  : 'Confirming on Solana'}
+              </Text>
+              <Text style={styles.progressSubtitle}>
+                {status === 'signing'
+                  ? 'Approve the transaction in your wallet...'
+                  : status === 'sending'
+                  ? 'Broadcasting to the Solana network...'
+                  : 'Waiting for block confirmation...'}
+              </Text>
+            </View>
+          )}
+
           {/* Error */}
-          {error && (
+          {error && !isBusy && (
             <View style={styles.errorBanner}>
-              <Ionicons name="warning" size={16} color={COLORS.error} />
-              <Text style={styles.errorText}>{error}</Text>
+              <Ionicons name="alert-circle" size={18} color={COLORS.error} />
+              <View style={styles.errorContent}>
+                <Text style={styles.errorTitle}>Swap Failed</Text>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
             </View>
           )}
 
           {/* Swap Button */}
-          <Pressable
-            style={[styles.swapButton, !canSwap && styles.swapButtonDisabled]}
-            onPress={handleSwap}
-            disabled={!canSwap}
-          >
-            {isBusy ? (
-              <View style={styles.swapButtonContent}>
-                <ActivityIndicator size="small" color={COLORS.textInverse} />
-                <Text style={styles.swapButtonText}>
-                  {status === 'signing'
-                    ? 'Confirm in wallet...'
-                    : status === 'sending'
-                    ? 'Sending...'
-                    : 'Confirming...'}
-                </Text>
-              </View>
-            ) : (
+          {!isBusy && (
+            <Pressable
+              style={[styles.swapButton, !canSwap && styles.swapButtonDisabled]}
+              onPress={handleSwap}
+              disabled={!canSwap}
+            >
               <Text style={styles.swapButtonText}>
                 {!walletAddress
                   ? 'Connect Wallet'
-                  : !inputAmount || parseFloat(inputAmount) <= 0
+                  : !inputAmount || inputNum <= 0
                   ? 'Enter Amount'
+                  : insufficientBalance
+                  ? `Insufficient ${inputToken.symbol}`
                   : isQuoting
                   ? 'Fetching Quote...'
                   : 'Swap'}
               </Text>
-            )}
-          </Pressable>
+            </Pressable>
+          )}
 
           {/* Info */}
           <View style={styles.infoRow}>
@@ -341,10 +487,37 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  tokenLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+  },
   tokenLabel: {
     ...TYPOGRAPHY.caption,
     color: COLORS.textSecondary,
-    marginBottom: SPACING.sm,
+  },
+  balanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  balanceText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    fontSize: 11,
+  },
+  maxButton: {
+    backgroundColor: COLORS.primaryMuted,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: RADII.sm,
+  },
+  maxButtonText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.primary,
+    fontWeight: '700',
+    fontSize: 10,
   },
   tokenRow: {
     flexDirection: 'row',
@@ -425,21 +598,60 @@ const styles = StyleSheet.create({
   detailValueWarning: {
     color: COLORS.warning,
   },
+
+  // Transaction progress
+  progressCard: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderRadius: RADII.lg,
+    padding: SPACING.xl,
+    gap: SPACING.md,
+    marginTop: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.primaryMuted,
+  },
+  progressTitle: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textPrimary,
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  progressSubtitle: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+  },
+
+  // Error
   errorBanner: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 68, 68, 0.1)',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255, 68, 68, 0.08)',
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.md,
     borderRadius: RADII.md,
     gap: SPACING.sm,
     marginTop: SPACING.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 68, 68, 0.2)',
+  },
+  errorContent: {
+    flex: 1,
+  },
+  errorTitle: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.error,
+    fontWeight: '700',
+    fontSize: 13,
+    marginBottom: 2,
   },
   errorText: {
     ...TYPOGRAPHY.caption,
     color: COLORS.error,
-    flex: 1,
+    opacity: 0.8,
   },
+
+  // Swap button
   swapButton: {
     backgroundColor: COLORS.primary,
     borderRadius: RADII.md,
@@ -450,11 +662,6 @@ const styles = StyleSheet.create({
   },
   swapButtonDisabled: {
     opacity: 0.4,
-  },
-  swapButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
   },
   swapButtonText: {
     ...TYPOGRAPHY.body,
@@ -475,5 +682,111 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 11,
     lineHeight: 16,
+  },
+
+  // ─── Success screen ───
+  resultContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.xl,
+  },
+  successCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.lg,
+  },
+  resultTitle: {
+    ...TYPOGRAPHY.h2,
+    color: COLORS.textPrimary,
+    fontWeight: '800',
+    marginBottom: SPACING.sm,
+  },
+  resultSubtitle: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginBottom: SPACING.lg,
+  },
+  signatureCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADII.md,
+    padding: SPACING.md,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: SPACING.md,
+  },
+  signatureLabel: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textTertiary,
+    marginBottom: SPACING.xs,
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  signatureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  signatureValue: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textSecondary,
+    fontSize: 12,
+    fontFamily: 'monospace',
+    flex: 1,
+  },
+  signatureHint: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.primary,
+    fontSize: 10,
+    marginTop: SPACING.xs,
+  },
+  resultHint: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textTertiary,
+    marginBottom: SPACING.xl,
+  },
+  resultActions: {
+    flexDirection: 'row',
+    gap: SPACING.md,
+    width: '100%',
+  },
+  secondaryButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.md + 2,
+    borderRadius: RADII.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    backgroundColor: COLORS.primaryMuted,
+  },
+  secondaryButtonText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.primary,
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  primaryButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: SPACING.md + 2,
+    borderRadius: RADII.md,
+    backgroundColor: COLORS.primary,
+  },
+  primaryButtonText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textInverse,
+    fontWeight: '700',
+    fontSize: 15,
   },
 });
