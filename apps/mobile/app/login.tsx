@@ -24,9 +24,16 @@ try {
 // Access the raw Privy client for manual SIWS (nonce persists server-side,
 // not in hook state — survives app backgrounding between deeplinks).
 let usePrivyClient: any = null;
+let createSiwsMessage: any = null;
 try {
   const privy = require('@privy-io/expo');
   usePrivyClient = privy.usePrivyClient;
+} catch {
+  // Not available
+}
+try {
+  const core = require('@privy-io/js-sdk-core');
+  createSiwsMessage = core.createSiwsMessage;
 } catch {
   // Not available
 }
@@ -93,22 +100,17 @@ function PhantomWalletLogin({ onSuccess }: { onSuccess: () => void }) {
         // Fetch nonce from Privy server and build SIWS message
         // siws API lives under privyClient.auth.siws (AuthApi → SiwsApi)
         const siwsApi = privyClient.auth?.siws ?? privyClient.siws;
-        const nonce = await siwsApi.fetchNonce({ address: phantom.address });
+        const { nonce } = await siwsApi.fetchNonce({ address: phantom.address });
 
-        // Construct standard SIWS message
-        const issuedAt = new Date().toISOString();
-        const message = [
-          `momento.app wants you to sign in with your Solana account:`,
-          phantom.address,
-          '',
-          'Sign in to Momento',
-          '',
-          `URI: https://momento.app`,
-          `Version: 1`,
-          `Chain ID: mainnet`,
-          `Nonce: ${nonce.nonce}`,
-          `Issued At: ${issuedAt}`,
-        ].join('\n');
+        // Use Privy's own createSiwsMessage to guarantee the exact format
+        // the server expects (statement, resources, etc.)
+        const message = createSiwsMessage({
+          address: phantom.address,
+          nonce,
+          domain: 'momento.app',
+          uri: 'https://momento.app',
+        });
+        console.log('[WalletLogin] SIWS message:', message);
 
         // Persist message so it survives the second deeplink round-trip
         await AsyncStorage.setItem(SIWS_MESSAGE_KEY, message);
@@ -174,7 +176,7 @@ function PhantomWalletLogin({ onSuccess }: { onSuccess: () => void }) {
 
   // ── Tap handler: start the connect flow ───────────────────────────────
   const handleConnect = useCallback(async () => {
-    if (!phantom || !privyClient) {
+    if (!phantom || !privyClient || !createSiwsMessage) {
       Alert.alert('Not Available', 'Wallet connector could not be loaded. Make sure you are using a dev build.');
       return;
     }
@@ -202,7 +204,7 @@ function PhantomWalletLogin({ onSuccess }: { onSuccess: () => void }) {
     }
   }, [phantom, privyClient]);
 
-  if (!usePhantomConnector || !usePrivyClient) return null;
+  if (!usePhantomConnector || !usePrivyClient || !createSiwsMessage) return null;
 
   const stageLabels = {
     idle: 'CONNECT SOLANA WALLET',
@@ -297,7 +299,7 @@ export default function LoginScreen() {
           </TouchableOpacity>
 
           {/* Wallet login — Phantom deeplink with manual SIWS + nonce persistence */}
-          {isPrivyAvailable && usePhantomConnector && usePrivyClient && (
+          {isPrivyAvailable && usePhantomConnector && usePrivyClient && createSiwsMessage && (
             <>
               <View style={styles.dividerRow}>
                 <View style={styles.dividerLine} />
