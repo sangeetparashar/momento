@@ -10,14 +10,16 @@ import { Text, MomentoLogo } from '@/components/primitives';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 
-// Dynamically load the Phantom connector to avoid crashes in Expo Go
+// Phantom deeplink SIWS is disabled for now.
+// The flow requires two round-trips to Phantom (connect → sign), and the
+// app goes to background/foreground between each step. Privy's SIWS nonce
+// is invalidated when the SDK reinitializes, causing "SIWS message and/or
+// nonce was invalid" errors. This needs either:
+//   1. Privy native Phantom support (single-trip), or
+//   2. A custom server-side challenge flow that persists across app restarts.
+// For now, users authenticate via Google OAuth.
+const PHANTOM_LOGIN_ENABLED = false;
 let usePhantomConnector: any = null;
-try {
-  const connectors = require('@privy-io/expo/connectors');
-  usePhantomConnector = connectors.usePhantomDeeplinkWalletConnector;
-} catch {
-  // Not available in Expo Go
-}
 
 function PhantomWalletLogin({ onSuccess }: { onSuccess: () => void }) {
   const auth = useAuth();
@@ -214,8 +216,8 @@ export default function LoginScreen() {
             <Text style={styles.signUpText}>CONTINUE WITH GOOGLE</Text>
           </TouchableOpacity>
 
-          {/* Wallet login — Phantom deeplink */}
-          {isPrivyAvailable && usePhantomConnector && (
+          {/* Wallet login — Phantom deeplink (disabled — SIWS nonce invalidates across deeplink round-trips) */}
+          {PHANTOM_LOGIN_ENABLED && isPrivyAvailable && usePhantomConnector && (
             <>
               <View style={styles.dividerRow}>
                 <View style={styles.dividerLine} />

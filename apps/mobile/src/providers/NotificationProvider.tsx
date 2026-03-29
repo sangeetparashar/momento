@@ -9,13 +9,12 @@ import React, {
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiService } from '@/services/api';
+import { useAuth } from '@/hooks/useAuth';
 
 // expo-notifications is not available in Expo Go (removed in SDK 53+).
 // We dynamically require it and no-op when unavailable.
-// Note: setNotificationHandler is deferred to the provider component to
-// avoid triggering Firebase initialization at module import time (which
-// crashes if google-services.json is not configured).
 let Notifications: typeof import('expo-notifications') | null = null;
 const isExpoGo = Constants.appOwnership === 'expo';
 
@@ -27,18 +26,30 @@ if (!isExpoGo) {
   }
 }
 
+interface NotificationsApiResponse {
+  notifications: any[];
+  unreadCount: number;
+  hasMore: boolean;
+}
+
 interface NotificationContextValue {
   /** The Expo push token string, or null if not yet registered. */
   pushToken: string | null;
   /** The most recent notification received while the app was foregrounded. */
   lastNotification: any | null;
-  /** Number of unread notifications stored locally. */
+  /** Number of unread notifications. */
   unreadCount: number;
-  /** Refresh the unread count from storage. */
+  /** Refresh the unread count from server. */
   refreshUnreadCount: () => void;
+  /** Whether the initial notification fetch is complete. */
+  isLoaded: boolean;
 }
 
 const NotificationContext = createContext<NotificationContextValue | null>(null);
+
+/** Query key for notifications — can be used by index.tsx for prefetching */
+export const NOTIFICATIONS_QUERY_KEY = (userId?: string | null) =>
+  ['notifications-count', userId ?? 'anon'];
 
 interface NotificationProviderProps {
   children: React.ReactNode;
@@ -47,29 +58,30 @@ interface NotificationProviderProps {
 export function NotificationProvider({ children }: NotificationProviderProps) {
   const [pushToken, setPushToken] = useState<string | null>(null);
   const [lastNotification, setLastNotification] = useState<any | null>(null);
-  const [unreadCount, setUnreadCount] = useState(0);
   const notificationListener = useRef<any>(null);
   const responseListener = useRef<any>(null);
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { user: authUser } = useAuth();
+
+  // Use React Query for notification count — enables prefetching from index.tsx
+  // and integrates with the query cache for instant display.
+  const notifQuery = useQuery<NotificationsApiResponse>({
+    queryKey: NOTIFICATIONS_QUERY_KEY(authUser?.id),
+    queryFn: () => apiService.get<NotificationsApiResponse>('/notifications?limit=1'),
+    enabled: !!authUser,
+    staleTime: 15_000, // 15 seconds before refetching
+    refetchInterval: 30_000, // Poll every 30 seconds
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+  });
+
+  const unreadCount = notifQuery.data?.unreadCount ?? 0;
+  const isLoaded = !notifQuery.isLoading || !authUser;
 
   const refreshUnreadCount = useCallback(() => {
-    // Fetch unread count from server API
-    apiService
-      .get<{ notifications: any[]; unreadCount: number }>('/notifications?limit=1')
-      .then((data) => {
-        setUnreadCount(data.unreadCount ?? 0);
-      })
-      .catch(() => {
-        // API not reachable — keep current count
-      });
-  }, []);
-
-  // Load unread count on mount + poll every 30 seconds
-  useEffect(() => {
-    refreshUnreadCount();
-    const interval = setInterval(refreshUnreadCount, 30_000);
-    return () => clearInterval(interval);
-  }, [refreshUnreadCount]);
+    queryClient.invalidateQueries({ queryKey: NOTIFICATIONS_QUERY_KEY(authUser?.id) });
+  }, [queryClient, authUser?.id]);
 
   // ---------------------------------------------------------------------------
   // Token registration
@@ -82,7 +94,6 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     }
 
     try {
-      // Request permission
       const { status: existingStatus } =
         await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
@@ -92,11 +103,8 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
         finalStatus = status;
       }
 
-      if (finalStatus !== 'granted') {
-        return;
-      }
+      if (finalStatus !== 'granted') return;
 
-      // Get the Expo push token
       const tokenData = await Notifications.getExpoPushTokenAsync({
         projectId: Constants.expoConfig?.extra?.eas?.projectId,
       });
@@ -104,7 +112,6 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       console.log('[Notifications] Got push token:', token);
       setPushToken(token);
 
-      // Register the token with our API
       try {
         await apiService.post('/users/me/push-token', { pushToken: token });
         console.log('[Notifications] Push token registered with API');
@@ -112,7 +119,6 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
         console.warn('[Notifications] Push token registration failed:', regErr);
       }
 
-      // Android-specific notification channel
       if (Platform.OS === 'android') {
         await Notifications.setNotificationChannelAsync('default', {
           name: 'Default',
@@ -122,7 +128,6 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
         });
       }
     } catch (err) {
-      // Firebase/FCM not configured — silently degrade
       console.warn('Push notification setup failed:', err);
     }
   }, []);
@@ -139,7 +144,6 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
 
       if (!data) return;
 
-      // Route based on notification payload
       if (data.type === 'post' && data.postId) {
         router.push(`/post/${data.postId}`);
       } else if (data.type === 'creator' && data.creatorId) {
@@ -161,8 +165,6 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       return;
     }
 
-    // Set notification handler inside useEffect (wrapped in try/catch)
-    // to avoid triggering Firebase init at module level
     try {
       Notifications.setNotificationHandler({
         handleNotification: async () => ({
@@ -174,43 +176,36 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
         }),
       });
     } catch {
-      // Firebase not configured — notifications won't work but app continues
+      // Firebase not configured
     }
 
     registerForPushNotifications();
 
-    // Listen for notifications received while app is foregrounded
     try {
       notificationListener.current =
         Notifications.addNotificationReceivedListener((notification) => {
           setLastNotification(notification);
-          // Refresh count from server — the notification is already stored server-side
+          // Immediately refresh count — notification already stored server-side
           refreshUnreadCount();
         });
 
-      // Listen for notification taps
       responseListener.current =
         Notifications.addNotificationResponseReceivedListener(
           handleNotificationResponse,
         );
     } catch {
-      // Firebase/FCM not initialized — listeners can't be registered
       console.warn('Notification listeners could not be registered (Firebase not configured)');
     }
 
     return () => {
-      if (notificationListener.current) {
-        notificationListener.current.remove();
-      }
-      if (responseListener.current) {
-        responseListener.current.remove();
-      }
+      if (notificationListener.current) notificationListener.current.remove();
+      if (responseListener.current) responseListener.current.remove();
     };
   }, [registerForPushNotifications, handleNotificationResponse, refreshUnreadCount]);
 
   return (
     <NotificationContext.Provider
-      value={{ pushToken, lastNotification, unreadCount, refreshUnreadCount }}
+      value={{ pushToken, lastNotification, unreadCount, refreshUnreadCount, isLoaded }}
     >
       {children}
     </NotificationContext.Provider>

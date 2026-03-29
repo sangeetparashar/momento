@@ -8,6 +8,7 @@ import { apiService } from '@/services/api';
 import { getOnboardingState, setOnboardingUser, markProfileSetupComplete } from '@/services/onboardingStorage';
 import { Text, MomentoLogo } from '@/components/primitives';
 import { DisclaimerModal, hasAcceptedDisclaimer } from '@/components/features';
+import { NOTIFICATIONS_QUERY_KEY } from '@/providers/NotificationProvider';
 import { COLORS, SPACING } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import type { User } from '@momento/shared';
@@ -45,6 +46,15 @@ export default function IndexScreen() {
 
   // Prefetch feed immediately — runs in parallel with auth init.
   useFeed();
+
+  // Prefetch notifications in parallel — so data is in React Query cache
+  // before the home screen mounts. This eliminates the delay the user sees.
+  const notifQuery = useQuery({
+    queryKey: NOTIFICATIONS_QUERY_KEY(authUser?.id),
+    queryFn: () => apiService.get('/notifications?limit=1'),
+    enabled: !!authUser,
+    staleTime: 15_000,
+  });
 
   // Fetch full profile in parallel with feed (only when authenticated).
   // Key includes authUser.id so switching users gets a fresh fetch.

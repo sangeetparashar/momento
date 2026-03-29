@@ -14,6 +14,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Text } from '@/components/primitives';
 import { apiService } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
+import { NOTIFICATIONS_QUERY_KEY } from '@/providers/NotificationProvider';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo } from '@/utils/formatters';
@@ -109,7 +110,9 @@ export default function NotificationsScreen() {
     mutationFn: (payload: { ids?: string[]; all?: boolean }) =>
       apiService.post('/notifications', payload),
     onSuccess: () => {
+      // Invalidate both the notification list AND the unread count in the provider
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      queryClient.invalidateQueries({ queryKey: NOTIFICATIONS_QUERY_KEY(user?.id) });
     },
   });
 
