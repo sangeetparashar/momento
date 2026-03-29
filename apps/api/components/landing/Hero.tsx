@@ -58,17 +58,17 @@ export default function Hero() {
           style={{ animationDelay: '250ms', animationFillMode: 'forwards' }}
         >
           <span className="inline-block overflow-hidden">
-            {['Own', 'the'].map((word, i) => (
+            {['Own', ' ', 'the'].map((word, i) => (
               <span
-                key={word}
-                className="inline-block transition-all duration-700 ease-out"
-                style={{
+                key={`hero-word-${i}`}
+                className={word === ' ' ? 'inline-block w-[0.3em]' : 'inline-block transition-all duration-700 ease-out'}
+                style={word === ' ' ? {} : {
                   transform: revealed ? 'translateY(0)' : 'translateY(100%)',
                   opacity: revealed ? 1 : 0,
                   transitionDelay: `${i * 120 + 400}ms`,
                 }}
               >
-                {word}{' '}
+                {word}
               </span>
             ))}
           </span>
