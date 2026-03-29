@@ -15,8 +15,12 @@
 
 import { PrismaClient } from '@prisma/client';
 
+// Use DIRECT_URL when available (bypasses pgbouncer, needed for DDL),
+// but fall back to DATABASE_URL for environments where DIRECT_URL isn't reachable
+// (e.g. Vercel build — can't reach Supabase direct port).
+const dbUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
 const prisma = new PrismaClient({
-  datasources: { db: { url: process.env.DIRECT_URL || process.env.DATABASE_URL } },
+  datasources: { db: { url: dbUrl } },
 });
 
 async function applyPostGIS() {
@@ -104,6 +108,13 @@ async function applyPostGIS() {
 
 applyPostGIS()
   .catch((e) => {
+    // In Vercel build environment, the direct DB connection may not be reachable.
+    // PostGIS setup is idempotent and only needs to succeed once (locally or via
+    // a deploy hook). Don't fail the build if we can't connect.
+    if (e.message?.includes("Can't reach database") || e.message?.includes('ECONNREFUSED')) {
+      console.warn('[PostGIS] Could not reach database — skipping PostGIS setup (run locally if needed)');
+      process.exit(0); // Don't fail the build
+    }
     console.error('[PostGIS] Migration FAILED:', e.message);
     process.exit(1);
   })
