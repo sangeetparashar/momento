@@ -54,23 +54,30 @@ export default function Hero() {
 
         {/* Main headline with word-by-word reveal + sweeping highlight */}
         <h1
-          className="text-7xl md:text-8xl lg:text-9xl font-black text-white leading-[0.95] tracking-tight opacity-0 animate-slide-up"
+          className="text-6xl md:text-7xl lg:text-8xl xl:text-9xl font-black text-white leading-[1.1] tracking-tight opacity-0 animate-slide-up"
           style={{ animationDelay: '250ms', animationFillMode: 'forwards' }}
         >
-          <span className="inline-block overflow-hidden">
-            {['Own', ' ', 'the'].map((word, i) => (
-              <span
-                key={`hero-word-${i}`}
-                className={word === ' ' ? 'inline-block w-[0.3em]' : 'inline-block transition-all duration-700 ease-out'}
-                style={word === ' ' ? {} : {
-                  transform: revealed ? 'translateY(0)' : 'translateY(100%)',
-                  opacity: revealed ? 1 : 0,
-                  transitionDelay: `${i * 120 + 400}ms`,
-                }}
-              >
-                {word}
-              </span>
-            ))}
+          <span className="block mb-2 md:mb-3">
+            <span
+              className="inline-block transition-all duration-700 ease-out mr-[0.3em]"
+              style={{
+                transform: revealed ? 'translateY(0)' : 'translateY(100%)',
+                opacity: revealed ? 1 : 0,
+                transitionDelay: '400ms',
+              }}
+            >
+              Own
+            </span>
+            <span
+              className="inline-block transition-all duration-700 ease-out"
+              style={{
+                transform: revealed ? 'translateY(0)' : 'translateY(100%)',
+                opacity: revealed ? 1 : 0,
+                transitionDelay: '520ms',
+              }}
+            >
+              the
+            </span>
           </span>
           <span className="inline-block relative">
             <span

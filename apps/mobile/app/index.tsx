@@ -7,6 +7,7 @@ import { useFeed } from '@/hooks';
 import { apiService } from '@/services/api';
 import { getOnboardingState, setOnboardingUser, markProfileSetupComplete } from '@/services/onboardingStorage';
 import { Text, MomentoLogo } from '@/components/primitives';
+import { DisclaimerModal, hasAcceptedDisclaimer } from '@/components/features';
 import { COLORS, SPACING } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import type { User } from '@momento/shared';
@@ -23,6 +24,18 @@ export default function IndexScreen() {
   const { isReady, user: authUser } = useAuth();
   const [navReady, setNavReady] = useState(false);
   const navigatedForUserRef = useRef<string | null>(null);
+  const [showDisclaimer, setShowDisclaimer] = useState(false);
+  const [disclaimerChecked, setDisclaimerChecked] = useState(false);
+
+  // Check if disclaimer was already accepted
+  useEffect(() => {
+    hasAcceptedDisclaimer().then((accepted) => {
+      setDisclaimerChecked(true);
+      if (!accepted) {
+        setShowDisclaimer(true);
+      }
+    });
+  }, []);
 
   // Prefetch feed immediately — runs in parallel with auth init.
   useFeed();
@@ -61,7 +74,7 @@ export default function IndexScreen() {
   }, [authUser?.id]);
 
   useEffect(() => {
-    if (!isReady || !navReady) return;
+    if (!isReady || !navReady || !disclaimerChecked || showDisclaimer) return;
 
     const currentUserId = authUser?.id ?? 'guest';
 
@@ -98,12 +111,16 @@ export default function IndexScreen() {
         router.replace('/(tabs)/home');
       }
     });
-  }, [isReady, authUser, router, navReady, profileQuery.isLoading, profileQuery.data]);
+  }, [isReady, authUser, router, navReady, profileQuery.isLoading, profileQuery.data, disclaimerChecked, showDisclaimer]);
 
   return (
     <View style={styles.container}>
       <MomentoLogo size={64} showText />
       <Text style={styles.loadingMessage}>Loading your experience...</Text>
+      <DisclaimerModal
+        visible={showDisclaimer}
+        onAccept={() => setShowDisclaimer(false)}
+      />
     </View>
   );
 }

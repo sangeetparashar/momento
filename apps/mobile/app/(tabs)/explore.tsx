@@ -177,7 +177,7 @@ function AnimatedCard({
   );
 }
 
-// Search result row for creators
+// Search result card for creators — matches landing page "Discover Nearby" design
 function CreatorSearchRow({
   creator,
   onPress,
@@ -186,31 +186,56 @@ function CreatorSearchRow({
   onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress} style={styles.searchRow}>
-      <Avatar
-        uri={creator.avatarUrl}
-        name={creator.displayName || creator.username}
-        size="md"
-      />
-      <View style={styles.searchRowInfo}>
-        <Text style={styles.searchRowName} numberOfLines={1}>
-          {creator.displayName || creator.username}
-        </Text>
-        <View style={styles.searchRowMeta}>
-          {creator.tokenSymbol && (
-            <Text style={styles.searchRowToken}>${creator.tokenSymbol}</Text>
-          )}
-          <Text style={styles.searchRowStat}>
-            {formatNumber(creator.followerCount)} followers
+    <Pressable onPress={onPress} style={styles.creatorCard}>
+      <View style={styles.creatorCardHeader}>
+        <Avatar
+          uri={creator.avatarUrl}
+          name={creator.displayName || creator.username}
+          size="md"
+        />
+        <View style={styles.creatorCardInfo}>
+          <Text style={styles.creatorCardName} numberOfLines={1}>
+            {creator.displayName || creator.username}
           </Text>
-          {creator.distanceMeters != null && (
-            <Text style={styles.searchRowStat}>
-              {formatDistance(creator.distanceMeters)}
-            </Text>
-          )}
+          <Text style={styles.creatorCardHandle} numberOfLines={1}>
+            @{creator.username || 'creator'}
+          </Text>
         </View>
+        {creator.tokenSymbol && (
+          <View style={styles.creatorCardPriceBadge}>
+            <Text style={styles.creatorCardPrice}>${creator.tokenSymbol}</Text>
+          </View>
+        )}
       </View>
-      <Ionicons name="chevron-forward" size={18} color={COLORS.textTertiary} />
+      {/* Preview area — avatar banner or placeholder */}
+      <View style={styles.creatorCardPreview}>
+        {creator.bannerUrl ? (
+          <Image
+            source={{ uri: creator.bannerUrl }}
+            style={styles.creatorCardBanner}
+            contentFit="cover"
+            cachePolicy="disk"
+          />
+        ) : (
+          <View style={styles.creatorCardBannerPlaceholder} />
+        )}
+      </View>
+      <View style={styles.creatorCardFooter}>
+        <View style={styles.creatorCardStat}>
+          <Text style={styles.creatorCardStatValue}>{formatNumber(creator.followerCount)}</Text>
+          <Text style={styles.creatorCardStatLabel}>followers</Text>
+        </View>
+        <View style={styles.creatorCardStat}>
+          <Text style={styles.creatorCardStatValue}>{formatNumber(creator.postCount)}</Text>
+          <Text style={styles.creatorCardStatLabel}>posts</Text>
+        </View>
+        {creator.distanceMeters != null && (
+          <View style={styles.creatorCardStat}>
+            <Ionicons name="location-outline" size={11} color={COLORS.primary} />
+            <Text style={styles.creatorCardStatLabel}>{formatDistance(creator.distanceMeters)}</Text>
+          </View>
+        )}
+      </View>
     </Pressable>
   );
 }
@@ -427,18 +452,18 @@ export default function ExploreScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Explore</Text>
+        <Text style={styles.headerTitle}>Discover Nearby Creators</Text>
       </View>
 
-      {/* Search Bar */}
+      {/* Search Bar — matches landing page style */}
       <CoachMark
         hintId="explore_search"
         text="Search for creators, tokens, or posts"
         position="bottom"
       >
       <View style={styles.searchContainer}>
-        <View style={styles.searchBar}>
-          <Ionicons name="search" size={18} color={COLORS.textTertiary} />
+        <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
+          <Ionicons name="search" size={18} color={searchFocused ? COLORS.primary : COLORS.textTertiary} />
           <TextInput
             ref={inputRef}
             style={styles.searchInput}
@@ -446,7 +471,7 @@ export default function ExploreScreen() {
             onChangeText={setSearchText}
             onFocus={() => setSearchFocused(true)}
             onBlur={() => setSearchFocused(false)}
-            placeholder="Search creators, posts..."
+            placeholder="Search nearby creators..."
             placeholderTextColor={COLORS.textTertiary}
             returnKeyType="search"
             autoCorrect={false}
@@ -648,12 +673,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
-    borderRadius: RADII.full,
+    borderRadius: RADII.lg,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
+    paddingVertical: SPACING.sm + 2,
     gap: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
+  },
+  searchBarFocused: {
+    borderColor: COLORS.primary + '60',
+    backgroundColor: COLORS.background,
   },
   searchInput: {
     flex: 1,
@@ -661,6 +690,85 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     padding: 0,
     fontSize: 15,
+  },
+  // Creator card — matches landing page "Discover Nearby Creators" design
+  creatorCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADII.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    marginBottom: SPACING.sm,
+    overflow: 'hidden',
+  },
+  creatorCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.md,
+    gap: SPACING.sm,
+  },
+  creatorCardInfo: {
+    flex: 1,
+  },
+  creatorCardName: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textPrimary,
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  creatorCardHandle: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textTertiary,
+    fontSize: 12,
+    marginTop: 1,
+  },
+  creatorCardPriceBadge: {
+    backgroundColor: COLORS.primary + '20',
+    paddingHorizontal: SPACING.sm + 2,
+    paddingVertical: 4,
+    borderRadius: RADII.full,
+  },
+  creatorCardPrice: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.primary,
+    fontWeight: '800',
+    fontSize: 13,
+  },
+  creatorCardPreview: {
+    height: 80,
+    backgroundColor: COLORS.backgroundTertiary,
+  },
+  creatorCardBanner: {
+    width: '100%',
+    height: '100%',
+  },
+  creatorCardBannerPlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: COLORS.backgroundTertiary,
+  },
+  creatorCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: SPACING.md,
+    gap: SPACING.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.border,
+  },
+  creatorCardStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  creatorCardStatValue: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textPrimary,
+    fontWeight: '700',
+    fontSize: 12,
+  },
+  creatorCardStatLabel: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textTertiary,
+    fontSize: 11,
   },
   // Search results
   searchListContent: {
