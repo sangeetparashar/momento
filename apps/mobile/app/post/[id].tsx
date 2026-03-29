@@ -43,16 +43,14 @@ export default function PostScreen() {
 
   const deleteMutation = useMutation({
     mutationFn: () => apiService.delete(`/posts/${id}`),
-    onSuccess: async () => {
-      // Remove the deleted post's own query cache
-      queryClient.removeQueries({ queryKey: ['post', id] });
-      // Refetch feed and profile so stale data is gone before navigating back
-      await Promise.all([
-        queryClient.refetchQueries({ queryKey: ['feed'] }),
-        queryClient.invalidateQueries({ queryKey: ['userProfile'] }),
-        queryClient.invalidateQueries({ queryKey: ['creator'] }),
-      ]);
+    onSuccess: () => {
+      // Navigate back FIRST to prevent the unmounted post query from refetching
       router.back();
+      // Then clean up caches in the background (no await — screen is already gone)
+      queryClient.removeQueries({ queryKey: ['post', id] });
+      queryClient.invalidateQueries({ queryKey: ['feed'] });
+      queryClient.invalidateQueries({ queryKey: ['userProfile'] });
+      queryClient.invalidateQueries({ queryKey: ['creator'] });
     },
   });
 

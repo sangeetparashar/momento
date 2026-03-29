@@ -53,12 +53,14 @@ function getPhantomHook() {
 const GUEST_AUTH = {
   isReady: true,
   user: null,
-  login: async () => {
+  login: async (_provider?: 'google' | 'instagram') => {
     console.warn('[useAuth] Privy not available in Expo Go — use a development build.');
   },
   loginWithWallet: async () => {
     console.warn('[useAuth] Privy not available in Expo Go — use a development build.');
   },
+  generateSiwsMessage: async () => ({ message: '' }),
+  siwsLogin: async () => {},
   logout: async () => {},
   getAccessToken: async () => null,
   walletAddress: null as string | null,
@@ -169,11 +171,13 @@ export function useAuth() {
 
   /**
    * Login with an external Solana wallet via SIWS (Sign In With Solana).
-   * Takes the wallet address and a signMessage function (from Phantom deeplink connector).
+   * Takes the wallet address, a signMessage function, and optional wallet metadata.
+   * Works with both Phantom deeplink and MWA (Mobile Wallet Adapter).
    */
   const loginWithWallet = async (
     externalAddress: string,
     signMessage: (message: string) => Promise<{ signature: string }>,
+    walletMeta?: { walletClientType?: string; connectorType?: string },
   ) => {
     console.log('[useAuth] Starting SIWS login for wallet:', externalAddress);
 
@@ -194,8 +198,8 @@ export function useAuth() {
       signature,
       message,
       wallet: {
-        walletClientType: 'phantom',
-        connectorType: 'deeplink',
+        walletClientType: walletMeta?.walletClientType ?? 'phantom',
+        connectorType: walletMeta?.connectorType ?? 'deeplink',
       },
     });
 
@@ -205,10 +209,14 @@ export function useAuth() {
   return {
     isReady: privy.isReady,
     user: privy.user,
-    login: async () => {
-      await oauthLogin({ provider: 'google' });
+    login: async (provider: 'google' | 'instagram' = 'google') => {
+      await oauthLogin({ provider });
     },
     loginWithWallet,
+    /** Generate a SIWS message for an external wallet address. */
+    generateSiwsMessage: siws.generateMessage,
+    /** Complete SIWS login with a pre-signed message. */
+    siwsLogin: siws.login,
     logout: async () => {
       // Cancel all in-flight queries BEFORE logout to prevent
       // "query dehydrated as pending ended up rejected" errors.

@@ -14,21 +14,24 @@ export const createCommentSchema = z.object({
   content: z.string().min(1).max(2000).trim(),
 });
 
+// Transform empty strings to undefined so optional fields pass validation
+const emptyToUndefined = (val: string | undefined) => (val === '' ? undefined : val);
+
 export const updateProfileSchema = z.object({
-  username: z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores').optional(),
-  displayName: z.string().min(1).max(50).optional(),
-  bio: z.string().max(500).optional(),
-  avatarUrl: z.string().url().optional().nullable(),
-  bannerUrl: z.string().url().optional().nullable(),
-  tokenSymbol: z.string().min(2).max(10).regex(/^[A-Z0-9]+$/, 'Token symbol must be uppercase letters and numbers').optional(),
+  username: z.preprocess(emptyToUndefined, z.string().min(3).max(30).regex(/^[a-zA-Z0-9_]+$/, 'Username can only contain letters, numbers, and underscores').optional()),
+  displayName: z.preprocess(emptyToUndefined, z.string().min(1).max(50).optional()),
+  bio: z.preprocess(emptyToUndefined, z.string().max(500).optional()),
+  avatarUrl: z.preprocess(emptyToUndefined, z.string().url().optional().nullable()),
+  bannerUrl: z.preprocess(emptyToUndefined, z.string().url().optional().nullable()),
+  tokenSymbol: z.preprocess(emptyToUndefined, z.string().min(2).max(10).regex(/^[A-Z0-9]+$/, 'Token symbol must be uppercase letters and numbers').optional()),
   socialLinks: z.object({
-    instagram: z.string().max(100).optional(),
-    twitter: z.string().max(100).optional(),
-    youtube: z.string().max(200).optional(),
-    spotify: z.string().max(200).optional(),
-    soundcloud: z.string().max(100).optional(),
-    tiktok: z.string().max(100).optional(),
-    website: z.string().url().max(200).optional(),
+    instagram: z.preprocess(emptyToUndefined, z.string().max(100).optional()),
+    twitter: z.preprocess(emptyToUndefined, z.string().max(100).optional()),
+    youtube: z.preprocess(emptyToUndefined, z.string().max(200).optional()),
+    spotify: z.preprocess(emptyToUndefined, z.string().max(200).optional()),
+    soundcloud: z.preprocess(emptyToUndefined, z.string().max(100).optional()),
+    tiktok: z.preprocess(emptyToUndefined, z.string().max(100).optional()),
+    website: z.preprocess(emptyToUndefined, z.string().url().max(200).optional()),
   }).optional().nullable(),
 });
 

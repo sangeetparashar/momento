@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePrivyGuard } from '@/providers/PrivyGuard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text, MomentoLogo } from '@/components/primitives';
+import { ComingSoonModal } from '@/components/features';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 
@@ -18,95 +19,14 @@ try {
   usePhantomConnector = connectors.usePhantomDeeplinkWalletConnector;
 } catch { /* Not available in Expo Go */ }
 
-// Raw Privy client + SIWS message builder from SDK
-let usePrivyClient: any = null;
-let createSiwsMessage: any = null;
-try {
-  const privy = require('@privy-io/expo');
-  usePrivyClient = privy.usePrivyClient;
-} catch { /* Not available */ }
-try {
-  const core = require('@privy-io/js-sdk-core');
-  createSiwsMessage = core.createSiwsMessage;
-} catch { /* Not available */ }
-
-// AsyncStorage keys for persisting SIWS state across deeplink round-trips
-const SIWS_PENDING_KEY = 'momento_siws_pending';     // 'connect' | 'sign'
-const SIWS_MESSAGE_KEY = 'momento_siws_message';
-const SIWS_ADDRESS_KEY = 'momento_siws_address';
-
-async function clearSiwsState() {
-  await AsyncStorage.multiRemove([SIWS_PENDING_KEY, SIWS_MESSAGE_KEY, SIWS_ADDRESS_KEY]);
-}
-
-// ── Helper: run the SIWS flow once we have an address ───────────────────────
-// Extracted so it can be called from useEffect or from the recovery poll.
-async function runSiwsFlow(
-  address: string,
-  phantom: any,
-  privyClient: any,
-  setStage: (s: string) => void,
-  onSuccess: () => void,
-) {
-  const siwsApi = privyClient.auth?.siws ?? privyClient.siws;
-
-  console.log('[WalletLogin] === Starting SIWS flow for:', address);
-
-  // 1. Fetch nonce
-  const { nonce } = await siwsApi.fetchNonce({ address });
-  console.log('[WalletLogin] Got nonce:', nonce?.slice(0, 20) + '...');
-
-  // 2. Build SIWS message using Privy's exact format
-  const message = createSiwsMessage({
-    address,
-    nonce,
-    domain: 'momento.app',
-    uri: 'https://momento.app',
-  });
-  console.log('[WalletLogin] SIWS message built, length:', message.length);
-
-  // 3. Persist for recovery
-  await AsyncStorage.setItem(SIWS_MESSAGE_KEY, message);
-  await AsyncStorage.setItem(SIWS_ADDRESS_KEY, address);
-  await AsyncStorage.setItem(SIWS_PENDING_KEY, 'sign');
-
-  // 4. Open Phantom for signing (second deeplink)
-  console.log('[WalletLogin] Opening Phantom for signing...');
-  setStage('signing');
-  const { signature } = await phantom.signMessage(message);
-
-  console.log('[WalletLogin] Got signature, type:', typeof signature, 'len:', String(signature).length);
-  console.log('[WalletLogin] Signature preview:', String(signature).slice(0, 60));
-
-  // 5. Login via raw Privy API
-  setStage('logging-in');
-  console.log('[WalletLogin] Calling siwsApi.login...');
-  try {
-    await siwsApi.login({
-      message,
-      signature,
-      walletClientType: 'phantom',
-      connectorType: 'deeplink',
-    });
-  } catch (loginErr: any) {
-    console.error('[WalletLogin] LOGIN FAILED:', JSON.stringify({
-      msg: loginErr?.message,
-      status: loginErr?.status,
-      body: JSON.stringify(loginErr?.body)?.slice(0, 300),
-      code: loginErr?.code,
-    }));
-    throw loginErr;
-  }
-
-  console.log('[WalletLogin] === Login successful! ===');
-  await clearSiwsState();
-  onSuccess();
-}
+// AsyncStorage key for persisting connect state across deeplink round-trips
+const SIWS_PENDING_KEY = 'momento_siws_pending'; // 'connect'
 
 // ── Phantom wallet login component ──────────────────────────────────────────
 function PhantomWalletLogin({ onSuccess }: { onSuccess: () => void }) {
   const [stage, setStage] = useState<string>('idle');
   const busyRef = useRef(false);
+  const auth = useAuth();
 
   const phantom = usePhantomConnector?.({
     appUrl: 'https://momento.app',
@@ -114,15 +34,13 @@ function PhantomWalletLogin({ onSuccess }: { onSuccess: () => void }) {
     autoReconnect: true,
   });
 
-  const privyClient = usePrivyClient?.();
-
   // ── Log phantom state changes for debugging ─────────────────────────
   useEffect(() => {
     console.log('[WalletLogin] phantom.address changed:', phantom?.address ?? 'undefined');
     console.log('[WalletLogin] phantom.isConnected:', phantom?.isConnected);
   }, [phantom?.address, phantom?.isConnected]);
 
-  // ── Core effect: when address appears AND we have a pending connect ──
+  // ── Core effect: when address appears AND we have a pending connect, run SIWS ──
   useEffect(() => {
     if (!phantom?.address || busyRef.current) return;
 
@@ -135,13 +53,37 @@ function PhantomWalletLogin({ onSuccess }: { onSuccess: () => void }) {
       busyRef.current = true;
 
       try {
-        await runSiwsFlow(phantom.address, phantom, privyClient, setStage, () => {
-          busyRef.current = false;
-          onSuccess();
+        setStage('signing');
+        console.log('[WalletLogin] === Starting SIWS via useAuth.loginWithWallet ===');
+        console.log('[WalletLogin] Address:', phantom.address);
+
+        // Use useAuth's loginWithWallet — the exact flow Privy designed.
+        // It calls siws.generateMessage() → signMessage → siws.login() internally.
+        await auth.loginWithWallet(phantom.address, async (message: string) => {
+          console.log('[WalletLogin] signMessage callback called, message length:', message.length);
+          console.log('[WalletLogin] Message preview:', message.slice(0, 150));
+          console.log('[WalletLogin] Opening Phantom for signing...');
+          setStage('signing');
+          const result = await phantom.signMessage(message);
+          console.log('[WalletLogin] Got signature, type:', typeof result.signature, 'len:', String(result.signature).length);
+          console.log('[WalletLogin] Signature preview:', String(result.signature).slice(0, 60));
+          return result;
         });
+
+        console.log('[WalletLogin] === Login successful! ===');
+        await AsyncStorage.removeItem(SIWS_PENDING_KEY);
+        setStage('idle');
+        busyRef.current = false;
+        onSuccess();
       } catch (error: any) {
         console.warn('[WalletLogin] SIWS flow failed:', error?.message || error);
-        await clearSiwsState();
+        console.warn('[WalletLogin] Error details:', JSON.stringify({
+          msg: error?.message,
+          status: error?.status,
+          body: JSON.stringify(error?.body)?.slice(0, 300),
+          code: error?.code,
+        }));
+        await AsyncStorage.removeItem(SIWS_PENDING_KEY);
         busyRef.current = false;
         setStage('idle');
         if (!error?.message?.includes('cancel')) {
@@ -151,75 +93,27 @@ function PhantomWalletLogin({ onSuccess }: { onSuccess: () => void }) {
     })();
   }, [phantom?.address]);
 
-  // ── On mount: recover from interrupted flow after cold start ──────
-  // The app may have been killed while Phantom was open. Poll for
-  // phantom.address to appear (autoReconnect / getInitialURL).
+  // ── On mount: check for interrupted flow from cold start ──────────
   useEffect(() => {
-    let cancelled = false;
-    let pollTimer: ReturnType<typeof setInterval> | null = null;
-
     (async () => {
       const pending = await AsyncStorage.getItem(SIWS_PENDING_KEY);
       console.log('[WalletLogin] Mount recovery check. pending:', pending, 'phantom.address:', phantom?.address);
 
-      if (!pending) return;
-
-      // Show connecting state while we wait
-      setStage(pending === 'sign' ? 'signing' : 'connecting');
-
-      // If the address is already available, the address-useEffect handles it.
-      // If not, poll every 500ms for up to 5 seconds waiting for autoReconnect.
-      if (!phantom?.address) {
-        console.log('[WalletLogin] Waiting for phantom.address via autoReconnect...');
-        let attempts = 0;
-        pollTimer = setInterval(async () => {
-          attempts++;
-          console.log('[WalletLogin] Poll #' + attempts + ' phantom.address:', phantom?.address);
-
-          if (phantom?.address && !cancelled && !busyRef.current) {
-            clearInterval(pollTimer!);
-            pollTimer = null;
-            busyRef.current = true;
-
-            // If we were in 'sign' state, restart from 'connect' (need new nonce)
-            if (pending === 'sign') {
-              await AsyncStorage.setItem(SIWS_PENDING_KEY, 'connect');
-            }
-
-            try {
-              await runSiwsFlow(phantom.address, phantom, privyClient, setStage, () => {
-                busyRef.current = false;
-                onSuccess();
-              });
-            } catch (error: any) {
-              console.warn('[WalletLogin] Recovery SIWS failed:', error?.message);
-              await clearSiwsState();
-              busyRef.current = false;
-              setStage('idle');
-              if (!error?.message?.includes('cancel')) {
-                Alert.alert('Wallet Login Failed', error?.message || 'Please try again.');
-              }
-            }
-          } else if (attempts >= 10) {
-            clearInterval(pollTimer!);
-            pollTimer = null;
-            console.warn('[WalletLogin] Timed out waiting for phantom.address');
-            await clearSiwsState();
-            setStage('idle');
-          }
-        }, 500);
+      if (pending === 'connect') {
+        // Show connecting state — the address-useEffect above will handle when phantom reconnects
+        setStage('connecting');
       }
-    })();
 
-    return () => {
-      cancelled = true;
-      if (pollTimer) clearInterval(pollTimer);
-    };
+      // If there was a pending 'connect' but no phantom.address, it means the app
+      // was killed during Phantom's connect flow. The phantom connector's autoReconnect
+      // will eventually populate the address if the connection succeeded.
+      // We just wait for the address-useEffect to fire.
+    })();
   }, []); // Only run on mount
 
   // ── Tap handler: start the connect flow ───────────────────────────────
   const handleConnect = useCallback(async () => {
-    if (!phantom || !privyClient || !createSiwsMessage) {
+    if (!phantom) {
       Alert.alert('Not Available', 'Wallet connector not loaded. Use a dev build.');
       return;
     }
@@ -232,19 +126,165 @@ function PhantomWalletLogin({ onSuccess }: { onSuccess: () => void }) {
       // If this resolves, the address useEffect will handle the rest
     } catch (error: any) {
       console.warn('[WalletLogin] Connect failed:', error?.message || error);
-      await clearSiwsState();
+      await AsyncStorage.removeItem(SIWS_PENDING_KEY);
       setStage('idle');
       if (!error?.message?.includes('cancel')) {
         Alert.alert('Connection Failed', 'Could not connect to Phantom.');
       }
     }
-  }, [phantom, privyClient]);
+  }, [phantom]);
 
-  if (!usePhantomConnector || !usePrivyClient || !createSiwsMessage) return null;
+  if (!usePhantomConnector) return null;
 
   const labels: Record<string, string> = {
     idle: 'CONNECT SOLANA WALLET',
     connecting: 'OPENING PHANTOM...',
+    signing: 'SIGN TO VERIFY...',
+    'logging-in': 'COMPLETING LOGIN...',
+  };
+
+  return (
+    <TouchableOpacity
+      onPress={handleConnect}
+      style={styles.walletButton}
+      activeOpacity={0.7}
+      disabled={stage !== 'idle'}
+    >
+      {stage !== 'idle' ? (
+        <>
+          <ActivityIndicator size="small" color={COLORS.primary} />
+          <Text style={[styles.walletButtonText, { marginLeft: SPACING.sm }]}>
+            {labels[stage] || 'CONNECTING...'}
+          </Text>
+        </>
+      ) : (
+        <>
+          <Ionicons name="wallet-outline" size={20} color={COLORS.primary} />
+          <Text style={styles.walletButtonText}>{labels.idle}</Text>
+        </>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+// ── MWA (Mobile Wallet Adapter) login component ─────────────────────────────
+// Uses Solana's native MWA protocol: single session for connect + sign.
+// On Android, this shows a system bottom sheet with installed wallets.
+// On iOS, it uses ASWebAuthenticationSession (browser-based sheet).
+
+let _mwaTransact: any = null;
+let _mwaAvailable: boolean | null = null;
+function getMwaTransact() {
+  if (_mwaAvailable === null) {
+    try {
+      const mwa = require('@solana-mobile/mobile-wallet-adapter-protocol-web3js');
+      _mwaTransact = mwa.transact;
+      _mwaAvailable = true;
+    } catch {
+      _mwaAvailable = false;
+    }
+  }
+  return _mwaTransact;
+}
+
+function MWAWalletLogin({ onSuccess }: { onSuccess: () => void }) {
+  const [stage, setStage] = useState<string>('idle');
+  const auth = useAuth();
+
+  const handleConnect = useCallback(async () => {
+    const transact = getMwaTransact();
+    if (!transact) {
+      Alert.alert('Not Available', 'Mobile Wallet Adapter is not available on this device.');
+      return;
+    }
+
+    setStage('connecting');
+
+    try {
+      // Single MWA session: authorize + sign SIWS message without leaving the app
+      const { address, message, signature } = await transact(async (wallet: any) => {
+        // Step 1: Authorize — shows OS wallet picker, user selects & approves
+        console.log('[MWA] Requesting authorization...');
+        const authResult = await wallet.authorize({
+          identity: {
+            name: 'Momento',
+            uri: 'https://momento.app',
+          },
+          chain: 'solana:mainnet',
+        });
+
+        const account = authResult.accounts[0];
+        if (!account) throw new Error('No wallet account returned');
+
+        // Decode base64 address to base58 Solana address
+        const { PublicKey } = require('@solana/web3.js');
+        const pubkeyBytes = Uint8Array.from(atob(account.address), (c: string) => c.charCodeAt(0));
+        const address = new PublicKey(pubkeyBytes).toBase58();
+        console.log('[MWA] Authorized. Address:', address);
+
+        // Step 2: Generate SIWS message (Privy network call — session stays open)
+        setStage('signing');
+        console.log('[MWA] Generating SIWS message...');
+        const { message } = await auth.generateSiwsMessage({
+          wallet: { address },
+          from: { domain: 'momento.app', uri: 'https://momento.app' },
+        });
+        console.log('[MWA] SIWS message generated, length:', message.length);
+
+        // Step 3: Sign the SIWS message within the same wallet session
+        console.log('[MWA] Requesting message signature...');
+        const messageBytes = new TextEncoder().encode(message);
+        const signedPayloads = await wallet.signMessages({
+          addresses: [account.address],
+          payloads: [messageBytes],
+        });
+
+        // Encode signature as base58 (standard Solana signature format)
+        const bs58 = require('bs58');
+        const signature = bs58.default
+          ? bs58.default.encode(signedPayloads[0])
+          : bs58.encode(signedPayloads[0]);
+        console.log('[MWA] Signature obtained, length:', signature.length);
+
+        return { address, message, signature };
+      });
+
+      // Step 4: Complete Privy SIWS login (MWA session closed, but we have everything)
+      setStage('logging-in');
+      console.log('[MWA] Completing SIWS login with Privy...');
+      await auth.siwsLogin({
+        signature,
+        message,
+        wallet: {
+          walletClientType: 'mobile-wallet-adapter',
+          connectorType: 'mobile-wallet-adapter',
+        },
+      });
+
+      console.log('[MWA] Login complete!');
+      setStage('idle');
+      onSuccess();
+    } catch (error: any) {
+      console.warn('[MWA] Login failed:', error?.message || error);
+      console.warn('[MWA] Error code:', error?.code);
+      setStage('idle');
+
+      // Don't show alert for user cancellation
+      const msg = error?.message || '';
+      const code = error?.code || '';
+      if (msg.includes('cancel') || msg.includes('Cancel') ||
+          code.includes('CANCEL') || code.includes('SESSION_CLOSED')) {
+        return;
+      }
+      Alert.alert('Wallet Login Failed', msg || 'Could not complete sign-in.');
+    }
+  }, [auth, onSuccess]);
+
+  if (!getMwaTransact()) return null;
+
+  const labels: Record<string, string> = {
+    idle: 'CONNECT SOLANA WALLET',
+    connecting: 'SELECT WALLET...',
     signing: 'SIGN TO VERIFY...',
     'logging-in': 'COMPLETING LOGIN...',
   };
@@ -281,15 +321,16 @@ export default function LoginScreen() {
   const auth = useAuth();
   const { isPrivyAvailable } = usePrivyGuard();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [showComingSoon, setShowComingSoon] = useState(false);
 
-  const handleAuth = useCallback(async () => {
+  const handleAuth = useCallback(async (provider: 'google' | 'instagram' = 'google') => {
     try {
       if (!isPrivyAvailable) {
         Alert.alert('Dev Build Required', 'Privy auth requires a development build.');
         return;
       }
       setIsAuthenticating(true);
-      await auth.login();
+      await auth.login(provider);
       queryClient.invalidateQueries();
       router.replace('/');
     } catch (error: any) {
@@ -325,27 +366,44 @@ export default function LoginScreen() {
         </View>
         <View style={styles.bottomSpacer} />
         <View style={styles.actions}>
-          <TouchableOpacity onPress={handleAuth} style={styles.signUpButton} activeOpacity={0.7}>
+          <TouchableOpacity onPress={() => handleAuth('google')} style={styles.signUpButton} activeOpacity={0.7}>
             <Ionicons name="logo-google" size={20} color={COLORS.background} style={{ marginRight: SPACING.sm }} />
             <Text style={styles.signUpText}>CONTINUE WITH GOOGLE</Text>
           </TouchableOpacity>
 
-          {isPrivyAvailable && usePhantomConnector && usePrivyClient && createSiwsMessage && (
+          <TouchableOpacity onPress={() => setShowComingSoon(true)} style={[styles.signUpButton, styles.instagramButton]} activeOpacity={0.7}>
+            <Ionicons name="logo-instagram" size={20} color={COLORS.background} style={{ marginRight: SPACING.sm }} />
+            <Text style={styles.signUpText}>CONTINUE WITH INSTAGRAM</Text>
+          </TouchableOpacity>
+
+          {isPrivyAvailable && (getMwaTransact() || usePhantomConnector) && (
             <>
               <View style={styles.dividerRow}>
                 <View style={styles.dividerLine} />
                 <Text style={styles.dividerText}>or</Text>
                 <View style={styles.dividerLine} />
               </View>
-              <PhantomWalletLogin onSuccess={handleWalletSuccess} />
+              {/* MWA: single-session connect+sign (preferred on Android, works on iOS) */}
+              {getMwaTransact() ? (
+                <MWAWalletLogin onSuccess={handleWalletSuccess} />
+              ) : (
+                /* Fallback: Phantom deeplink (two round-trips) */
+                <PhantomWalletLogin onSuccess={handleWalletSuccess} />
+              )}
             </>
           )}
 
-          <TouchableOpacity onPress={handleAuth} style={styles.loginLink} activeOpacity={0.7}>
+          <TouchableOpacity onPress={() => handleAuth('google')} style={styles.loginLink} activeOpacity={0.7}>
             <Text style={styles.loginText}>ALREADY HAVE AN ACCOUNT? LOGIN</Text>
           </TouchableOpacity>
         </View>
       </View>
+      <ComingSoonModal
+        visible={showComingSoon}
+        onClose={() => setShowComingSoon(false)}
+        title="Coming Soon!"
+        message="Instagram login will be available in the next release. Stay tuned!"
+      />
     </SafeAreaView>
   );
 }
@@ -365,6 +423,11 @@ const styles = StyleSheet.create({
     elevation: 8, borderBottomWidth: 3, borderBottomColor: 'rgba(0,0,0,0.15)',
   },
   signUpText: { ...TYPOGRAPHY.body, color: COLORS.background, fontWeight: '800', letterSpacing: 2, fontSize: 16 },
+  instagramButton: {
+    marginTop: SPACING.sm,
+    backgroundColor: '#E1306C',
+    shadowColor: '#E1306C',
+  },
   dividerRow: { flexDirection: 'row', alignItems: 'center', width: '100%', marginVertical: SPACING.lg },
   dividerLine: { flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: COLORS.border },
   dividerText: { ...TYPOGRAPHY.body, color: COLORS.textTertiary, marginHorizontal: SPACING.md, fontSize: 13 },
