@@ -8,7 +8,6 @@ import {
   Linking,
   ActivityIndicator,
   RefreshControl,
-  Animated,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,7 +23,7 @@ import {
   FavoritesSkeleton,
   FundWalletModal,
 } from '@/components/features';
-import { useUserProfile, useSavedPosts, useProfileComplete, useSwipeNavigation, useWalletBalance } from '@/hooks';
+import { useUserProfile, useSavedPosts, useProfileComplete, useWalletBalance } from '@/hooks';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotifications } from '@/providers/NotificationProvider';
 import { apiService } from '@/services/api';
@@ -56,7 +55,6 @@ function splitMasonryColumns(posts: any[]) {
 
 export default function ProfileScreen() {
   const router = useRouter();
-  const { translateX, onTouchStart, onTouchEnd } = useSwipeNavigation({ currentScreen: '/(tabs)/profile' });
   const { unreadCount } = useNotifications();
   const { width: SCREEN_WIDTH } = useWindowDimensions();
   const ITEM_WIDTH = useMemo(() => (SCREEN_WIDTH - SPACING.md * 2 - COLUMN_GAP) / 2, [SCREEN_WIDTH]);
@@ -399,8 +397,7 @@ export default function ProfileScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <Animated.View style={[{ flex: 1 }, { transform: [{ translateX }] }]}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header bar */}
       <View style={styles.header}>
         <Text style={styles.headerUsername}>
@@ -583,7 +580,6 @@ export default function ProfileScreen() {
         visible={showFundModal}
         onClose={() => setShowFundModal(false)}
       />
-      </Animated.View>
     </SafeAreaView>
   );
 }

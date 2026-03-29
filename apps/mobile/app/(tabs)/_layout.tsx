@@ -9,12 +9,22 @@ import { COLORS } from '@/styles/theme';
  * Animated tab bar button with subtle scale feedback on press.
  * Uses React Native's built-in Animated API (no reanimated/worklets dependency).
  */
+let tabPressCount = 0;
+
 function AnimatedTabButton(props: PressableProps & { style?: StyleProp<ViewStyle> }) {
   const { onPressIn, onPressOut, style, children, ...rest } = props;
   const scale = useRef(new Animated.Value(1)).current;
+  const lastTapRef = useRef(0);
 
   const handlePressIn = useCallback(
     (event: any) => {
+      if (__DEV__) {
+        const now = Date.now();
+        const gap = lastTapRef.current ? now - lastTapRef.current : 0;
+        lastTapRef.current = now;
+        tabPressCount++;
+        console.log(`[TAP] TabBar/tab#${tabPressCount} (gap: ${gap || 'first'}ms)`);
+      }
       Animated.timing(scale, {
         toValue: 0.85,
         duration: 80,
@@ -39,15 +49,16 @@ function AnimatedTabButton(props: PressableProps & { style?: StyleProp<ViewStyle
   );
 
   return (
-    <Animated.View style={[{ transform: [{ scale }] }, style]}>
-      <Pressable
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        {...rest}
-      >
+    <Pressable
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      style={[style as ViewStyle, { alignItems: 'center', justifyContent: 'center' }]}
+      {...rest}
+    >
+      <Animated.View style={{ transform: [{ scale }] }}>
         {children}
-      </Pressable>
-    </Animated.View>
+      </Animated.View>
+    </Pressable>
   );
 }
 

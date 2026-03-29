@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar } from '@/components/primitives';
 import { useUserProfile, useUpload } from '@/hooks';
+import { markProfileSetupComplete } from '@/services/onboardingStorage';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 
@@ -101,6 +102,7 @@ export default function SetupProfileScreen() {
       } as any,
       {
         onSuccess: () => {
+          markProfileSetupComplete();
           if (from === 'profile') {
             router.back();
           } else {

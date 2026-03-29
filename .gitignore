@@ -14,3 +14,4 @@ coverage/
 *.tsbuildinfo
 excalidraw.log
 .vercel
+*-firebase-adminsdk-*.json

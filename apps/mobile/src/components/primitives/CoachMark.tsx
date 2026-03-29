@@ -18,6 +18,8 @@ interface CoachMarkProps {
   position?: Position;
   /** Optional callback after dismiss */
   onDismiss?: () => void;
+  /** Optional style for the wrapper View */
+  style?: import('react-native').ViewStyle;
   /** The element to anchor the hint to */
   children: React.ReactNode;
 }
@@ -29,6 +31,7 @@ export function CoachMark({
   text,
   position = 'bottom',
   onDismiss,
+  style,
   children,
 }: CoachMarkProps) {
   const { visible, dismiss } = useCoachMark(hintId);
@@ -39,7 +42,7 @@ export function CoachMark({
   };
 
   return (
-    <View style={styles.wrapper}>
+    <View style={[styles.wrapper, style]}>
       {children}
       {visible && (
         <AnimatedPressable

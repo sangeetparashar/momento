@@ -1,0 +1,5 @@
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Geometric M mark - white variant for dark backgrounds -->
+  <path d="M4 32V10L13 20L20 12L27 20L36 10V32" stroke="#00FF88" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <circle cx="36" cy="10" r="2.5" fill="#00FF88"/>
+</svg>

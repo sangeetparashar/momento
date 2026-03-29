@@ -1,5 +1,5 @@
-import React, { useCallback } from 'react';
-import { View, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
@@ -14,35 +14,38 @@ export default function LoginScreen() {
   const queryClient = useQueryClient();
   const auth = useAuth();
   const { isPrivyAvailable } = usePrivyGuard();
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
 
-  const handleSignUp = useCallback(async () => {
+  const handleAuth = useCallback(async () => {
     try {
       if (!isPrivyAvailable) {
         Alert.alert('Dev Build Required', 'Privy auth requires a development build.');
         return;
       }
+      setIsAuthenticating(true);
       await auth.login();
       queryClient.invalidateQueries();
       // Route back to index — it handles profile check → funding → home
       router.replace('/');
     } catch (error: any) {
+      setIsAuthenticating(false);
       Alert.alert('Login Error', error?.message || String(error));
     }
   }, [auth, router, isPrivyAvailable, queryClient]);
 
-  const handleLogin = useCallback(async () => {
-    try {
-      if (!isPrivyAvailable) {
-        Alert.alert('Dev Build Required', 'Privy auth requires a development build.');
-        return;
-      }
-      await auth.login();
-      queryClient.invalidateQueries();
-      router.replace('/');
-    } catch (error: any) {
-      Alert.alert('Login Error', error?.message || String(error));
-    }
-  }, [auth, router, isPrivyAvailable, queryClient]);
+  // Show loading screen if auth is in progress OR user is already authenticated
+  // (handles re-mount after OAuth callback where local state resets but auth.user is set)
+  if (isAuthenticating || auth.user) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <MomentoLogo size={64} showText />
+          <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: SPACING.xl }} />
+          <Text style={styles.loadingText}>Setting up your experience...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -61,11 +64,11 @@ export default function LoginScreen() {
 
         {/* Actions */}
         <View style={styles.actions}>
-          <TouchableOpacity onPress={handleSignUp} style={styles.signUpButton} activeOpacity={0.7}>
+          <TouchableOpacity onPress={handleAuth} style={styles.signUpButton} activeOpacity={0.7}>
             <Text style={styles.signUpText}>SIGN UP</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={handleLogin} style={styles.loginLink} activeOpacity={0.7}>
+          <TouchableOpacity onPress={handleAuth} style={styles.loginLink} activeOpacity={0.7}>
             <Text style={styles.loginText}>OR LOGIN</Text>
           </TouchableOpacity>
         </View>
@@ -127,5 +130,15 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     letterSpacing: 2,
     fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.md,
   },
 });

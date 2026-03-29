@@ -22,12 +22,14 @@ export function setOnboardingUser(userId: string | null): void {
 export interface OnboardingState {
   dismissedHints: string[];
   hasSeenFundingScreen: boolean;
+  hasCompletedProfileSetup: boolean;
   completedAt?: string;
 }
 
 const DEFAULT_STATE: OnboardingState = {
   dismissedHints: [],
   hasSeenFundingScreen: false,
+  hasCompletedProfileSetup: false,
 };
 
 export async function getOnboardingState(): Promise<OnboardingState> {
@@ -55,6 +57,12 @@ export async function dismissHint(hintId: string): Promise<void> {
 export async function isHintDismissed(hintId: string): Promise<boolean> {
   const state = await getOnboardingState();
   return state.dismissedHints.includes(hintId);
+}
+
+export async function markProfileSetupComplete(): Promise<void> {
+  const state = await getOnboardingState();
+  state.hasCompletedProfileSetup = true;
+  await saveState(state);
 }
 
 export async function markFundingScreenSeen(): Promise<void> {

@@ -330,6 +330,7 @@ export default function CreatorScreen() {
                 hintId="creator_token"
                 text="Buy this creator's token to support them"
                 position="top"
+                style={{ flex: 1 }}
               >
                 <Pressable onPress={handleBuy} style={styles.buyButton}>
                   <Text style={styles.buyButtonText}>BUY</Text>

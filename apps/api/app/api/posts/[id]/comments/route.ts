@@ -3,7 +3,7 @@ import prisma from '@/lib/prisma';
 import { requireAuth, getAuthUser } from '@/lib/auth';
 import { getOrSetCache, invalidateCache, cacheKeys, cacheTTL } from '@/lib/redis';
 import { notifyNewComment } from '@/lib/notifications';
-import { readLimiter, commentLimiter, applyRateLimit } from '@/lib/ratelimit';
+import { readLimiter, writeLimiter, applyRateLimit } from '@/lib/ratelimit';
 import { createCommentSchema, validateBody } from '@/lib/validation';
 
 const PAGE_SIZE = 20;
@@ -89,7 +89,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const rateLimitResponse = await applyRateLimit(request, commentLimiter);
+    const rateLimitResponse = await applyRateLimit(request, writeLimiter);
     if (rateLimitResponse) return rateLimitResponse;
 
     const user = await requireAuth(request);

@@ -2,128 +2,103 @@ import { Ratelimit } from '@upstash/ratelimit';
 import { Redis } from '@upstash/redis';
 import { NextRequest, NextResponse } from 'next/server';
 
-// ─── Redis instance for rate limiting ────────────────────────────────────────
-
+// Lazy Redis singleton (env vars available at request time, not module load)
 let _redis: Redis | null = null;
-function getRateLimitRedis(): Redis | null {
-  if (_redis) return _redis;
-
-  const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
-  if (!url || !token) return null;
-
-  _redis = new Redis({ url, token });
+function getRedis(): Redis {
+  if (!_redis) {
+    const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+    if (!url || !token) {
+      throw new Error('Missing UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN');
+    }
+    _redis = new Redis({ url, token });
+  }
   return _redis;
 }
 
-// ─── Lazy Rate Limiter Factory ──────────────────────────────────────────────
+// Lazy limiter cache — created on first use
+const _limiters = new Map<string, Ratelimit>();
 
-const _limiters = new Map<string, Ratelimit | null>();
-
-function getLimiter(name: string, tokens: number, window: Parameters<typeof Ratelimit.slidingWindow>[1]): Ratelimit | null {
-  if (_limiters.has(name)) return _limiters.get(name)!;
-
-  const redis = getRateLimitRedis();
-  if (!redis) {
-    _limiters.set(name, null);
-    return null;
+function getLimiter(
+  name: string,
+  tokens: number,
+  window: Parameters<typeof Ratelimit.slidingWindow>[1],
+): Ratelimit {
+  if (!_limiters.has(name)) {
+    _limiters.set(
+      name,
+      new Ratelimit({
+        redis: getRedis(),
+        limiter: Ratelimit.slidingWindow(tokens, window),
+        prefix: `rl:${name}`,
+      }),
+    );
   }
-
-  const limiter = new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(tokens, window),
-    analytics: true,
-    prefix: 'momento:ratelimit',
-  });
-  _limiters.set(name, limiter);
-  return limiter;
+  return _limiters.get(name)!;
 }
 
-// ─── Rate Limiters (lazy — created on first use, not at import time) ────────
+/** KYC apply: 1 request per hour per user */
+export function kycLimiter() { return getLimiter('kyc', 1, '1 h'); }
 
-export const authLimiter = { get: () => getLimiter('auth', 5, '1 m') };
-export const readLimiter = { get: () => getLimiter('read', 60, '1 m') };
-export const writeLimiter = { get: () => getLimiter('write', 30, '1 m') };
-export const postCreateHourlyLimiter = { get: () => getLimiter('postCreate:hourly', 50, '1 h') };
-export const postCreateDailyLimiter = { get: () => getLimiter('postCreate:daily', 100, '1 d') };
-export const commentLimiter = { get: () => getLimiter('comment', 20, '1 m') };
-export const kycLimiter = { get: () => getLimiter('kyc', 1, '1 h') };
-export const uploadLimiter = { get: () => getLimiter('upload', 100, '1 h') };
+/** Swap: 5 requests per minute per user */
+export function swapLimiter() { return getLimiter('swap', 5, '1 m'); }
 
-// ─── Identifier Extraction ──────────────────────────────────────────────────
+/** Write operations (POST/PATCH/DELETE): 30 req/min per user */
+export function writeLimiter() { return getLimiter('write', 30, '1 m'); }
 
-function getIdentifier(request: NextRequest): string {
-  // Use first 32 chars of Authorization token if present
-  const authHeader = request.headers.get('authorization');
-  if (authHeader) {
-    const token = authHeader.replace(/^Bearer\s+/i, '');
-    if (token.length > 0) {
-      try {
-        const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString());
-        const userId = payload.sub || payload.userId || payload.sid;
-        if (userId) return `auth:${userId}`;
-      } catch {
-        // Fall through to token prefix if JWT decode fails
-      }
-      return `auth:${token.substring(0, 32)}`;
-    }
-  }
-
-  // Fall back to IP address
-  const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) {
-    return `ip:${forwarded.split(',')[0].trim()}`;
-  }
-
-  const realIp = request.headers.get('x-real-ip');
-  if (realIp) {
-    return `ip:${realIp}`;
-  }
-
-  return 'ip:unknown';
-}
-
-// ─── Apply Rate Limit Helper ─────────────────────────────────────────────────
+/** Read operations (GET): 60 req/min per user */
+export function readLimiter() { return getLimiter('read', 60, '1 m'); }
 
 /**
- * Checks rate limit for the request. Returns a 429 Response if exceeded,
- * or null if the request is allowed. If Redis is unavailable (limiter is null),
- * all requests are allowed (graceful degradation).
+ * Check rate limit. Returns 429 response if limited, null if allowed.
  */
-export async function applyRateLimit(
-  request: NextRequest,
-  limiterRef: { get: () => Ratelimit | null } | Ratelimit | null
+export async function checkRateLimit(
+  limiter: Ratelimit,
+  identifier: string,
 ): Promise<NextResponse | null> {
-  // Resolve lazy limiter
-  const limiter = limiterRef && 'get' in limiterRef ? limiterRef.get() : limiterRef;
-  // Graceful degradation: if Redis is not configured, allow all requests
-  if (!limiter) return null;
-
-  const identifier = getIdentifier(request);
-
   try {
     const { success, limit, remaining, reset } = await limiter.limit(identifier);
-
     if (!success) {
-      const retryAfter = Math.ceil((reset - Date.now()) / 1000);
       return NextResponse.json(
         { success: false, error: 'Too many requests. Please try again later.' },
         {
           status: 429,
           headers: {
-            'Retry-After': String(Math.max(retryAfter, 1)),
-            'X-RateLimit-Limit': String(limit),
-            'X-RateLimit-Remaining': '0',
-            'X-RateLimit-Reset': String(reset),
+            'X-RateLimit-Limit': limit.toString(),
+            'X-RateLimit-Remaining': remaining.toString(),
+            'X-RateLimit-Reset': reset.toString(),
+            'Retry-After': Math.ceil((reset - Date.now()) / 1000).toString(),
           },
-        }
+        },
       );
     }
-
     return null;
-  } catch (error) {
-    // If rate limiting fails (Redis down, network issue), allow the request
-    console.error('Rate limit check failed:', error);
+  } catch {
+    // Fail open if Redis is down
     return null;
   }
+}
+
+/**
+ * Extract rate limit identifier from request. Uses userId or falls back to IP.
+ */
+export function getRateLimitId(request: NextRequest, userId?: string): string {
+  if (userId) return `user:${userId}`;
+  const forwarded = request.headers.get('x-forwarded-for');
+  const ip = forwarded?.split(',')[0]?.trim() || 'unknown';
+  return `ip:${ip}`;
+}
+
+/**
+ * Convenience: check rate limit using IP from request.
+ * Compatible with the old `applyRateLimit(request, limiter)` API.
+ */
+export async function applyRateLimit(
+  request: NextRequest,
+  limiterOrFn: Ratelimit | (() => Ratelimit),
+  userId?: string,
+): Promise<NextResponse | null> {
+  const limiter = typeof limiterOrFn === 'function' ? limiterOrFn() : limiterOrFn;
+  const id = getRateLimitId(request, userId);
+  return checkRateLimit(limiter, id);
 }

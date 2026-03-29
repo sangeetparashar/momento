@@ -36,6 +36,11 @@ interface SwapModalProps {
 const SOL_DECIMALS = 9;
 const USDC_DECIMALS = 6;
 
+/** Minimum swap amounts */
+const MIN_SWAP: Record<string, number> = { SOL: 0.01, USDC: 1 };
+/** Minimum SOL required in wallet for transaction fees */
+const MIN_SOL_FOR_FEES = 0.005;
+
 interface TokenInfo {
   symbol: string;
   mint: string;
@@ -201,7 +206,17 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
   const isBusy = status === 'signing' || status === 'sending' || status === 'confirming';
   const inputNum = parseFloat(inputAmount) || 0;
   const insufficientBalance = availableBalance != null && inputNum > availableBalance;
-  const canSwap = quote && !isBusy && !isQuoting && inputNum > 0 && !insufficientBalance;
+  const isBalanceLoading = balanceQuery.isLoading || !balanceQuery.data;
+
+  // Minimum swap validation
+  const minSwap = MIN_SWAP[inputToken.symbol] ?? 0;
+  const belowMinimum = inputNum > 0 && inputNum < minSwap;
+
+  // Check if user has enough SOL for transaction fees
+  const solBalance = balanceQuery.data?.solBalance ?? 0;
+  const insufficientFees = balanceQuery.data != null && solBalance < MIN_SOL_FOR_FEES;
+
+  const canSwap = quote && !isBusy && !isQuoting && inputNum > 0 && !insufficientBalance && !belowMinimum && !insufficientFees;
 
   // ─── Success screen ───
   if (swapResult?.type === 'success') {
@@ -282,6 +297,43 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
           contentContainerStyle={styles.contentInner}
           keyboardShouldPersistTaps="handled"
         >
+          {/* Skeleton loading state until balance data is ready */}
+          {isBalanceLoading ? (
+            <View style={styles.skeletonContainer}>
+              <View style={styles.skeletonCard}>
+                <View style={styles.skeletonLabelRow}>
+                  <View style={[styles.skeletonBlock, { width: 60, height: 12 }]} />
+                  <View style={[styles.skeletonBlock, { width: 100, height: 12 }]} />
+                </View>
+                <View style={styles.skeletonTokenRow}>
+                  <View style={[styles.skeletonBlock, { width: 80, height: 36, borderRadius: 18 }]} />
+                  <View style={[styles.skeletonBlock, { width: 100, height: 28 }]} />
+                </View>
+              </View>
+              <View style={styles.flipContainer}>
+                <View style={[styles.flipButton, { opacity: 0.3 }]}>
+                  <Ionicons name="swap-vertical" size={20} color={COLORS.primary} />
+                </View>
+              </View>
+              <View style={styles.skeletonCard}>
+                <View style={styles.skeletonLabelRow}>
+                  <View style={[styles.skeletonBlock, { width: 80, height: 12 }]} />
+                </View>
+                <View style={styles.skeletonTokenRow}>
+                  <View style={[styles.skeletonBlock, { width: 80, height: 36, borderRadius: 18 }]} />
+                  <View style={[styles.skeletonBlock, { width: 80, height: 28 }]} />
+                </View>
+              </View>
+              <View style={[styles.skeletonBlock, { width: '100%', height: 52, borderRadius: RADII.md, marginTop: SPACING.lg }]} />
+              <View style={styles.infoRow}>
+                <Ionicons name="shield-checkmark" size={14} color={COLORS.textTertiary} />
+                <Text style={styles.infoText}>
+                  Loading your wallet balances...
+                </Text>
+              </View>
+            </View>
+          ) : (
+          <>
           {/* Input Token */}
           <View style={styles.tokenCard}>
             <View style={styles.tokenLabelRow}>
@@ -414,6 +466,10 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
                   ? 'Connect Wallet'
                   : !inputAmount || inputNum <= 0
                   ? 'Enter Amount'
+                  : belowMinimum
+                  ? `Min ${minSwap} ${inputToken.symbol}`
+                  : insufficientFees
+                  ? `Need ${MIN_SOL_FOR_FEES} SOL for fees`
                   : insufficientBalance
                   ? `Insufficient ${inputToken.symbol}`
                   : isQuoting
@@ -430,6 +486,8 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
               Transactions are signed locally with your embedded wallet. Momento never has access to your private keys.
             </Text>
           </View>
+          </>
+          )}
         </ScrollView>
       </View>
     </Modal>
@@ -682,6 +740,33 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 11,
     lineHeight: 16,
+  },
+
+  // ─── Skeleton loading ───
+  skeletonContainer: {
+    gap: SPACING.sm,
+  },
+  skeletonCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADII.lg,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  skeletonLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.sm,
+  },
+  skeletonTokenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  skeletonBlock: {
+    backgroundColor: COLORS.backgroundTertiary,
+    borderRadius: RADII.sm,
+    opacity: 0.6,
   },
 
   // ─── Success screen ───

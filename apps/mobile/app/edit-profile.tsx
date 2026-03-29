@@ -6,6 +6,7 @@ import {
   Pressable,
   TextInput,
   Alert,
+  Modal,
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
@@ -155,9 +156,17 @@ export default function EditProfileScreen() {
     []
   );
 
+  const [showPendingModal, setShowPendingModal] = useState(false);
+
   const handleStartKyc = useCallback(() => {
+    const status = user?.kycStatus || KycStatus.NONE;
+    // Already pending or verified — don't re-apply, show info modal
+    if (status === KycStatus.PENDING || status === KycStatus.VERIFIED) {
+      setShowPendingModal(true);
+      return;
+    }
     kycMutation.mutate({});
-  }, [kycMutation]);
+  }, [kycMutation, user?.kycStatus]);
 
   const getKycStatusDisplay = () => {
     const status = user?.kycStatus || KycStatus.NONE;
@@ -313,7 +322,7 @@ export default function EditProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Verification</Text>
           {kycDisplay ? (
-            <View style={styles.kycStatusRow}>
+            <Pressable onPress={() => setShowPendingModal(true)} style={styles.kycStatusRow}>
               <Ionicons
                 name={kycDisplay.icon}
                 size={24}
@@ -322,7 +331,8 @@ export default function EditProfileScreen() {
               <Text style={[styles.kycStatusText, { color: kycDisplay.color }]}>
                 {kycDisplay.text}
               </Text>
-            </View>
+              <Ionicons name="chevron-forward" size={16} color={COLORS.textTertiary} style={{ marginLeft: 'auto' }} />
+            </Pressable>
           ) : (
             <Pressable onPress={handleStartKyc} style={styles.verifyButton}>
               <Ionicons
@@ -338,6 +348,40 @@ export default function EditProfileScreen() {
         <View style={styles.bottomSpacer} />
       </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Verification Status Modal */}
+      <Modal
+        visible={showPendingModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPendingModal(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowPendingModal(false)}>
+          <View style={styles.modalContent}>
+            <Ionicons
+              name={user?.kycStatus === KycStatus.VERIFIED ? 'checkmark-circle' : 'time'}
+              size={48}
+              color={user?.kycStatus === KycStatus.VERIFIED ? COLORS.success : '#FFA500'}
+            />
+            <Text style={styles.modalTitle}>
+              {user?.kycStatus === KycStatus.VERIFIED
+                ? 'You\'re Verified!'
+                : 'Verification In Progress'}
+            </Text>
+            <Text style={styles.modalMessage}>
+              {user?.kycStatus === KycStatus.VERIFIED
+                ? 'Your account has been verified. You have full creator access.'
+                : 'Our admins will review your profile and verify your account to become a creator. This usually takes 24-48 hours.'}
+            </Text>
+            <Pressable
+              onPress={() => setShowPendingModal(false)}
+              style={styles.modalButton}
+            >
+              <Text style={styles.modalButtonText}>GOT IT</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -494,5 +538,48 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: SPACING.xl,
+  },
+  // Verification modal
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.xl,
+  },
+  modalContent: {
+    backgroundColor: COLORS.surface,
+    borderRadius: RADII.xl,
+    padding: SPACING.xl,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 340,
+  },
+  modalTitle: {
+    ...TYPOGRAPHY.h3,
+    color: COLORS.textPrimary,
+    fontWeight: '800',
+    marginTop: SPACING.md,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    marginTop: SPACING.sm,
+    lineHeight: 22,
+  },
+  modalButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.sm + 2,
+    paddingHorizontal: SPACING.xl * 2,
+    borderRadius: RADII.full,
+    marginTop: SPACING.lg,
+  },
+  modalButtonText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.background,
+    fontWeight: '800',
+    letterSpacing: 1,
   },
 });

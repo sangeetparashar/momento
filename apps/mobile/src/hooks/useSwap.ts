@@ -1,6 +1,19 @@
 import { useState, useCallback, useRef } from 'react';
+import { VersionedTransaction, Connection } from '@solana/web3.js';
 import { apiService } from '@/services/api';
 import { useAuth } from './useAuth';
+
+const SOLANA_RPC_URL = process.env.EXPO_PUBLIC_HELIUS_RPC_URL || 'https://api.mainnet-beta.solana.com';
+
+/** Decode base64 to Uint8Array without needing Node's Buffer polyfill */
+function base64ToUint8Array(base64: string): Uint8Array {
+  const binaryString = atob(base64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
 
 /** Well-known Solana token mints (mirrored from API) */
 export const TOKEN_MINTS = {
@@ -84,7 +97,7 @@ export function useSwap(): UseSwapReturn {
         const message = err?.message || 'Failed to fetch quote';
         setError(message);
         setStatus('error');
-        console.error('[useSwap] Quote error:', message);
+        console.warn('[useSwap] Quote error:', message);
         return null;
       }
     },
@@ -123,12 +136,19 @@ export function useSwap(): UseSwapReturn {
 
       setStatus('sending');
 
-      // Decode the base64 transaction and sign+send via Privy
-      // The provider handles VersionedTransaction serialization
+      // Decode the base64 transaction into a VersionedTransaction object
+      const txBytes = base64ToUint8Array(swapTransaction);
+      const transaction = VersionedTransaction.deserialize(txBytes);
+
+      // Privy's embedded wallet provider requires a Connection object
+      // to send the signed transaction via connection.sendRawTransaction()
+      const connection = new Connection(SOLANA_RPC_URL, 'confirmed');
+
       const { signature } = await provider.request({
         method: 'signAndSendTransaction',
         params: {
-          transaction: swapTransaction,
+          transaction,
+          connection,
         },
       });
 
@@ -139,7 +159,7 @@ export function useSwap(): UseSwapReturn {
       const message = err?.message || 'Swap failed';
       setError(message);
       setStatus('error');
-      console.error('[useSwap] Swap error:', message);
+      console.warn('[useSwap] Swap error:', message);
       return null;
     }
   }, [walletAddress, getWalletProvider]);

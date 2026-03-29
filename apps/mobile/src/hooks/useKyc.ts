@@ -12,14 +12,33 @@ interface KycApplicationPayload {
 
 /**
  * Submit a KYC / creator application. Optimistically sets the user's
- * KYC status to PENDING.
+ * KYC status to PENDING. Guards against re-application when already
+ * PENDING or VERIFIED — shows info alert instead.
  */
 export function useKyc() {
   const queryClient = useQueryClient();
 
   return useMutation<KycApplicationResponse, Error, KycApplicationPayload>({
-    mutationFn: (payload) =>
-      apiService.post<KycApplicationResponse>('/creators/apply', payload),
+    mutationFn: (payload) => {
+      // Guard at mutation level — prevent API call if already applied
+      const cached = queryClient.getQueryData<User>(['userProfile']);
+      const status = cached?.kycStatus;
+      if (status === KycStatus.PENDING) {
+        Alert.alert(
+          'Verification In Progress',
+          'Our admins will review your profile and verify your account to become a creator. This usually takes 24-48 hours.'
+        );
+        return Promise.reject({ __skipped: true });
+      }
+      if (status === KycStatus.VERIFIED) {
+        Alert.alert(
+          "You're Verified!",
+          'Your account has been verified. You have full creator access.'
+        );
+        return Promise.reject({ __skipped: true });
+      }
+      return apiService.post<KycApplicationResponse>('/creators/apply', payload);
+    },
 
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: ['userProfile'] });
@@ -37,6 +56,9 @@ export function useKyc() {
     },
 
     onError: (err: any, _vars, context) => {
+      // Don't show error or rollback for intentionally skipped mutations
+      if (err?.__skipped) return;
+
       const ctx = context as { previous?: User } | undefined;
       if (ctx?.previous) {
         queryClient.setQueryData(['userProfile'], ctx.previous);
@@ -50,7 +72,8 @@ export function useKyc() {
       }
     },
 
-    onSettled: () => {
+    onSettled: (_data, err) => {
+      if (err?.__skipped) return;
       queryClient.invalidateQueries({ queryKey: ['userProfile'] });
     },
 

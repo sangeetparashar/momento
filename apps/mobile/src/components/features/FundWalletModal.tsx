@@ -98,43 +98,17 @@ function MethodPicker({ onSelect }: { onSelect: (m: FundingMethod) => void }) {
         Choose how you'd like to add USDC to your Solana wallet
       </Text>
 
-      <Pressable style={styles.methodCard} onPress={() => onSelect('ramp')}>
-        <View style={[styles.methodIcon, { backgroundColor: '#21BF73' }]}>
-          <Ionicons name="flash" size={24} color="#FFFFFF" />
-        </View>
-        <View style={styles.methodInfo}>
-          <View style={styles.methodTitleRow}>
-            <Text style={styles.methodTitle}>Ramp</Text>
-            <View style={styles.recommendedBadge}>
-              <Text style={styles.recommendedText}>RECOMMENDED</Text>
-            </View>
-          </View>
-          <Text style={styles.methodDesc}>
-            Apple Pay, Google Pay, card, or bank transfer. Lowest fees.
-          </Text>
-        </View>
-        <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
-      </Pressable>
-
-      <Pressable style={styles.methodCard} onPress={() => onSelect('moonpay')}>
-        <View style={[styles.methodIcon, { backgroundColor: '#7B61FF' }]}>
-          <Ionicons name="card" size={24} color="#FFFFFF" />
-        </View>
-        <View style={styles.methodInfo}>
-          <Text style={styles.methodTitle}>MoonPay</Text>
-          <Text style={styles.methodDesc}>
-            Apple Pay, Google Pay, PayPal, Venmo, card, or bank transfer
-          </Text>
-        </View>
-        <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
-      </Pressable>
-
       <Pressable style={styles.methodCard} onPress={() => onSelect('transak')}>
         <View style={[styles.methodIcon, { backgroundColor: '#4643E8' }]}>
           <Ionicons name="logo-usd" size={24} color="#FFFFFF" />
         </View>
         <View style={styles.methodInfo}>
-          <Text style={styles.methodTitle}>Transak</Text>
+          <View style={styles.methodTitleRow}>
+            <Text style={styles.methodTitle}>Transak</Text>
+            <View style={styles.recommendedBadge}>
+              <Text style={styles.recommendedText}>RECOMMENDED</Text>
+            </View>
+          </View>
           <Text style={styles.methodDesc}>
             Apple Pay, Google Pay, card, or bank transfer. Lite KYC available.
           </Text>
@@ -150,6 +124,42 @@ function MethodPicker({ onSelect }: { onSelect: (m: FundingMethod) => void }) {
           <Text style={styles.methodTitle}>Transfer from Wallet</Text>
           <Text style={styles.methodDesc}>
             Send SOL or USDC from Phantom, Solflare, or any Solana wallet
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
+      </Pressable>
+
+      <Pressable style={[styles.methodCard, styles.methodCardDisabled]} onPress={() => onSelect('ramp')}>
+        <View style={[styles.methodIcon, { backgroundColor: '#21BF73' }]}>
+          <Ionicons name="flash" size={24} color="#FFFFFF" />
+        </View>
+        <View style={styles.methodInfo}>
+          <View style={styles.methodTitleRow}>
+            <Text style={styles.methodTitle}>Ramp</Text>
+            <View style={styles.comingSoonBadge}>
+              <Text style={styles.comingSoonText}>COMING SOON</Text>
+            </View>
+          </View>
+          <Text style={styles.methodDesc}>
+            Apple Pay, Google Pay, card, or bank transfer. Lowest fees.
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
+      </Pressable>
+
+      <Pressable style={[styles.methodCard, styles.methodCardDisabled]} onPress={() => onSelect('moonpay')}>
+        <View style={[styles.methodIcon, { backgroundColor: '#7B61FF' }]}>
+          <Ionicons name="card" size={24} color="#FFFFFF" />
+        </View>
+        <View style={styles.methodInfo}>
+          <View style={styles.methodTitleRow}>
+            <Text style={styles.methodTitle}>MoonPay</Text>
+            <View style={styles.comingSoonBadge}>
+              <Text style={styles.comingSoonText}>COMING SOON</Text>
+            </View>
+          </View>
+          <Text style={styles.methodDesc}>
+            Apple Pay, Google Pay, PayPal, Venmo, card, or bank transfer
           </Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
@@ -468,6 +478,23 @@ const styles = StyleSheet.create({
   recommendedText: {
     ...TYPOGRAPHY.caption,
     color: COLORS.primary,
+    fontWeight: '800',
+    fontSize: 9,
+    letterSpacing: 0.5,
+  },
+  methodCardDisabled: {
+    opacity: 0.5,
+  },
+  comingSoonBadge: {
+    backgroundColor: COLORS.backgroundTertiary,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 2,
+    borderRadius: RADII.sm,
+    marginBottom: 2,
+  },
+  comingSoonText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textTertiary,
     fontWeight: '800',
     fontSize: 9,
     letterSpacing: 0.5,

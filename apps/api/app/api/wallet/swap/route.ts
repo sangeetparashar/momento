@@ -105,9 +105,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     if (error instanceof Response) return error;
-    console.error('[Swap] Build transaction error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to build swap transaction';
+    console.error('[Swap] Build transaction error:', message);
     return NextResponse.json(
-      { success: false, error: 'Failed to build swap transaction' },
+      { success: false, error: message },
       { status: 500 }
     );
   }

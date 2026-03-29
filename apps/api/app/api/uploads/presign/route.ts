@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuth } from '@/lib/auth';
 import { createPresignedUpload } from '@/lib/storage';
-import { uploadLimiter, applyRateLimit } from '@/lib/ratelimit';
+import { writeLimiter, applyRateLimit } from '@/lib/ratelimit';
 import { uploadPresignSchema, validateBody } from '@/lib/validation';
 
 const ALLOWED_CONTENT_TYPES = [
@@ -18,7 +18,7 @@ const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 
 export async function POST(request: NextRequest) {
   try {
-    const rateLimitResponse = await applyRateLimit(request, uploadLimiter);
+    const rateLimitResponse = await applyRateLimit(request, writeLimiter);
     if (rateLimitResponse) return rateLimitResponse;
 
     const user = await requireAuth(request);

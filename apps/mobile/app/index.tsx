@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { useFeed } from '@/hooks';
 import { apiService } from '@/services/api';
-import { getOnboardingState, setOnboardingUser } from '@/services/onboardingStorage';
+import { getOnboardingState, setOnboardingUser, markProfileSetupComplete } from '@/services/onboardingStorage';
 import { Text, MomentoLogo } from '@/components/primitives';
 import { COLORS, SPACING } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -14,13 +14,7 @@ import type { User } from '@momento/shared';
 function isProfileComplete(user: User): boolean {
   const hasUsername = !!user.username && user.username.length >= 3;
   const hasAvatar = !!user.avatarUrl;
-  const hasSocial =
-    user.socialLinks &&
-    typeof user.socialLinks === 'object' &&
-    Object.values(user.socialLinks as Record<string, string>).some(
-      (v) => typeof v === 'string' && v.trim().length > 0,
-    );
-  return hasUsername && hasAvatar && !!hasSocial;
+  return hasUsername && hasAvatar;
 }
 
 export default function IndexScreen() {
@@ -86,14 +80,18 @@ export default function IndexScreen() {
 
     navigatedForUserRef.current = currentUserId;
 
-    // Incomplete profile → force setup (no skip allowed)
-    if (profileQuery.data && !isProfileComplete(profileQuery.data)) {
-      router.replace('/setup-profile');
-      return;
-    }
-
-    // Profile complete — check if they've seen the funding screen
+    // Check onboarding state + profile completeness together
     getOnboardingState().then((state) => {
+      // Incomplete profile AND hasn't completed setup before → force setup
+      if (
+        profileQuery.data &&
+        !isProfileComplete(profileQuery.data) &&
+        !state.hasCompletedProfileSetup
+      ) {
+        router.replace('/setup-profile');
+        return;
+      }
+
       if (!state.hasSeenFundingScreen) {
         router.replace('/fund-wallet-onboarding');
       } else {

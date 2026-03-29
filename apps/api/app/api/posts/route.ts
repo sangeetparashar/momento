@@ -3,15 +3,13 @@ import prisma from '@/lib/prisma';
 import { requireCreator } from '@/lib/auth';
 import { invalidateCache, cacheKeys } from '@/lib/redis';
 import { notifyNewPost } from '@/lib/notifications';
-import { postCreateHourlyLimiter, postCreateDailyLimiter, applyRateLimit } from '@/lib/ratelimit';
+import { writeLimiter, applyRateLimit } from '@/lib/ratelimit';
 import { createPostSchema, validateBody } from '@/lib/validation';
 
 export async function POST(request: NextRequest) {
   try {
-    const hourlyLimit = await applyRateLimit(request, postCreateHourlyLimiter);
-    if (hourlyLimit) return hourlyLimit;
-    const dailyLimit = await applyRateLimit(request, postCreateDailyLimiter);
-    if (dailyLimit) return dailyLimit;
+    const rateLimitResponse = await applyRateLimit(request, writeLimiter);
+    if (rateLimitResponse) return rateLimitResponse;
     const user = await requireCreator(request);
 
     const body = await request.json();

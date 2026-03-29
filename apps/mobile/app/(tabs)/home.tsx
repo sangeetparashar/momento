@@ -43,7 +43,7 @@ const HEADER_HEIGHT = 44;
 const TICKER_HEIGHT = 72; // approx height for 2 ticker banners
 const TAB_BAR_HEIGHT = 80;
 const CREATOR_HEADER_HEIGHT = 52; // creator avatar + name at TOP of post
-const ACTION_BAR_HEIGHT = 64; // caption + action icons + buy button at bottom
+const ACTION_BAR_HEIGHT = 80; // caption + action icons + buy button at bottom (extra padding to clear nav)
 
 const SORT_ICONS: Record<FeedSortMode, keyof typeof Ionicons.glyphMap> = {
   smart: 'sparkles',
@@ -639,11 +639,12 @@ const styles = StyleSheet.create({
   actionBar: {
     height: ACTION_BAR_HEIGHT,
     paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
+    paddingTop: SPACING.xs,
+    paddingBottom: SPACING.md,
     backgroundColor: COLORS.background,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: COLORS.border,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
   },
   actionBarTop: {
     marginBottom: SPACING.xs,

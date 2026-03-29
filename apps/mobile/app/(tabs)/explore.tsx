@@ -9,14 +9,16 @@ import {
   Animated,
   TextInput,
   ActivityIndicator,
+  PanResponder,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar, CoachMark } from '@/components/primitives';
+import { useCoachMark } from '@/hooks/useCoachMark';
 import { ExploreSkeleton, FundWalletModal } from '@/components/features';
-import { useFeed, useNearbyCreators, useSearch, useSwipeNavigation } from '@/hooks';
+import { useFeed, useNearbyCreators, useSearch } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatDistance, formatNumber } from '@/utils/formatters';
@@ -35,6 +37,8 @@ interface GridItem {
   imageUri?: string;
   label?: string;
   sublabel?: string;
+  /** Full text content for text-only posts */
+  textContent?: string;
   distanceText?: string;
   heightMultiplier: number;
   postId?: string;
@@ -113,6 +117,20 @@ function AnimatedCard({
               </View>
             )}
           </>
+        ) : item.textContent ? (
+          <View style={[styles.gridImage, styles.textPostCard]}>
+            <View style={styles.textPostQuoteMark}>
+              <Text style={styles.textPostQuoteIcon}>"</Text>
+            </View>
+            <Text style={styles.textPostPreview} numberOfLines={6}>
+              {item.textContent}
+            </Text>
+            {item.label && (
+              <Text style={styles.textPostAuthor} numberOfLines={1}>
+                — {item.label}
+              </Text>
+            )}
+          </View>
         ) : (
           <View style={[styles.gridImage, styles.gridPlaceholder]}>
             <Text style={styles.placeholderText}>
@@ -217,8 +235,11 @@ function PostSearchRow({
           recyclingKey={post.mediaUrl}
         />
       ) : (
-        <View style={[styles.searchThumb, styles.searchThumbPlaceholder]}>
-          <Ionicons name="document-text-outline" size={18} color={COLORS.textTertiary} />
+        <View style={[styles.searchThumb, styles.searchThumbText]}>
+          <Text style={styles.searchThumbQuote}>"</Text>
+          <Text style={styles.searchThumbSnippet} numberOfLines={2}>
+            {post.content || post.caption || ''}
+          </Text>
         </View>
       )}
       <View style={styles.searchRowInfo}>
@@ -235,7 +256,6 @@ function PostSearchRow({
 }
 
 export default function ExploreScreen() {
-  const { translateX, onTouchStart, onTouchEnd } = useSwipeNavigation({ currentScreen: '/(tabs)/explore' });
   const { width: SCREEN_WIDTH } = useWindowDimensions();
   const ITEM_WIDTH = useMemo(() => (SCREEN_WIDTH - SPACING.md * 2 - COLUMN_GAP) / 2, [SCREEN_WIDTH]);
   const router = useRouter();
@@ -247,22 +267,34 @@ export default function ExploreScreen() {
   const creatorsQuery = useNearbyCreators();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showFundModal, setShowFundModal] = useState(false);
+  const { visible: showSwipeHint, dismiss: dismissSwipeHint } = useCoachMark('explore_swipe_tabs');
 
-  // Sub-tab swipe between CREATORS ↔ POSTS
-  const subTabTouch = useRef<{ x: number; y: number; time: number } | null>(null);
-  const handleContentTouchStart = useCallback((e: any) => {
-    subTabTouch.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, time: Date.now() };
-  }, []);
-  const handleContentTouchEnd = useCallback((e: any) => {
-    if (!subTabTouch.current) return;
-    const dx = e.nativeEvent.pageX - subTabTouch.current.x;
-    const dy = e.nativeEvent.pageY - subTabTouch.current.y;
-    const dt = Date.now() - subTabTouch.current.time;
-    subTabTouch.current = null;
-    if (dt > 350 || Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
-    if (dx < 0 && activeTab === 'CREATORS') setActiveTab('POSTS');
-    else if (dx > 0 && activeTab === 'POSTS') setActiveTab('CREATORS');
-  }, [activeTab]);
+  // Sub-tab swipe between CREATORS ↔ POSTS using PanResponder
+  // PanResponder captures horizontal swipes even over FlatList
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+
+  const panResponder = useMemo(() => PanResponder.create({
+    // Only claim the gesture when it's clearly horizontal (not vertical scroll)
+    onMoveShouldSetPanResponder: (_evt, gestureState) => {
+      const { dx, dy } = gestureState;
+      // Must move at least 10px and be more horizontal than vertical
+      return Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.5;
+    },
+    onMoveShouldSetPanResponderCapture: () => false, // don't steal from children initially
+    onPanResponderRelease: (_evt, gestureState) => {
+      const { dx, dy, vx } = gestureState;
+      // Require: >60px horizontal, more horizontal than vertical, and decent velocity
+      if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
+      if (dx < 0 && activeTabRef.current === 'CREATORS') {
+        setActiveTab('POSTS');
+        if (showSwipeHint) dismissSwipeHint();
+      } else if (dx > 0 && activeTabRef.current === 'POSTS') {
+        setActiveTab('CREATORS');
+        if (showSwipeHint) dismissSwipeHint();
+      }
+    },
+  }), [showSwipeHint, dismissSwipeHint]);
 
   const searchType = activeTab === 'CREATORS' ? 'creators' : 'posts';
   const { results, isSearching, isActive: isSearchActive } = useSearch(searchText, searchText.length >= 2 ? searchType : 'all');
@@ -282,7 +314,14 @@ export default function ExploreScreen() {
 
   const posts = useMemo(() => {
     if (!feedQuery.data?.pages) return [];
-    return feedQuery.data.pages.flatMap((page) => page.posts);
+    const all = feedQuery.data.pages.flatMap((page) => page.posts);
+    // Deduplicate by post ID (can appear across pages)
+    const seen = new Set<string>();
+    return all.filter((p) => {
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
   }, [feedQuery.data]);
 
   // Create varied height patterns for visual interest
@@ -299,6 +338,7 @@ export default function ExploreScreen() {
           imageUri: post.mediaUrl,
           label: post.creator.displayName || post.creator.username,
           sublabel: post.caption,
+          textContent: !post.mediaUrl ? (post.content || post.caption) : undefined,
           distanceText: post.distanceMeters ? formatDistance(post.distanceMeters) : undefined,
           heightMultiplier: heightPattern[index % heightPattern.length],
           postId: post.id,
@@ -307,7 +347,14 @@ export default function ExploreScreen() {
       });
     }
 
-    return creatorsQuery.creators.map(
+    // Deduplicate creators (can appear across pages)
+    const seenCreators = new Set<string>();
+    const uniqueCreators = creatorsQuery.creators.filter((c: PublicCreator) => {
+      if (seenCreators.has(c.id)) return false;
+      seenCreators.add(c.id);
+      return true;
+    });
+    return uniqueCreators.map(
       (creator: PublicCreator, index: number) => ({
         id: creator.id,
         type: 'creator' as const,
@@ -377,8 +424,7 @@ export default function ExploreScreen() {
   const showSearchResults = isSearchActive && searchText.length >= 2;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <Animated.View style={[{ flex: 1 }, { transform: [{ translateX }] }]}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Explore</Text>
@@ -453,8 +499,16 @@ export default function ExploreScreen() {
         </Pressable>
       </View>
 
+      {/* Swipe hint — shown once to teach swipe between tabs */}
+      {showSwipeHint && (
+        <Pressable onPress={dismissSwipeHint} style={styles.swipeHint}>
+          <Ionicons name="swap-horizontal" size={14} color={COLORS.primary} />
+          <Text style={styles.swipeHintText}>Swipe left or right to switch tabs</Text>
+        </Pressable>
+      )}
+
       {/* Content area — swipeable between CREATORS/POSTS */}
-      <View style={{ flex: 1 }} onTouchStart={handleContentTouchStart} onTouchEnd={handleContentTouchEnd}>
+      <View style={{ flex: 1 }} {...panResponder.panHandlers}>
       {showSearchResults ? (
         <FlatList
           data={
@@ -506,7 +560,7 @@ export default function ExploreScreen() {
                 <View style={styles.column}>
                   {leftColumn.map((item, index) => (
                     <AnimatedCard
-                      key={item.id}
+                      key={`L-${item.id}-${index}`}
                       item={item}
                       index={index * 2}
                       itemWidth={ITEM_WIDTH}
@@ -517,7 +571,7 @@ export default function ExploreScreen() {
                 <View style={styles.column}>
                   {rightColumn.map((item, index) => (
                     <AnimatedCard
-                      key={item.id}
+                      key={`R-${item.id}-${index}`}
                       item={item}
                       index={index * 2 + 1}
                       itemWidth={ITEM_WIDTH}
@@ -564,7 +618,6 @@ export default function ExploreScreen() {
         )
       )}
       </View>
-      </Animated.View>
 
       <FundWalletModal visible={showFundModal} onClose={() => setShowFundModal(false)} />
     </SafeAreaView>
@@ -632,6 +685,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: COLORS.backgroundTertiary,
   },
+  searchThumbText: {
+    backgroundColor: COLORS.primaryMuted,
+    padding: 4,
+    overflow: 'hidden',
+  },
+  searchThumbQuote: {
+    fontSize: 14,
+    color: COLORS.primary,
+    fontWeight: '900',
+    lineHeight: 14,
+    opacity: 0.5,
+  },
+  searchThumbSnippet: {
+    fontSize: 8,
+    color: COLORS.textPrimary,
+    lineHeight: 10,
+  },
   searchRowInfo: {
     flex: 1,
   },
@@ -687,6 +757,23 @@ const styles = StyleSheet.create({
   toggleTextActive: {
     color: COLORS.textPrimary,
   },
+  swipeHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+    paddingVertical: SPACING.xs,
+    marginHorizontal: SPACING.xl,
+    marginBottom: SPACING.sm,
+    backgroundColor: COLORS.primary + '15',
+    borderRadius: RADII.full,
+  },
+  swipeHintText: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.primary,
+    fontWeight: '600',
+    fontSize: 12,
+  },
   // Grid
   listContent: {
     paddingHorizontal: SPACING.md,
@@ -724,6 +811,40 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.h1,
     color: COLORS.textTertiary,
     fontSize: 40,
+  },
+  textPostCard: {
+    backgroundColor: COLORS.primaryMuted,
+    padding: SPACING.md,
+    paddingTop: SPACING.lg,
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+    borderWidth: 1,
+    borderColor: COLORS.primary + '30',
+  },
+  textPostQuoteMark: {
+    position: 'absolute',
+    top: 4,
+    left: SPACING.sm,
+    opacity: 0.3,
+  },
+  textPostQuoteIcon: {
+    fontSize: 32,
+    color: COLORS.primary,
+    fontWeight: '900',
+    lineHeight: 32,
+  },
+  textPostPreview: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textPrimary,
+    lineHeight: 20,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  textPostAuthor: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.primary,
+    fontWeight: '600',
+    marginTop: SPACING.xs,
   },
   gridOverlay: {
     position: 'absolute',

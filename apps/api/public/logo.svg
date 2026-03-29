@@ -1,0 +1,6 @@
+<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Geometric M mark with momentum arrow -->
+  <rect width="40" height="40" rx="10" fill="#0D0D0D"/>
+  <path d="M8 30V14L15 22L20 16L25 22L32 14V30" stroke="#00FF88" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <circle cx="32" cy="14" r="2" fill="#00FF88"/>
+</svg>
