@@ -1,6 +1,3 @@
-// Force all pages to be dynamic (API-only app, no static generation needed)
-export const dynamic = 'force-dynamic';
-
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
