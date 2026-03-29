@@ -85,11 +85,15 @@ function PhantomWalletLogin({ onSuccess }: { onSuccess: () => void }) {
       busyRef.current = true;
 
       console.log('[WalletLogin] Address detected:', phantom.address, '— generating SIWS message');
+      console.log('[WalletLogin] privyClient keys:', Object.keys(privyClient || {}));
+      console.log('[WalletLogin] privyClient.auth keys:', Object.keys(privyClient?.auth || {}));
       setStage('signing');
 
       try {
         // Fetch nonce from Privy server and build SIWS message
-        const nonce = await privyClient.siws.fetchNonce({ address: phantom.address });
+        // siws API lives under privyClient.auth.siws (AuthApi → SiwsApi)
+        const siwsApi = privyClient.auth?.siws ?? privyClient.siws;
+        const nonce = await siwsApi.fetchNonce({ address: phantom.address });
 
         // Construct standard SIWS message
         const issuedAt = new Date().toISOString();
@@ -121,7 +125,8 @@ function PhantomWalletLogin({ onSuccess }: { onSuccess: () => void }) {
         setStage('logging-in');
 
         // Login via raw Privy API (server-side nonce validation)
-        await privyClient.siws.login({
+        const siwsLoginApi = privyClient.auth?.siws ?? privyClient.siws;
+        await siwsLoginApi.login({
           message,
           signature,
           walletClientType: 'phantom',
