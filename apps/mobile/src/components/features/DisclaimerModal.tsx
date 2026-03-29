@@ -13,11 +13,20 @@ import { Text } from '@/components/primitives';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 
-const DISCLAIMER_ACCEPTED_KEY = 'momento_disclaimer_accepted';
+const DISCLAIMER_ACCEPTED_KEY_PREFIX = 'momento_disclaimer_accepted';
+
+/** Build a per-user disclaimer key. Falls back to device-level key when no userId. */
+function disclaimerKey(userId?: string | null): string {
+  return userId
+    ? `${DISCLAIMER_ACCEPTED_KEY_PREFIX}_${userId}`
+    : DISCLAIMER_ACCEPTED_KEY_PREFIX;
+}
 
 interface DisclaimerModalProps {
   visible: boolean;
   onAccept: () => void;
+  /** Current authenticated user ID — used to scope disclaimer per-account. */
+  userId?: string | null;
 }
 
 /**
@@ -25,7 +34,7 @@ interface DisclaimerModalProps {
  * Shows beta notice, trading risk warning, and privacy/terms summary.
  * Must be accepted before using the app.
  */
-export function DisclaimerModal({ visible, onAccept }: DisclaimerModalProps) {
+export function DisclaimerModal({ visible, onAccept, userId }: DisclaimerModalProps) {
   const insets = useSafeAreaInsets();
   const [termsChecked, setTermsChecked] = useState(false);
   const [riskChecked, setRiskChecked] = useState(false);
@@ -33,7 +42,7 @@ export function DisclaimerModal({ visible, onAccept }: DisclaimerModalProps) {
   const canAccept = termsChecked && riskChecked;
 
   const handleAccept = async () => {
-    await AsyncStorage.setItem(DISCLAIMER_ACCEPTED_KEY, Date.now().toString()).catch(() => {});
+    await AsyncStorage.setItem(disclaimerKey(userId), Date.now().toString()).catch(() => {});
     onAccept();
   };
 
@@ -171,10 +180,10 @@ function BulletPoint({ text }: { text: string }) {
   );
 }
 
-/** Check if user has already accepted the disclaimer */
-export async function hasAcceptedDisclaimer(): Promise<boolean> {
+/** Check if a specific user has already accepted the disclaimer */
+export async function hasAcceptedDisclaimer(userId?: string | null): Promise<boolean> {
   try {
-    const val = await AsyncStorage.getItem(DISCLAIMER_ACCEPTED_KEY);
+    const val = await AsyncStorage.getItem(disclaimerKey(userId));
     return val != null;
   } catch {
     return false;

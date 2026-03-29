@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { usePrivyGuard } from '@/providers/PrivyGuard';
+import { queryClient } from '@/providers/QueryProvider';
 
 // Re-export for convenience
 export { usePrivyGuard };
@@ -16,6 +17,7 @@ let _privyHooks: {
   usePrivy: any;
   useLoginWithOAuth: any;
   useEmbeddedSolanaWallet: any;
+  useLoginWithSiws: any;
 } | false | null = null;
 
 function getPrivyHooks() {
@@ -26,6 +28,7 @@ function getPrivyHooks() {
         usePrivy: privy.usePrivy,
         useLoginWithOAuth: privy.useLoginWithOAuth,
         useEmbeddedSolanaWallet: privy.useEmbeddedSolanaWallet,
+        useLoginWithSiws: privy.useLoginWithSiws,
       };
     } catch {
       _privyHooks = false;
@@ -34,10 +37,26 @@ function getPrivyHooks() {
   return _privyHooks;
 }
 
+let _phantomHook: any = null;
+function getPhantomHook() {
+  if (_phantomHook === null) {
+    try {
+      const connectors = require('@privy-io/expo/connectors');
+      _phantomHook = connectors.usePhantomDeeplinkWalletConnector;
+    } catch {
+      _phantomHook = false;
+    }
+  }
+  return _phantomHook;
+}
+
 const GUEST_AUTH = {
   isReady: true,
   user: null,
   login: async () => {
+    console.warn('[useAuth] Privy not available in Expo Go — use a development build.');
+  },
+  loginWithWallet: async () => {
     console.warn('[useAuth] Privy not available in Expo Go — use a development build.');
   },
   logout: async () => {},
@@ -67,6 +86,8 @@ export function useAuth() {
   const privy = hooks.usePrivy();
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const { login: oauthLogin } = hooks.useLoginWithOAuth();
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const siws = hooks.useLoginWithSiws();
 
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const solanaWallet = hooks.useEmbeddedSolanaWallet({
@@ -146,13 +167,56 @@ export function useAuth() {
     }
   };
 
+  /**
+   * Login with an external Solana wallet via SIWS (Sign In With Solana).
+   * Takes the wallet address and a signMessage function (from Phantom deeplink connector).
+   */
+  const loginWithWallet = async (
+    externalAddress: string,
+    signMessage: (message: string) => Promise<{ signature: string }>,
+  ) => {
+    console.log('[useAuth] Starting SIWS login for wallet:', externalAddress);
+
+    // 1. Generate the SIWS message
+    const { message } = await siws.generateMessage({
+      wallet: { address: externalAddress },
+      from: {
+        domain: 'momento.app',
+        uri: 'https://momento.app',
+      },
+    });
+
+    // 2. Sign with the external wallet
+    const { signature } = await signMessage(message);
+
+    // 3. Login via Privy SIWS
+    await siws.login({
+      signature,
+      message,
+      wallet: {
+        walletClientType: 'phantom',
+        connectorType: 'deeplink',
+      },
+    });
+
+    console.log('[useAuth] SIWS login complete');
+  };
+
   return {
     isReady: privy.isReady,
     user: privy.user,
     login: async () => {
       await oauthLogin({ provider: 'google' });
     },
-    logout: privy.logout,
+    loginWithWallet,
+    logout: async () => {
+      // Cancel all in-flight queries BEFORE logout to prevent
+      // "query dehydrated as pending ended up rejected" errors.
+      // Queries like walletBalance will get 401 after auth is cleared.
+      queryClient.cancelQueries();
+      queryClient.clear();
+      await privy.logout();
+    },
     getAccessToken: async () => null, // handled by AuthBridge
     walletAddress,
     walletStatus: solanaWallet.status,

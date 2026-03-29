@@ -1,14 +1,15 @@
-import React, { useCallback } from 'react';
-import { StyleSheet } from 'react-native';
-import { Stack } from 'expo-router';
+import React, { useCallback, useEffect } from 'react';
+import { Linking, StyleSheet } from 'react-native';
+import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { QueryProvider } from '@/providers/QueryProvider';
+import { QueryProvider, QueryCacheCleaner } from '@/providers/QueryProvider';
 import { PrivyGuard } from '@/providers/PrivyGuard';
 import { LocationProvider } from '@/providers/LocationProvider';
 import { NotificationProvider } from '@/providers/NotificationProvider';
+import { useAuth } from '@/hooks/useAuth';
 import { ErrorBoundary } from '@/components/primitives';
 import { COLORS } from '@/styles/theme';
 import Toast from 'react-native-toast-message';
@@ -17,17 +18,63 @@ import Toast from 'react-native-toast-message';
 // This prevents the white/black flash while JS bundle loads and providers init.
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
+/** Wires the current auth user into QueryCacheCleaner */
+function AuthAwareQueryCacheCleaner() {
+  const { user } = useAuth();
+  return <QueryCacheCleaner userId={user?.id ?? null} />;
+}
+
+/**
+ * Intercepts Phantom/wallet deeplink callback URLs that would otherwise
+ * cause expo-router's "Unmatched Route" error. When Phantom redirects
+ * back (momento://momento///?wallet_action=onConnect&...), expo-router
+ * can't match it as a file-based route. We detect these and redirect
+ * to the index screen instead.
+ */
+function useWalletDeeplinkInterceptor() {
+  const router = useRouter();
+
+  useEffect(() => {
+    const handleUrl = ({ url }: { url: string }) => {
+      if (url.includes('wallet_action=') || url.includes('phantom_encryption')) {
+        console.log('[DeeplinkInterceptor] Caught wallet callback URL, redirecting to /');
+        // Give the Privy connector a moment to process the encrypted data
+        setTimeout(() => {
+          try { router.replace('/'); } catch { /* nav not ready */ }
+        }, 300);
+      }
+    };
+
+    const sub = Linking.addEventListener('url', handleUrl);
+
+    // Also check the initial URL on mount (cold start from deeplink)
+    Linking.getInitialURL().then((url) => {
+      if (url && (url.includes('wallet_action=') || url.includes('phantom_encryption'))) {
+        console.log('[DeeplinkInterceptor] Initial URL is wallet callback, redirecting');
+        setTimeout(() => {
+          try { router.replace('/'); } catch { /* nav not ready */ }
+        }, 500);
+      }
+    });
+
+    return () => sub.remove();
+  }, [router]);
+}
+
 export default function RootLayout() {
   // Hide splash screen once the root layout has mounted (providers + nav ready)
   const onLayoutReady = useCallback(() => {
     SplashScreen.hideAsync().catch(() => {});
   }, []);
 
+  useWalletDeeplinkInterceptor();
+
   return (
     <GestureHandlerRootView style={styles.root} onLayout={onLayoutReady}>
       <SafeAreaProvider>
         <QueryProvider>
           <PrivyGuard>
+            <AuthAwareQueryCacheCleaner />
             <LocationProvider>
               <NotificationProvider>
                 <StatusBar style="light" />

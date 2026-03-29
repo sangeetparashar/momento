@@ -18,6 +18,7 @@ import {
   SwapModal,
   ComingSoonModal,
   FundWalletModal,
+  SendModal,
 } from '@/components/features';
 import { useWalletBalance } from '@/hooks';
 import { useUserProfile } from '@/hooks/useUserProfile';
@@ -55,6 +56,7 @@ export default function WalletScreen() {
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [showFundModal, setShowFundModal] = useState(false);
+  const [showSendModal, setShowSendModal] = useState(false);
   const [copied, setCopied] = useState(false);
   const [recentTxs, setRecentTxs] = useState<TxRecord[]>([]);
   const logPress = usePressLogger('Wallet');
@@ -67,10 +69,10 @@ export default function WalletScreen() {
       })
       .catch(() => {});
     // When swap/fund modal closes, poll aggressively for 60s to catch the update
-    if (!showSwapModal && !showFundModal) {
+    if (!showSwapModal && !showFundModal && !showSendModal) {
       startFastPolling();
     }
-  }, [showSwapModal, showFundModal]);
+  }, [showSwapModal, showFundModal, showSendModal]);
 
   const handlePullRefresh = useCallback(() => {
     walletQuery.refetch();
@@ -339,12 +341,16 @@ export default function WalletScreen() {
       <View style={styles.swapButtonContainer}>
         <View style={styles.bottomButtons}>
           <Pressable onPress={() => { logPress('FUND_ACCOUNT'); handleBuyCrypto(); }} style={styles.buyButton} hitSlop={8}>
-            <Ionicons name="wallet-outline" size={20} color={COLORS.background} />
-            <Text style={styles.buyButtonText}>FUND ACCOUNT</Text>
+            <Ionicons name="wallet-outline" size={18} color={COLORS.background} />
+            <Text style={styles.buyButtonText}>FUND</Text>
           </Pressable>
           <Pressable onPress={() => { logPress('SWAP'); handleSwapPress(); }} style={styles.swapButton} hitSlop={8}>
-            <Ionicons name="swap-horizontal" size={20} color={COLORS.background} />
+            <Ionicons name="swap-horizontal" size={18} color={COLORS.background} />
             <Text style={styles.swapButtonText}>SWAP</Text>
+          </Pressable>
+          <Pressable onPress={() => { logPress('SEND'); setShowSendModal(true); }} style={styles.sendButton} hitSlop={8}>
+            <Ionicons name="paper-plane" size={18} color={COLORS.primary} />
+            <Text style={styles.sendButtonText}>SEND</Text>
           </Pressable>
         </View>
       </View>
@@ -361,6 +367,10 @@ export default function WalletScreen() {
       <FundWalletModal
         visible={showFundModal}
         onClose={() => setShowFundModal(false)}
+      />
+      <SendModal
+        visible={showSendModal}
+        onClose={() => setShowSendModal(false)}
       />
     </SafeAreaView>
   );
@@ -643,17 +653,49 @@ const styles = StyleSheet.create({
   },
   swapButton: {
     flex: 1,
-    backgroundColor: COLORS.backgroundTertiary,
+    backgroundColor: COLORS.primary,
     paddingVertical: SPACING.md,
     borderRadius: RADII.full,
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'center',
     gap: SPACING.sm,
+    // 3D elevated look
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+    borderBottomWidth: 3,
+    borderBottomColor: 'rgba(0,0,0,0.2)',
   },
   swapButtonText: {
     ...TYPOGRAPHY.body,
-    color: COLORS.textPrimary,
+    color: COLORS.background,
+    fontWeight: '800',
+    letterSpacing: 1,
+    fontSize: 16,
+  },
+  sendButton: {
+    flex: 1,
+    backgroundColor: COLORS.surface,
+    paddingVertical: SPACING.md,
+    borderRadius: RADII.full,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.primary,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  sendButtonText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.primary,
     fontWeight: '800',
     letterSpacing: 1,
     fontSize: 16,

@@ -27,15 +27,21 @@ export default function IndexScreen() {
   const [showDisclaimer, setShowDisclaimer] = useState(false);
   const [disclaimerChecked, setDisclaimerChecked] = useState(false);
 
-  // Check if disclaimer was already accepted
+  // Check if disclaimer was already accepted — re-check when user changes
   useEffect(() => {
-    hasAcceptedDisclaimer().then((accepted) => {
+    if (!isReady) return;
+    const userId = authUser?.id ?? null;
+    setDisclaimerChecked(false);
+    hasAcceptedDisclaimer(userId).then((accepted) => {
       setDisclaimerChecked(true);
-      if (!accepted) {
+      if (!accepted && authUser) {
+        // Only show disclaimer for authenticated users (not guests)
         setShowDisclaimer(true);
+      } else {
+        setShowDisclaimer(false);
       }
     });
-  }, []);
+  }, [isReady, authUser?.id]);
 
   // Prefetch feed immediately — runs in parallel with auth init.
   useFeed();
@@ -120,6 +126,7 @@ export default function IndexScreen() {
       <DisclaimerModal
         visible={showDisclaimer}
         onAccept={() => setShowDisclaimer(false)}
+        userId={authUser?.id}
       />
     </View>
   );

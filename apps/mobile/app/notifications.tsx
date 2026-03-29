@@ -1,43 +1,55 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   StyleSheet,
   FlatList,
   Pressable,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Text } from '@/components/primitives';
+import { apiService } from '@/services/api';
+import { useAuth } from '@/hooks/useAuth';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo } from '@/utils/formatters';
-import {
-  getNotifications,
-  markAsRead,
-  markAllAsRead,
-  type StoredNotification,
-} from '@/services/notificationStorage';
-import { useNotifications } from '@/providers/NotificationProvider';
+
+interface Notification {
+  id: string;
+  userId: string;
+  type: string;
+  title: string;
+  body: string;
+  data: Record<string, any> | null;
+  read: boolean;
+  createdAt: string;
+}
+
+interface NotificationsResponse {
+  notifications: Notification[];
+  unreadCount: number;
+  hasMore: boolean;
+}
 
 const NOTIFICATION_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
-  post: 'image-outline',
-  like: 'heart',
-  comment: 'chatbubble',
-  follow: 'person-add',
-  kyc: 'shield-checkmark',
-  creator: 'person-outline',
+  new_post: 'image-outline',
+  new_like: 'heart',
+  new_comment: 'chatbubble',
+  new_follow: 'person-add',
+  creator_approval: 'shield-checkmark',
   wallet: 'wallet-outline',
 };
 
 const NOTIFICATION_ICON_COLORS: Record<string, string> = {
-  post: COLORS.info,
-  like: COLORS.error,
-  comment: COLORS.primary,
-  follow: COLORS.info,
-  kyc: COLORS.success,
-  creator: COLORS.info,
+  new_post: COLORS.info,
+  new_like: COLORS.error,
+  new_comment: COLORS.primary,
+  new_follow: COLORS.info,
+  creator_approval: COLORS.success,
   wallet: COLORS.warning,
 };
 
@@ -45,8 +57,8 @@ function NotificationRow({
   item,
   onPress,
 }: {
-  item: StoredNotification;
-  onPress: (item: StoredNotification) => void;
+  item: Notification;
+  onPress: (item: Notification) => void;
 }) {
   const iconName = NOTIFICATION_ICONS[item.type] || 'notifications-outline';
   const iconColor = NOTIFICATION_ICON_COLORS[item.type] || COLORS.textSecondary;
@@ -77,37 +89,43 @@ function NotificationRow({
 
 export default function NotificationsScreen() {
   const router = useRouter();
-  const { refreshUnreadCount } = useNotifications();
-  const [notifications, setNotifications] = useState<StoredNotification[]>([]);
-  const [refreshing, setRefreshing] = useState(false);
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
 
-  const loadNotifications = useCallback(async () => {
-    const data = await getNotifications();
-    setNotifications(data);
-  }, []);
+  // Fetch notifications from server
+  const notificationsQuery = useQuery<NotificationsResponse>({
+    queryKey: ['notifications', user?.id],
+    queryFn: () => apiService.get<NotificationsResponse>('/notifications'),
+    enabled: !!user,
+    staleTime: 10_000, // 10 seconds
+    refetchOnMount: 'always',
+  });
 
-  useEffect(() => {
-    loadNotifications();
-  }, [loadNotifications]);
+  const notifications = notificationsQuery.data?.notifications ?? [];
+  const hasUnread = notifications.some((n) => !n.read);
 
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    await loadNotifications();
-    setRefreshing(false);
-  }, [loadNotifications]);
+  // Mark as read mutation
+  const markReadMutation = useMutation({
+    mutationFn: (payload: { ids?: string[]; all?: boolean }) =>
+      apiService.post('/notifications', payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
 
-  const handleMarkAllRead = useCallback(async () => {
-    await markAllAsRead();
-    await loadNotifications();
-    refreshUnreadCount();
-  }, [loadNotifications, refreshUnreadCount]);
+  const handleRefresh = useCallback(() => {
+    notificationsQuery.refetch();
+  }, [notificationsQuery]);
+
+  const handleMarkAllRead = useCallback(() => {
+    markReadMutation.mutate({ all: true });
+  }, [markReadMutation]);
 
   const handlePress = useCallback(
-    async (item: StoredNotification) => {
+    (item: Notification) => {
+      // Mark as read
       if (!item.read) {
-        await markAsRead(item.id);
-        await loadNotifications();
-        refreshUnreadCount();
+        markReadMutation.mutate({ ids: [item.id] });
       }
 
       // Navigate based on notification data
@@ -116,23 +134,21 @@ export default function NotificationsScreen() {
         router.push(`/post/${data.postId}`);
       } else if (data?.creatorId) {
         router.push(`/creator/${data.creatorId}`);
-      } else if (data?.type === 'wallet') {
+      } else if (item.type === 'wallet') {
         router.push('/wallet');
       }
     },
-    [router, loadNotifications, refreshUnreadCount],
+    [router, markReadMutation],
   );
 
   const renderItem = useCallback(
-    ({ item }: { item: StoredNotification }) => (
+    ({ item }: { item: Notification }) => (
       <NotificationRow item={item} onPress={handlePress} />
     ),
     [handlePress],
   );
 
-  const keyExtractor = useCallback((item: StoredNotification) => item.id, []);
-
-  const hasUnread = notifications.some((n) => !n.read);
+  const keyExtractor = useCallback((item: Notification) => item.id, []);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -153,36 +169,42 @@ export default function NotificationsScreen() {
         )}
       </View>
 
-      {/* List */}
-      <FlatList
-        data={notifications}
-        renderItem={renderItem}
-        keyExtractor={keyExtractor}
-        contentContainerStyle={
-          notifications.length === 0 ? styles.emptyContainer : undefined
-        }
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            tintColor={COLORS.primary}
-          />
-        }
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons
-              name="notifications-outline"
-              size={56}
-              color={COLORS.textTertiary}
+      {/* Loading */}
+      {notificationsQuery.isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      ) : (
+        <FlatList
+          data={notifications}
+          renderItem={renderItem}
+          keyExtractor={keyExtractor}
+          contentContainerStyle={
+            notifications.length === 0 ? styles.emptyContainer : undefined
+          }
+          refreshControl={
+            <RefreshControl
+              refreshing={notificationsQuery.isRefetching}
+              onRefresh={handleRefresh}
+              tintColor={COLORS.primary}
             />
-            <Text style={styles.emptyText}>No notifications yet</Text>
-            <Text style={styles.emptySubtext}>
-              When you get likes, comments, or follows they'll show up here
-            </Text>
-          </View>
-        }
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
-      />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Ionicons
+                name="notifications-outline"
+                size={56}
+                color={COLORS.textTertiary}
+              />
+              <Text style={styles.emptyText}>No notifications yet</Text>
+              <Text style={styles.emptySubtext}>
+                When you get likes, comments, or follows they'll show up here
+              </Text>
+            </View>
+          }
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -217,6 +239,11 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.caption,
     color: COLORS.primary,
     fontWeight: '600',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   // Row

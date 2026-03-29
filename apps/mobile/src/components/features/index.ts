@@ -22,3 +22,4 @@ export { ChartSkeleton } from './ChartSkeleton';
 export { FavoritesSkeleton } from './FavoritesSkeleton';
 export { SwipeIndicator } from './SwipeIndicator';
 export { DisclaimerModal, hasAcceptedDisclaimer } from './DisclaimerModal';
+export { SendModal } from './SendModal';

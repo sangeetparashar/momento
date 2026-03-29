@@ -163,6 +163,21 @@ model SavedPost {
   @@map("saved_posts")
 }
 
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String   // new_like, new_comment, new_follow, new_post, creator_approval
+  title     String
+  body      String
+  data      Json?    // { postId, creatorId, etc. }
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, read])
+  @@map("notifications")
+}
+
 model PortfolioSnapshot {
   id             String   @id @default(uuid())
   userId         String

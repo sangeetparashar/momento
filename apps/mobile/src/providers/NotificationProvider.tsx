@@ -10,10 +10,6 @@ import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { apiService } from '@/services/api';
-import {
-  saveNotification,
-  getUnreadCount,
-} from '@/services/notificationStorage';
 
 // expo-notifications is not available in Expo Go (removed in SDK 53+).
 // We dynamically require it and no-op when unavailable.
@@ -57,12 +53,22 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   const router = useRouter();
 
   const refreshUnreadCount = useCallback(() => {
-    getUnreadCount().then(setUnreadCount).catch(() => {});
+    // Fetch unread count from server API
+    apiService
+      .get<{ notifications: any[]; unreadCount: number }>('/notifications?limit=1')
+      .then((data) => {
+        setUnreadCount(data.unreadCount ?? 0);
+      })
+      .catch(() => {
+        // API not reachable — keep current count
+      });
   }, []);
 
-  // Load unread count on mount
+  // Load unread count on mount + poll every 30 seconds
   useEffect(() => {
     refreshUnreadCount();
+    const interval = setInterval(refreshUnreadCount, 30_000);
+    return () => clearInterval(interval);
   }, [refreshUnreadCount]);
 
   // ---------------------------------------------------------------------------
@@ -70,7 +76,10 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   // ---------------------------------------------------------------------------
 
   const registerForPushNotifications = useCallback(async () => {
-    if (!Notifications) return; // Not available in Expo Go
+    if (!Notifications) {
+      console.warn('[Notifications] expo-notifications not available — push will not work');
+      return;
+    }
 
     try {
       // Request permission
@@ -92,13 +101,15 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
         projectId: Constants.expoConfig?.extra?.eas?.projectId,
       });
       const token = tokenData.data;
+      console.log('[Notifications] Got push token:', token);
       setPushToken(token);
 
-      // Register the token with our API (fire and forget)
+      // Register the token with our API
       try {
         await apiService.post('/users/me/push-token', { pushToken: token });
-      } catch {
-        // Silently fail — token registration is non-critical
+        console.log('[Notifications] Push token registered with API');
+      } catch (regErr) {
+        console.warn('[Notifications] Push token registration failed:', regErr);
       }
 
       // Android-specific notification channel
@@ -145,7 +156,10 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
   // ---------------------------------------------------------------------------
 
   useEffect(() => {
-    if (!Notifications) return; // Not available in Expo Go
+    if (!Notifications) {
+      console.warn('[Notifications] expo-notifications not available — skipping listener setup');
+      return;
+    }
 
     // Set notification handler inside useEffect (wrapped in try/catch)
     // to avoid triggering Firebase init at module level
@@ -170,20 +184,8 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       notificationListener.current =
         Notifications.addNotificationReceivedListener((notification) => {
           setLastNotification(notification);
-
-          // Persist to local storage
-          const content = notification?.request?.content;
-          if (content) {
-            const data = (content.data as Record<string, string>) || {};
-            saveNotification({
-              type: data.type || 'general',
-              title: content.title || 'Momento',
-              body: content.body || '',
-              data,
-            })
-              .then(() => refreshUnreadCount())
-              .catch(() => {});
-          }
+          // Refresh count from server — the notification is already stored server-side
+          refreshUnreadCount();
         });
 
       // Listen for notification taps

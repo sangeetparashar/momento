@@ -14,6 +14,7 @@ const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 /**
  * Sends push notifications via Expo's push notification service.
  * Handles batching and filters out invalid tokens.
+ * Push is best-effort — failures are logged but don't block.
  */
 async function sendPushNotifications(messages: ExpoPushMessage[]): Promise<void> {
   if (messages.length === 0) return;
@@ -48,6 +49,63 @@ async function sendPushNotifications(messages: ExpoPushMessage[]): Promise<void>
 }
 
 /**
+ * Saves a notification to the database AND attempts push delivery.
+ * This ensures notifications are always stored server-side even if
+ * push fails (no FCM, no token, Expo Go, etc.).
+ */
+async function createAndPushNotification({
+  userId,
+  type,
+  title,
+  body,
+  data,
+}: {
+  userId: string;
+  type: string;
+  title: string;
+  body: string;
+  data?: Record<string, any>;
+}): Promise<void> {
+  // 1. Always save to DB (guaranteed delivery when user opens notifications)
+  try {
+    await prisma.notification.create({
+      data: {
+        userId,
+        type,
+        title,
+        body,
+        data: data ?? {},
+      },
+    });
+  } catch (err) {
+    console.error('Failed to save notification to DB:', err);
+  }
+
+  // 2. Best-effort push notification
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { pushToken: true },
+    });
+
+    if (user?.pushToken) {
+      await sendPushNotifications([
+        {
+          to: user.pushToken,
+          title,
+          body,
+          data: { type, ...data },
+          sound: 'default',
+        },
+      ]);
+    }
+  } catch (err) {
+    // Push failure is non-critical — notification is already in DB
+    console.warn('Push delivery failed (notification saved to DB):', err);
+  }
+}
+
+/**
  * Notifies all followers of a creator when a new post is published.
  */
 export async function notifyNewPost(
@@ -55,27 +113,27 @@ export async function notifyNewPost(
   creatorName: string,
   postId: string
 ): Promise<void> {
-  // Get all followers who have push tokens
+  // Get all followers
   const followers = await prisma.follow.findMany({
     where: { followingId: creatorId },
-    include: {
-      follower: {
-        select: { pushToken: true },
-      },
+    select: {
+      followerId: true,
+      follower: { select: { pushToken: true } },
     },
   });
 
-  const messages: ExpoPushMessage[] = followers
-    .filter((f) => f.follower.pushToken)
-    .map((f) => ({
-      to: f.follower.pushToken!,
+  // Save notification for each follower + push
+  const promises = followers.map((f) =>
+    createAndPushNotification({
+      userId: f.followerId,
+      type: 'new_post',
       title: 'New Post',
       body: `${creatorName} just shared a new momento!`,
-      data: { type: 'new_post', postId, creatorId },
-      sound: 'default' as const,
-    }));
+      data: { postId, creatorId },
+    })
+  );
 
-  await sendPushNotifications(messages);
+  await Promise.allSettled(promises);
 }
 
 /**
@@ -87,25 +145,16 @@ export async function notifyNewComment(
   postId: string,
   commentPreview: string
 ): Promise<void> {
-  const creator = await prisma.user.findUnique({
-    where: { id: postCreatorId },
-    select: { pushToken: true },
-  });
-
-  if (!creator?.pushToken) return;
-
   const truncatedPreview =
     commentPreview.length > 80 ? commentPreview.slice(0, 77) + '...' : commentPreview;
 
-  await sendPushNotifications([
-    {
-      to: creator.pushToken,
-      title: 'New Comment',
-      body: `${commenterName}: ${truncatedPreview}`,
-      data: { type: 'new_comment', postId },
-      sound: 'default',
-    },
-  ]);
+  await createAndPushNotification({
+    userId: postCreatorId,
+    type: 'new_comment',
+    title: 'New Comment',
+    body: `${commenterName}: ${truncatedPreview}`,
+    data: { postId },
+  });
 }
 
 /**
@@ -115,22 +164,13 @@ export async function notifyNewFollow(
   followedUserId: string,
   followerName: string
 ): Promise<void> {
-  const user = await prisma.user.findUnique({
-    where: { id: followedUserId },
-    select: { pushToken: true },
+  await createAndPushNotification({
+    userId: followedUserId,
+    type: 'new_follow',
+    title: 'New Follower',
+    body: `${followerName} started following you!`,
+    data: {},
   });
-
-  if (!user?.pushToken) return;
-
-  await sendPushNotifications([
-    {
-      to: user.pushToken,
-      title: 'New Follower',
-      body: `${followerName} started following you!`,
-      data: { type: 'new_follow' },
-      sound: 'default',
-    },
-  ]);
 }
 
 /**
@@ -141,22 +181,13 @@ export async function notifyNewLike(
   likerName: string,
   postId: string
 ): Promise<void> {
-  const user = await prisma.user.findUnique({
-    where: { id: postCreatorId },
-    select: { pushToken: true },
+  await createAndPushNotification({
+    userId: postCreatorId,
+    type: 'new_like',
+    title: 'New Like',
+    body: `${likerName} liked your momento!`,
+    data: { postId },
   });
-
-  if (!user?.pushToken) return;
-
-  await sendPushNotifications([
-    {
-      to: user.pushToken,
-      title: 'New Like',
-      body: `${likerName} liked your momento!`,
-      data: { type: 'new_like', postId },
-      sound: 'default',
-    },
-  ]);
 }
 
 /**
@@ -166,22 +197,13 @@ export async function notifyCreatorApproval(
   userId: string,
   approved: boolean
 ): Promise<void> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { pushToken: true },
+  await createAndPushNotification({
+    userId,
+    type: 'creator_approval',
+    title: approved ? 'Creator Application Approved!' : 'Creator Application Update',
+    body: approved
+      ? 'Congratulations! You are now a verified creator on Momento.'
+      : 'Your creator application needs more information. Please re-apply.',
+    data: { approved },
   });
-
-  if (!user?.pushToken) return;
-
-  await sendPushNotifications([
-    {
-      to: user.pushToken,
-      title: approved ? 'Creator Application Approved!' : 'Creator Application Update',
-      body: approved
-        ? 'Congratulations! You are now a verified creator on Momento.'
-        : 'Your creator application needs more information. Please re-apply.',
-      data: { type: 'creator_approval', approved },
-      sound: 'default',
-    },
-  ]);
 }

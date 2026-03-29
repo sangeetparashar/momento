@@ -43,7 +43,7 @@ const HEADER_HEIGHT = 44;
 const TICKER_HEIGHT = 72; // approx height for 2 ticker banners
 const TAB_BAR_HEIGHT = 80;
 const CREATOR_HEADER_HEIGHT = 52; // creator avatar + name at TOP of post
-const ACTION_BAR_HEIGHT = 80; // caption + action icons + buy button at bottom (extra padding to clear nav)
+const ACTION_BAR_HEIGHT = 96; // caption + action icons + buy button at bottom (generous to prevent clip)
 
 const SORT_ICONS: Record<FeedSortMode, keyof typeof Ionicons.glyphMap> = {
   smart: 'sparkles',
@@ -175,7 +175,7 @@ const FeedPage = React.memo(function FeedPage({ post, screenWidth, pageHeight, i
         {/* Top row: caption + distance */}
         <View style={styles.actionBarTop}>
           {post.caption ? (
-            <Text style={styles.actionBarCaption} numberOfLines={2}>{post.caption}</Text>
+            <Text style={styles.actionBarCaption} numberOfLines={1}>{post.caption}</Text>
           ) : null}
           {post.distanceMeters != null && (
             <Text style={styles.actionBarDistance}>
@@ -222,6 +222,7 @@ const FeedPage = React.memo(function FeedPage({ post, screenWidth, pageHeight, i
             </View>
           </View>
           <Pressable onPress={() => setShowBuyModal(true)} style={styles.buyBtn}>
+            <Ionicons name="flash" size={14} color={COLORS.background} />
             <Text style={styles.buyBtnText}>Buy</Text>
           </Pressable>
         </View>
@@ -639,12 +640,13 @@ const styles = StyleSheet.create({
   actionBar: {
     height: ACTION_BAR_HEIGHT,
     paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.xs,
+    paddingTop: SPACING.sm,
     paddingBottom: SPACING.md,
     backgroundColor: COLORS.background,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: COLORS.border,
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
+    overflow: 'hidden',
   },
   actionBarTop: {
     marginBottom: SPACING.xs,
@@ -684,15 +686,27 @@ const styles = StyleSheet.create({
   },
   buyBtn: {
     backgroundColor: COLORS.primary,
-    paddingVertical: 7,
-    paddingHorizontal: SPACING.lg + 4,
+    paddingVertical: 8,
+    paddingHorizontal: SPACING.lg + 6,
     borderRadius: RADII.full,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    // 3D elevated look
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
+    borderBottomWidth: 3,
+    borderBottomColor: 'rgba(0,0,0,0.2)',
   },
   buyBtnText: {
     ...TYPOGRAPHY.caption,
     color: COLORS.background,
-    fontWeight: '700',
+    fontWeight: '800',
     fontSize: 14,
+    letterSpacing: 0.5,
   },
 
   // Page indicator
