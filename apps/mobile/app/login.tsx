@@ -22,13 +22,58 @@ try {
 function PhantomWalletLogin({ onSuccess }: { onSuccess: () => void }) {
   const auth = useAuth();
   const [isConnecting, setIsConnecting] = useState(false);
+  const [pendingSiws, setPendingSiws] = useState(false);
 
   // Use the Phantom deeplink connector
   const phantom = usePhantomConnector?.({
     appUrl: 'https://momento.app',
     redirectUri: 'momento:///',
-    autoReconnect: false,
+    autoReconnect: true, // Allow reconnecting after deeplink return
   });
+
+  // Watch for phantom.address to appear after deeplink callback.
+  // When Phantom redirects back, the component re-mounts but the connector
+  // processes the encrypted callback data and sets `address` asynchronously.
+  // We use AsyncStorage to persist "waiting for phantom" state across re-mounts.
+  React.useEffect(() => {
+    if (!phantom?.address || !pendingSiws) return;
+
+    console.log('[WalletLogin] Phantom address detected after callback:', phantom.address);
+
+    // Address appeared — proceed with SIWS login
+    (async () => {
+      try {
+        setIsConnecting(true);
+        await auth.loginWithWallet(phantom.address, phantom.signMessage);
+        setPendingSiws(false);
+        onSuccess();
+      } catch (error: any) {
+        console.warn('[WalletLogin] SIWS login failed:', error?.message || error);
+        Alert.alert('Wallet Login Failed', error?.message || 'Sign-in with wallet failed.');
+        setPendingSiws(false);
+        setIsConnecting(false);
+      }
+    })();
+  }, [phantom?.address, pendingSiws]);
+
+  // Check AsyncStorage on mount to restore pendingSiws state after app relaunch
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        const pending = await AsyncStorage.getItem('phantom_connect_pending');
+        if (pending === 'true' && !cancelled) {
+          console.log('[WalletLogin] Restoring pending SIWS state from storage');
+          setPendingSiws(true);
+          setIsConnecting(true);
+          // Clear the flag
+          await AsyncStorage.removeItem('phantom_connect_pending');
+        }
+      } catch { /* noop */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleConnect = useCallback(async () => {
     if (!phantom) {
@@ -39,28 +84,44 @@ function PhantomWalletLogin({ onSuccess }: { onSuccess: () => void }) {
     try {
       setIsConnecting(true);
 
-      // Step 1: Connect to Phantom (opens Phantom app)
+      // Persist pending state in case the app re-launches from deeplink
+      try {
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        await AsyncStorage.setItem('phantom_connect_pending', 'true');
+      } catch { /* noop */ }
+
+      // Mark that we're waiting for SIWS after Phantom returns
+      setPendingSiws(true);
+
+      // This opens Phantom via deeplink. The promise may or may not resolve
+      // depending on the app lifecycle (background/foreground). That's fine —
+      // the useEffect above watches for phantom.address instead.
       await phantom.connect();
 
-      if (!phantom.address) {
-        throw new Error('No wallet address returned from Phantom');
-      }
-
-      // Step 2: SIWS login through Privy
-      await auth.loginWithWallet(phantom.address, phantom.signMessage);
-
-      onSuccess();
-    } catch (error: any) {
-      console.warn('[WalletLogin] Failed:', error?.message || error);
-      if (error?.message?.includes('cancelled') || error?.message?.includes('canceled')) {
-        // User cancelled — do nothing
+      // If connect() resolves AND address is already available, the useEffect
+      // will pick it up. If address is not yet available, the useEffect waits.
+      if (phantom.address) {
+        console.log('[WalletLogin] Address available immediately after connect():', phantom.address);
+        // useEffect will handle SIWS login
       } else {
+        console.log('[WalletLogin] Waiting for Phantom callback to set address...');
+      }
+    } catch (error: any) {
+      console.warn('[WalletLogin] Connect failed:', error?.message || error);
+      if (error?.message?.includes('cancelled') || error?.message?.includes('canceled')) {
+        // User cancelled in Phantom — reset state
+      } else if (!error?.message?.includes('No wallet address')) {
         Alert.alert('Wallet Login Failed', error?.message || 'Could not connect wallet. Make sure Phantom is installed.');
       }
-    } finally {
+      setPendingSiws(false);
       setIsConnecting(false);
+      // Clean up storage flag
+      try {
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        await AsyncStorage.removeItem('phantom_connect_pending');
+      } catch { /* noop */ }
     }
-  }, [phantom, auth, onSuccess]);
+  }, [phantom]);
 
   if (!usePhantomConnector) return null;
 
@@ -72,7 +133,12 @@ function PhantomWalletLogin({ onSuccess }: { onSuccess: () => void }) {
       disabled={isConnecting}
     >
       {isConnecting ? (
-        <ActivityIndicator size="small" color={COLORS.primary} />
+        <>
+          <ActivityIndicator size="small" color={COLORS.primary} />
+          <Text style={[styles.walletButtonText, { marginLeft: SPACING.sm }]}>
+            {pendingSiws ? 'CONNECTING...' : 'OPENING PHANTOM...'}
+          </Text>
+        </>
       ) : (
         <>
           <Ionicons name="wallet-outline" size={20} color={COLORS.primary} />

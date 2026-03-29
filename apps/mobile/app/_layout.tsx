@@ -37,11 +37,12 @@ function useWalletDeeplinkInterceptor() {
   useEffect(() => {
     const handleUrl = ({ url }: { url: string }) => {
       if (url.includes('wallet_action=') || url.includes('phantom_encryption')) {
-        console.log('[DeeplinkInterceptor] Caught wallet callback URL, redirecting to /');
-        // Give the Privy connector a moment to process the encrypted data
+        console.log('[DeeplinkInterceptor] Caught wallet callback URL — letting Privy connector process first');
+        // Give the Privy connector plenty of time to process the encrypted data
+        // before we redirect. The +not-found screen also has its own delay.
         setTimeout(() => {
           try { router.replace('/'); } catch { /* nav not ready */ }
-        }, 300);
+        }, 2000);
       }
     };
 
@@ -50,10 +51,10 @@ function useWalletDeeplinkInterceptor() {
     // Also check the initial URL on mount (cold start from deeplink)
     Linking.getInitialURL().then((url) => {
       if (url && (url.includes('wallet_action=') || url.includes('phantom_encryption'))) {
-        console.log('[DeeplinkInterceptor] Initial URL is wallet callback, redirecting');
+        console.log('[DeeplinkInterceptor] Initial URL is wallet callback, letting Privy process');
         setTimeout(() => {
           try { router.replace('/'); } catch { /* nav not ready */ }
-        }, 500);
+        }, 2500);
       }
     });
 
