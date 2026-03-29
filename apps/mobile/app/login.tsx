@@ -1,7 +1,8 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/hooks/useAuth';
 import { usePrivyGuard } from '@/providers/PrivyGuard';
@@ -10,146 +11,226 @@ import { Text, MomentoLogo } from '@/components/primitives';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 
-// Phantom deeplink SIWS is disabled for now.
-// The flow requires two round-trips to Phantom (connect → sign), and the
-// app goes to background/foreground between each step. Privy's SIWS nonce
-// is invalidated when the SDK reinitializes, causing "SIWS message and/or
-// nonce was invalid" errors. This needs either:
-//   1. Privy native Phantom support (single-trip), or
-//   2. A custom server-side challenge flow that persists across app restarts.
-// For now, users authenticate via Google OAuth.
-const PHANTOM_LOGIN_ENABLED = false;
+// ── Phantom deeplink connector ──────────────────────────────────────────────
+// Dynamically load so the app doesn't crash in Expo Go (no native modules).
 let usePhantomConnector: any = null;
+try {
+  const connectors = require('@privy-io/expo/connectors');
+  usePhantomConnector = connectors.usePhantomDeeplinkWalletConnector;
+} catch {
+  // Not available in Expo Go
+}
+
+// Access the raw Privy client for manual SIWS (nonce persists server-side,
+// not in hook state — survives app backgrounding between deeplinks).
+let usePrivyClient: any = null;
+try {
+  const privy = require('@privy-io/expo');
+  usePrivyClient = privy.usePrivyClient;
+} catch {
+  // Not available
+}
+
+// AsyncStorage keys for persisting SIWS state across deeplink round-trips
+const SIWS_PENDING_KEY = 'momento_siws_pending';     // 'connect' | 'sign'
+const SIWS_MESSAGE_KEY = 'momento_siws_message';      // the SIWS message text
+const SIWS_ADDRESS_KEY = 'momento_siws_address';      // wallet address
+
+async function clearSiwsState() {
+  await AsyncStorage.multiRemove([SIWS_PENDING_KEY, SIWS_MESSAGE_KEY, SIWS_ADDRESS_KEY]);
+}
+
+// ── Phantom wallet login component ──────────────────────────────────────────
+//
+// Flow (two deeplink round-trips):
+//
+//   1. phantom.connect() → opens Phantom → user approves → redirects back
+//      - Connector processes URL, sets phantom.address
+//      - We detect address in useEffect
+//      - Generate SIWS message via Privy, persist to AsyncStorage
+//      - Call phantom.signMessage(message) → opens Phantom again
+//
+//   2. phantom.signMessage() → opens Phantom → user signs → redirects back
+//      - Connector processes URL, resolves signMessage promise
+//      - We call privyClient.siws.login() with the persisted message + signature
+//      - Login complete!
+//
+// The raw privyClient.siws.login() validates the nonce server-side (not in
+// React hook state), so it survives app backgrounding/foregrounding.
 
 function PhantomWalletLogin({ onSuccess }: { onSuccess: () => void }) {
-  const auth = useAuth();
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [pendingSiws, setPendingSiws] = useState(false);
+  const [stage, setStage] = useState<'idle' | 'connecting' | 'signing' | 'logging-in'>('idle');
+  const busyRef = useRef(false); // prevent double-execution
 
-  // Use the Phantom deeplink connector
+  // Phantom connector
   const phantom = usePhantomConnector?.({
     appUrl: 'https://momento.app',
     redirectUri: 'momento:///',
-    autoReconnect: true, // Allow reconnecting after deeplink return
+    autoReconnect: true,
   });
 
-  // Watch for phantom.address to appear after deeplink callback.
-  // When Phantom redirects back, the component re-mounts but the connector
-  // processes the encrypted callback data and sets `address` asynchronously.
-  // We use AsyncStorage to persist "waiting for phantom" state across re-mounts.
-  React.useEffect(() => {
-    if (!phantom?.address || !pendingSiws) return;
+  // Raw Privy client for manual SIWS
+  const privyClient = usePrivyClient?.();
 
-    console.log('[WalletLogin] Phantom address detected after callback:', phantom.address);
+  // ── After phantom.connect() returns: address is set ───────────────────
+  // Generate SIWS message, persist it, then call signMessage.
+  useEffect(() => {
+    if (!phantom?.address || busyRef.current) return;
 
-    // Address appeared — proceed with SIWS login
+    // Check if we're waiting for the connect step
     (async () => {
+      const pending = await AsyncStorage.getItem(SIWS_PENDING_KEY);
+      if (pending !== 'connect') return;
+      if (busyRef.current) return;
+      busyRef.current = true;
+
+      console.log('[WalletLogin] Address detected:', phantom.address, '— generating SIWS message');
+      setStage('signing');
+
       try {
-        setIsConnecting(true);
-        await auth.loginWithWallet(phantom.address, phantom.signMessage);
-        setPendingSiws(false);
+        // Fetch nonce from Privy server and build SIWS message
+        const nonce = await privyClient.siws.fetchNonce({ address: phantom.address });
+
+        // Construct standard SIWS message
+        const issuedAt = new Date().toISOString();
+        const message = [
+          `momento.app wants you to sign in with your Solana account:`,
+          phantom.address,
+          '',
+          'Sign in to Momento',
+          '',
+          `URI: https://momento.app`,
+          `Version: 1`,
+          `Chain ID: mainnet`,
+          `Nonce: ${nonce.nonce}`,
+          `Issued At: ${issuedAt}`,
+        ].join('\n');
+
+        // Persist message so it survives the second deeplink round-trip
+        await AsyncStorage.setItem(SIWS_MESSAGE_KEY, message);
+        await AsyncStorage.setItem(SIWS_ADDRESS_KEY, phantom.address);
+        await AsyncStorage.setItem(SIWS_PENDING_KEY, 'sign');
+
+        console.log('[WalletLogin] SIWS message generated, opening Phantom for signing...');
+
+        // This opens Phantom again via deeplink. The promise resolves
+        // when Phantom redirects back with the signed message.
+        const { signature } = await phantom.signMessage(message);
+
+        console.log('[WalletLogin] Signature received, logging in...');
+        setStage('logging-in');
+
+        // Login via raw Privy API (server-side nonce validation)
+        await privyClient.siws.login({
+          message,
+          signature,
+          walletClientType: 'phantom',
+          connectorType: 'deeplink',
+        });
+
+        console.log('[WalletLogin] Login successful!');
+        await clearSiwsState();
+        busyRef.current = false;
         onSuccess();
       } catch (error: any) {
-        console.warn('[WalletLogin] SIWS login failed:', error?.message || error);
-        Alert.alert('Wallet Login Failed', error?.message || 'Sign-in with wallet failed.');
-        setPendingSiws(false);
-        setIsConnecting(false);
+        console.warn('[WalletLogin] SIWS flow failed:', error?.message || error);
+        await clearSiwsState();
+        busyRef.current = false;
+        setStage('idle');
+
+        if (!error?.message?.includes('cancel')) {
+          Alert.alert(
+            'Wallet Login Failed',
+            error?.message || 'Could not complete sign-in. Please try again.',
+          );
+        }
       }
     })();
-  }, [phantom?.address, pendingSiws]);
+  }, [phantom?.address]);
 
-  // Check AsyncStorage on mount to restore pendingSiws state after app relaunch
-  React.useEffect(() => {
-    let cancelled = false;
+  // ── On mount: check for interrupted sign flow ─────────────────────────
+  // If the app was killed during the signMessage deeplink, we need to retry.
+  useEffect(() => {
     (async () => {
-      try {
-        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-        const pending = await AsyncStorage.getItem('phantom_connect_pending');
-        if (pending === 'true' && !cancelled) {
-          console.log('[WalletLogin] Restoring pending SIWS state from storage');
-          setPendingSiws(true);
-          setIsConnecting(true);
-          // Clear the flag
-          await AsyncStorage.removeItem('phantom_connect_pending');
-        }
-      } catch { /* noop */ }
+      const pending = await AsyncStorage.getItem(SIWS_PENDING_KEY);
+      if (pending === 'sign' && phantom?.address) {
+        console.log('[WalletLogin] Resuming interrupted sign flow');
+        // The connector should auto-reconnect and have the address.
+        // Re-trigger the flow by setting pending back to 'connect'
+        // so the address useEffect picks it up.
+        await AsyncStorage.setItem(SIWS_PENDING_KEY, 'connect');
+        setStage('signing');
+      } else if (pending === 'connect') {
+        // Waiting for connect callback — show connecting state
+        setStage('connecting');
+      }
     })();
-    return () => { cancelled = true; };
-  }, []);
+  }, [phantom?.address]);
 
+  // ── Tap handler: start the connect flow ───────────────────────────────
   const handleConnect = useCallback(async () => {
-    if (!phantom) {
-      Alert.alert('Phantom Not Available', 'Phantom wallet connector could not be loaded.');
+    if (!phantom || !privyClient) {
+      Alert.alert('Not Available', 'Wallet connector could not be loaded. Make sure you are using a dev build.');
       return;
     }
 
     try {
-      setIsConnecting(true);
+      setStage('connecting');
+      await AsyncStorage.setItem(SIWS_PENDING_KEY, 'connect');
 
-      // Persist pending state in case the app re-launches from deeplink
-      try {
-        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-        await AsyncStorage.setItem('phantom_connect_pending', 'true');
-      } catch { /* noop */ }
-
-      // Mark that we're waiting for SIWS after Phantom returns
-      setPendingSiws(true);
-
-      // This opens Phantom via deeplink. The promise may or may not resolve
-      // depending on the app lifecycle (background/foreground). That's fine —
-      // the useEffect above watches for phantom.address instead.
+      console.log('[WalletLogin] Opening Phantom for connect...');
       await phantom.connect();
 
-      // If connect() resolves AND address is already available, the useEffect
-      // will pick it up. If address is not yet available, the useEffect waits.
-      if (phantom.address) {
-        console.log('[WalletLogin] Address available immediately after connect():', phantom.address);
-        // useEffect will handle SIWS login
-      } else {
-        console.log('[WalletLogin] Waiting for Phantom callback to set address...');
-      }
+      // If connect() resolves immediately (unlikely with deeplinks),
+      // the useEffect above will handle the rest.
     } catch (error: any) {
       console.warn('[WalletLogin] Connect failed:', error?.message || error);
-      if (error?.message?.includes('cancelled') || error?.message?.includes('canceled')) {
-        // User cancelled in Phantom — reset state
-      } else if (!error?.message?.includes('No wallet address')) {
-        Alert.alert('Wallet Login Failed', error?.message || 'Could not connect wallet. Make sure Phantom is installed.');
-      }
-      setPendingSiws(false);
-      setIsConnecting(false);
-      // Clean up storage flag
-      try {
-        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-        await AsyncStorage.removeItem('phantom_connect_pending');
-      } catch { /* noop */ }
-    }
-  }, [phantom]);
+      await clearSiwsState();
+      setStage('idle');
 
-  if (!usePhantomConnector) return null;
+      if (!error?.message?.includes('cancel')) {
+        Alert.alert(
+          'Connection Failed',
+          'Could not connect to Phantom. Make sure the app is installed.',
+        );
+      }
+    }
+  }, [phantom, privyClient]);
+
+  if (!usePhantomConnector || !usePrivyClient) return null;
+
+  const stageLabels = {
+    idle: 'CONNECT SOLANA WALLET',
+    connecting: 'OPENING PHANTOM...',
+    signing: 'SIGN TO VERIFY...',
+    'logging-in': 'COMPLETING LOGIN...',
+  };
 
   return (
     <TouchableOpacity
       onPress={handleConnect}
       style={styles.walletButton}
       activeOpacity={0.7}
-      disabled={isConnecting}
+      disabled={stage !== 'idle'}
     >
-      {isConnecting ? (
+      {stage !== 'idle' ? (
         <>
           <ActivityIndicator size="small" color={COLORS.primary} />
           <Text style={[styles.walletButtonText, { marginLeft: SPACING.sm }]}>
-            {pendingSiws ? 'CONNECTING...' : 'OPENING PHANTOM...'}
+            {stageLabels[stage]}
           </Text>
         </>
       ) : (
         <>
           <Ionicons name="wallet-outline" size={20} color={COLORS.primary} />
-          <Text style={styles.walletButtonText}>CONNECT SOLANA WALLET</Text>
+          <Text style={styles.walletButtonText}>{stageLabels.idle}</Text>
         </>
       )}
     </TouchableOpacity>
   );
 }
+
+// ── Main login screen ────────────────────────────────────────────────────────
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -167,7 +248,6 @@ export default function LoginScreen() {
       setIsAuthenticating(true);
       await auth.login();
       queryClient.invalidateQueries();
-      // Route back to index — it handles profile check → funding → home
       router.replace('/');
     } catch (error: any) {
       setIsAuthenticating(false);
@@ -180,8 +260,7 @@ export default function LoginScreen() {
     router.replace('/');
   }, [router, queryClient]);
 
-  // Show loading screen if auth is in progress OR user is already authenticated
-  // (handles re-mount after OAuth callback where local state resets but auth.user is set)
+  // Show loading when auth is in progress or user is already authenticated
   if (isAuthenticating || auth.user) {
     return (
       <SafeAreaView style={styles.container}>
@@ -197,27 +276,23 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        {/* Spacer */}
         <View style={styles.topSpacer} />
 
-        {/* Logo */}
         <View style={styles.logoContainer}>
           <MomentoLogo size={80} showText />
           <Text style={styles.subtitle}>THE STOCK MARKET FOR CULTURE</Text>
         </View>
 
-        {/* Spacer */}
         <View style={styles.bottomSpacer} />
 
-        {/* Actions */}
         <View style={styles.actions}>
           <TouchableOpacity onPress={handleAuth} style={styles.signUpButton} activeOpacity={0.7}>
             <Ionicons name="logo-google" size={20} color={COLORS.background} style={{ marginRight: SPACING.sm }} />
             <Text style={styles.signUpText}>CONTINUE WITH GOOGLE</Text>
           </TouchableOpacity>
 
-          {/* Wallet login — Phantom deeplink (disabled — SIWS nonce invalidates across deeplink round-trips) */}
-          {PHANTOM_LOGIN_ENABLED && isPrivyAvailable && usePhantomConnector && (
+          {/* Wallet login — Phantom deeplink with manual SIWS + nonce persistence */}
+          {isPrivyAvailable && usePhantomConnector && usePrivyClient && (
             <>
               <View style={styles.dividerRow}>
                 <View style={styles.dividerLine} />
@@ -276,7 +351,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'center',
-    // 3D effect
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
@@ -292,7 +366,6 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     fontSize: 16,
   },
-  // Divider
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -310,7 +383,6 @@ const styles = StyleSheet.create({
     marginHorizontal: SPACING.md,
     fontSize: 13,
   },
-  // Wallet button
   walletButton: {
     backgroundColor: COLORS.surface,
     paddingVertical: SPACING.md,

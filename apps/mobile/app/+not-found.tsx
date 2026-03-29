@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, StyleSheet, ActivityIndicator } from 'react-native';
-import { Redirect, useGlobalSearchParams, usePathname } from 'expo-router';
-import { Text, MomentoLogo } from '@/components/primitives';
+import { Redirect, useGlobalSearchParams, usePathname, useRouter } from 'expo-router';
+import { MomentoLogo } from '@/components/primitives';
 import { COLORS, SPACING } from '@/styles/theme';
 
 /**
@@ -10,32 +10,49 @@ import { COLORS, SPACING } from '@/styles/theme';
  * Primarily handles Phantom wallet deeplink callbacks that expo-router
  * can't match (e.g. momento://momento///?wallet_action=onConnect&...).
  *
- * We delay the redirect briefly to give the Privy Phantom connector time
- * to process the encrypted callback data from the URL before we navigate away.
+ * For wallet callbacks: go BACK to the previous screen (login) so the
+ * Phantom connector hooks stay mounted and can process the response.
+ *
+ * For non-wallet routes: redirect to index.
  */
 export default function NotFoundScreen() {
   const pathname = usePathname();
   const params = useGlobalSearchParams();
+  const router = useRouter();
   const [shouldRedirect, setShouldRedirect] = useState(false);
 
   const isWalletCallback =
     pathname?.includes('wallet_action') ||
     Object.keys(params).some(
-      (k) => k === 'wallet_action' || k === 'phantom_encryption_public_key' || k === 'data' || k === 'nonce'
+      (k) =>
+        k === 'wallet_action' ||
+        k === 'phantom_encryption_public_key' ||
+        k === 'data' ||
+        k === 'nonce',
     );
 
   useEffect(() => {
-    console.log('[+not-found] Unmatched route:', pathname, 'params:', JSON.stringify(params));
-    console.log('[+not-found] Is wallet callback:', isWalletCallback);
+    console.log('[+not-found] Unmatched route:', pathname, 'wallet callback:', isWalletCallback);
 
-    // If this is a Phantom callback, wait longer to let the Privy connector
-    // process the encrypted response via the Linking event listener
-    const delay = isWalletCallback ? 1500 : 100;
+    if (isWalletCallback) {
+      // Give the Phantom connector time to process the encrypted response
+      // via its Linking event listener, then go back to login screen.
+      const timer = setTimeout(() => {
+        try {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            setShouldRedirect(true);
+          }
+        } catch {
+          setShouldRedirect(true);
+        }
+      }, 800);
+      return () => clearTimeout(timer);
+    }
 
-    const timer = setTimeout(() => {
-      setShouldRedirect(true);
-    }, delay);
-
+    // Non-wallet route — redirect to home after brief delay
+    const timer = setTimeout(() => setShouldRedirect(true), 100);
     return () => clearTimeout(timer);
   }, [pathname]);
 
@@ -43,7 +60,6 @@ export default function NotFoundScreen() {
     return <Redirect href="/" />;
   }
 
-  // Show a brief loading screen while we wait
   return (
     <View style={styles.container}>
       <MomentoLogo size={48} showText />

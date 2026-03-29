@@ -37,12 +37,18 @@ function useWalletDeeplinkInterceptor() {
   useEffect(() => {
     const handleUrl = ({ url }: { url: string }) => {
       if (url.includes('wallet_action=') || url.includes('phantom_encryption')) {
-        console.log('[DeeplinkInterceptor] Caught wallet callback URL — letting Privy connector process first');
-        // Give the Privy connector plenty of time to process the encrypted data
-        // before we redirect. The +not-found screen also has its own delay.
+        console.log('[DeeplinkInterceptor] Wallet callback URL detected — connector will process');
+        // Go back to the login screen (keeps its hooks mounted for the connector)
+        // instead of replacing with '/' which would unmount the connector.
         setTimeout(() => {
-          try { router.replace('/'); } catch { /* nav not ready */ }
-        }, 2000);
+          try {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/');
+            }
+          } catch { /* nav not ready */ }
+        }, 1000);
       }
     };
 
@@ -51,10 +57,16 @@ function useWalletDeeplinkInterceptor() {
     // Also check the initial URL on mount (cold start from deeplink)
     Linking.getInitialURL().then((url) => {
       if (url && (url.includes('wallet_action=') || url.includes('phantom_encryption'))) {
-        console.log('[DeeplinkInterceptor] Initial URL is wallet callback, letting Privy process');
+        console.log('[DeeplinkInterceptor] Cold start from wallet callback');
         setTimeout(() => {
-          try { router.replace('/'); } catch { /* nav not ready */ }
-        }, 2500);
+          try {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/');
+            }
+          } catch { /* nav not ready */ }
+        }, 1500);
       }
     });
 
