@@ -1,0 +1,7 @@
+# Exclude files from EAS Build uploads
+package-lock.json
+yarn.lock
+docs/
+AGENT_MEMORY.md
+scripts/
+*.log
