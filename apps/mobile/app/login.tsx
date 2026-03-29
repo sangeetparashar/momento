@@ -91,9 +91,11 @@ function PhantomWalletLogin({ onSuccess }: { onSuccess: () => void }) {
       if (busyRef.current) return;
       busyRef.current = true;
 
-      console.log('[WalletLogin] Address detected:', phantom.address, '— generating SIWS message');
+      console.log('[WalletLogin] Address detected:', phantom.address);
+      console.log('[WalletLogin] Pending state:', pending, 'busyRef:', busyRef.current);
       console.log('[WalletLogin] privyClient keys:', Object.keys(privyClient || {}));
       console.log('[WalletLogin] privyClient.auth keys:', Object.keys(privyClient?.auth || {}));
+      console.log('[WalletLogin] createSiwsMessage available:', !!createSiwsMessage);
       setStage('signing');
 
       try {
@@ -123,17 +125,30 @@ function PhantomWalletLogin({ onSuccess }: { onSuccess: () => void }) {
         // when Phantom redirects back with the signed message.
         const { signature } = await phantom.signMessage(message);
 
-        console.log('[WalletLogin] Signature received, logging in...');
+        console.log('[WalletLogin] Signature received:', JSON.stringify(signature).slice(0, 80));
+        console.log('[WalletLogin] Signature type:', typeof signature);
+        console.log('[WalletLogin] Message being sent to login:', JSON.stringify(message).slice(0, 200));
         setStage('logging-in');
 
         // Login via raw Privy API (server-side nonce validation)
         const siwsLoginApi = privyClient.auth?.siws ?? privyClient.siws;
-        await siwsLoginApi.login({
-          message,
-          signature,
-          walletClientType: 'phantom',
-          connectorType: 'deeplink',
-        });
+        try {
+          await siwsLoginApi.login({
+            message,
+            signature,
+            walletClientType: 'phantom',
+            connectorType: 'deeplink',
+          });
+        } catch (loginErr: any) {
+          console.error('[WalletLogin] LOGIN ERROR DETAILS:', JSON.stringify({
+            message: loginErr?.message,
+            status: loginErr?.status,
+            body: loginErr?.body,
+            code: loginErr?.code,
+            name: loginErr?.name,
+          }));
+          throw loginErr;
+        }
 
         console.log('[WalletLogin] Login successful!');
         await clearSiwsState();
