@@ -55,6 +55,12 @@ const config: Config = {
         'breathe-glow': 'breathe-glow 4s ease-in-out infinite',
         'flutter': 'flutter 6s ease-in-out infinite',
         'grain': 'grain 0.5s steps(1) infinite',
+        'fade-in': 'fade-in 0.7s ease-out forwards',
+        'fade-in-up': 'fade-in-up 0.6s ease-out forwards',
+        'polaroid-float': 'polaroid-float 4s ease-in-out infinite',
+        'pulse-dot': 'pulse-dot 1.5s ease-in-out infinite',
+        'expand-line': 'expand-line 2s ease-out forwards',
+        'stagger-in': 'fade-in-up 0.5s ease-out forwards',
       },
       keyframes: {
         ticker: {
@@ -128,6 +134,27 @@ const config: Config = {
           '50%': { transform: 'translate(-1%, 1%)' },
           '70%': { transform: 'translate(1%, -1%)' },
           '90%': { transform: 'translate(0%, 1%)' },
+        },
+        'fade-in': {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        'fade-in-up': {
+          '0%': { opacity: '0', transform: 'translateY(20px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        'polaroid-float': {
+          '0%, 100%': { transform: 'rotate(-2deg) translateY(0)' },
+          '50%': { transform: 'rotate(-1deg) translateY(-8px)' },
+        },
+        'pulse-dot': {
+          '0%, 100%': { opacity: '0.3', transform: 'scale(1)' },
+          '50%': { opacity: '1', transform: 'scale(1.2)' },
+        },
+        'expand-line': {
+          '0%': { width: '0%', opacity: '0' },
+          '50%': { opacity: '1' },
+          '100%': { width: '60px', opacity: '1' },
         },
       },
     },
