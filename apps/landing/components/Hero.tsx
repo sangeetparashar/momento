@@ -7,25 +7,22 @@ export default function Hero() {
   const [revealed, setRevealed] = useState(false);
 
   useEffect(() => {
-    const timer = setTimeout(() => setRevealed(true), 400);
+    const timer = setTimeout(() => setRevealed(true), 300);
     return () => clearTimeout(timer);
   }, []);
 
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-      {/* Ambient gradient orbs */}
-      <div className="absolute top-[15%] left-[20%] w-[500px] h-[500px] bg-[#00FF88]/[0.07] rounded-full blur-[180px] pointer-events-none animate-float-slow" />
-      <div className="absolute bottom-[20%] right-[15%] w-[400px] h-[400px] bg-teal-500/[0.08] rounded-full blur-[160px] pointer-events-none animate-float-delayed" />
-      <div className="absolute top-[50%] left-[60%] w-[350px] h-[350px] bg-emerald-400/[0.06] rounded-full blur-[140px] pointer-events-none animate-float" />
-
-      {/* Subtle radial gradient from center */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(0,255,136,0.04)_0%,transparent_70%)] pointer-events-none" />
+      {/* Breathing gradient orbs with organic flutter */}
+      <div className="absolute top-[10%] left-[15%] w-[600px] h-[600px] bg-[#00FF88]/[0.06] rounded-full blur-[180px] pointer-events-none animate-flutter" />
+      <div className="absolute bottom-[15%] right-[10%] w-[500px] h-[500px] bg-[#00FF88]/[0.04] rounded-full blur-[160px] pointer-events-none animate-breathe-glow" />
+      <div className="absolute top-[40%] left-[50%] w-[400px] h-[400px] bg-emerald-400/[0.03] rounded-full blur-[200px] pointer-events-none animate-float-slow" />
 
       {/* Content */}
-      <div className="relative z-10 text-center px-6 max-w-4xl mx-auto">
+      <div className="relative z-10 text-center px-6 max-w-5xl mx-auto">
         {/* Logo mark */}
         <div
-          className="flex justify-center mb-6 opacity-0 animate-slide-up"
+          className="flex justify-center mb-8 opacity-0 animate-slide-up"
           style={{ animationDelay: '0ms', animationFillMode: 'forwards' }}
         >
           <svg
@@ -41,97 +38,80 @@ export default function Hero() {
           </svg>
         </div>
 
-        {/* Label */}
-        <div
-          className="flex items-center justify-center gap-2 mb-8 opacity-0 animate-slide-up"
-          style={{ animationDelay: '100ms', animationFillMode: 'forwards' }}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-momento-primary inline-block" />
-          <span className="text-momento-primary text-xs font-medium tracking-[0.25em] uppercase">
-            The Stock Market for Culture
-          </span>
-        </div>
-
-        {/* Main headline with word-by-word reveal + sweeping highlight */}
+        {/* Main headline — Space Grotesk, massive */}
         <h1
-          className="text-7xl md:text-8xl lg:text-9xl font-black text-white leading-[0.95] tracking-tight opacity-0 animate-slide-up"
-          style={{ animationDelay: '250ms', animationFillMode: 'forwards' }}
+          className="opacity-0 animate-slide-up"
+          style={{ animationDelay: '150ms', animationFillMode: 'forwards' }}
         >
-          <span className="inline-block overflow-hidden">
-            {['Own', 'the'].map((word, i) => (
-              <span
-                key={word}
-                className="inline-block transition-all duration-700 ease-out"
-                style={{
-                  transform: revealed ? 'translateY(0)' : 'translateY(100%)',
-                  opacity: revealed ? 1 : 0,
-                  transitionDelay: `${i * 120 + 400}ms`,
-                }}
-              >
-                {word}{' '}
-              </span>
-            ))}
-          </span>
-          <span className="inline-block relative">
+          <span className="block font-display text-7xl md:text-8xl lg:text-[10rem] font-bold text-white leading-[0.9] tracking-tight">
             <span
-              className="inline-block bg-gradient-to-r from-[#00FF88] via-[#00DDAA] to-[#00FF88] bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient-shift transition-all duration-700 ease-out"
+              className="inline-block transition-all duration-700 ease-out"
               style={{
-                transform: revealed ? 'translateY(0) scale(1)' : 'translateY(100%) scale(0.9)',
+                transform: revealed ? 'translateY(0)' : 'translateY(40%)',
                 opacity: revealed ? 1 : 0,
-                transitionDelay: '640ms',
+                transitionDelay: '300ms',
+              }}
+            >
+              Own the
+            </span>
+          </span>
+          <span className="block relative mt-2">
+            <span
+              className="inline-block font-display text-7xl md:text-8xl lg:text-[10rem] font-bold leading-[0.9] tracking-tight bg-gradient-to-r from-[#00FF88] via-[#00DDAA] to-[#00FF88] bg-clip-text text-transparent bg-[length:200%_auto] animate-gradient-shift transition-all duration-700 ease-out"
+              style={{
+                transform: revealed ? 'translateY(0) scale(1)' : 'translateY(40%) scale(0.95)',
+                opacity: revealed ? 1 : 0,
+                transitionDelay: '500ms',
               }}
             >
               Culture
             </span>
-            {/* Sweeping light effect across "Culture" */}
+            {/* Sweep effect */}
             <span
               className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent bg-[length:50%_100%] pointer-events-none"
               style={{
-                animation: revealed ? 'sweep 2s ease-in-out 1.2s forwards' : 'none',
+                animation: revealed ? 'sweep 2s ease-in-out 1s forwards' : 'none',
                 opacity: 0,
               }}
             />
           </span>
         </h1>
 
-        {/* Subtitle */}
+        {/* Single punchy subtitle */}
         <p
-          className="text-lg md:text-xl text-momento-text-secondary max-w-2xl mx-auto mt-6 leading-relaxed opacity-0 animate-slide-up"
-          style={{ animationDelay: '300ms', animationFillMode: 'forwards' }}
+          className="text-lg md:text-xl text-[#666666] max-w-xl mx-auto mt-8 leading-relaxed opacity-0 animate-slide-up"
+          style={{ animationDelay: '350ms', animationFillMode: 'forwards' }}
         >
-          Invest in the creators you believe in. Trade tokens in real time.
-          Profit alongside the culture you helped shape.
+          Invest in the creators you believe in and profit alongside the culture you shape.
         </p>
 
         {/* Waitlist form */}
         <div
           id="waitlist"
-          className="mt-10 flex justify-center opacity-0 animate-slide-up"
-          style={{ animationDelay: '450ms', animationFillMode: 'forwards' }}
+          className="mt-12 flex justify-center opacity-0 animate-slide-up"
+          style={{ animationDelay: '500ms', animationFillMode: 'forwards' }}
         >
           <WaitlistForm />
         </div>
 
-        {/* Trust line */}
+        {/* Solana-powered caption — monospace, subtle */}
         <div
-          className="mt-4 flex items-center justify-center gap-3 flex-wrap opacity-0 animate-slide-up"
-          style={{ animationDelay: '600ms', animationFillMode: 'forwards' }}
+          className="mt-6 opacity-0 animate-slide-up"
+          style={{ animationDelay: '650ms', animationFillMode: 'forwards' }}
         >
-          <span className="text-sm text-momento-text-tertiary">Free early access</span>
-          <span className="w-1 h-1 rounded-full bg-momento-text-tertiary" />
-          <span className="text-sm text-momento-text-tertiary">No crypto knowledge needed</span>
-          <span className="w-1 h-1 rounded-full bg-momento-text-tertiary" />
-          <span className="text-sm text-momento-text-tertiary">Solana-powered</span>
+          <span className="font-mono text-xs text-[#444444] tracking-wider uppercase">
+            Solana-powered
+          </span>
         </div>
 
         {/* Scroll indicator */}
         <div
-          className="mt-20 flex justify-center opacity-0 animate-slide-up"
-          style={{ animationDelay: '750ms', animationFillMode: 'forwards' }}
+          className="mt-24 flex justify-center opacity-0 animate-slide-up"
+          style={{ animationDelay: '800ms', animationFillMode: 'forwards' }}
         >
-          <div className="animate-bounce-gentle opacity-50">
+          <div className="animate-bounce-gentle opacity-30">
             <svg
-              className="w-6 h-6 text-white/40"
+              className="w-5 h-5 text-white/40"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"

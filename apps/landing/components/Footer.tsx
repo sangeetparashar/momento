@@ -11,45 +11,45 @@ export default function Footer() {
 
   return (
     <>
-      <footer className="border-t border-white/[0.06]">
+      <footer className="border-t border-white/[0.04]">
         <div className="max-w-7xl mx-auto py-8 px-6 flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Left — Logo + tagline */}
           <div className="flex items-center gap-3">
-            <img
-              src="/logo-white.svg"
-              alt="Momento"
-              width={24}
-              height={24}
-            />
-            <div>
-              <span className="text-white font-extrabold text-sm tracking-[4px] uppercase">
-                MOMENTO
-              </span>
-              <p className="text-xs text-momento-text-tertiary">
-                The Stock Market for Culture
-              </p>
-            </div>
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 40 40"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path d="M4 32V10L13 20L20 12L27 20L36 10V32" stroke="#00FF88" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+              <circle cx="36" cy="10" r="2.5" fill="#00FF88"/>
+            </svg>
+            <span className="text-white font-medium text-sm tracking-[0.3em] uppercase">
+              MOMENTO
+            </span>
           </div>
 
           {/* Center — Legal links */}
-          <div className="flex items-center gap-6 text-sm text-momento-text-tertiary">
+          <div className="flex items-center gap-6 text-sm text-[#444444]">
             <button
               onClick={() => setShowPrivacy(true)}
               className="hover:text-white transition-colors duration-200"
             >
-              Privacy Policy
+              Privacy
             </button>
             <button
               onClick={() => setShowTerms(true)}
               className="hover:text-white transition-colors duration-200"
             >
-              Terms of Service
+              Terms
             </button>
+            <span className="font-mono text-xs text-[#333333]">Solana-powered</span>
           </div>
 
           {/* Right — Copyright */}
-          <p className="text-sm text-momento-text-tertiary">
-            &copy; 2026 Momento Inc.
+          <p className="text-sm text-[#333333] font-mono">
+            &copy; 2026 Momento
           </p>
         </div>
       </footer>
