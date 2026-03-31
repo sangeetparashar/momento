@@ -9,22 +9,23 @@ const config: Config = {
     extend: {
       colors: {
         momento: {
-          bg: '#0D0D0D',
-          'bg-secondary': '#1A1A1A',
-          'bg-tertiary': '#242424',
+          bg: '#000000',
+          'bg-secondary': '#111111',
+          'bg-tertiary': '#1A1A1A',
           primary: '#00FF88',
           'primary-muted': 'rgba(0, 255, 136, 0.15)',
           accent: '#00CC6A',
           glow: 'rgba(0, 255, 136, 0.3)',
           'text-primary': '#FFFFFF',
-          'text-secondary': '#8A8A8A',
-          'text-tertiary': '#555555',
-          border: '#2A2A2A',
+          'text-secondary': '#666666',
+          'text-tertiary': '#444444',
+          border: 'rgba(255, 255, 255, 0.06)',
           error: '#FF4444',
         },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'Menlo', 'monospace'],
       },
       backdropBlur: {
@@ -51,6 +52,9 @@ const config: Config = {
         'slide-in-right': 'slide-in-right 0.6s ease-out forwards',
         'scale-in': 'scale-in 0.5s ease-out forwards',
         'gradient-shift': 'gradient-shift 8s ease infinite',
+        'breathe-glow': 'breathe-glow 4s ease-in-out infinite',
+        'flutter': 'flutter 6s ease-in-out infinite',
+        'grain': 'grain 0.5s steps(1) infinite',
       },
       keyframes: {
         ticker: {
@@ -105,6 +109,25 @@ const config: Config = {
           '0%': { backgroundPosition: '0% 50%' },
           '50%': { backgroundPosition: '100% 50%' },
           '100%': { backgroundPosition: '0% 50%' },
+        },
+        'breathe-glow': {
+          '0%, 100%': { opacity: '0.4', filter: 'blur(60px)' },
+          '50%': { opacity: '0.8', filter: 'blur(80px)' },
+        },
+        flutter: {
+          '0%': { transform: 'translate(0, 0) scale(1)' },
+          '25%': { transform: 'translate(3px, -5px) scale(1.02)' },
+          '50%': { transform: 'translate(-2px, 3px) scale(0.98)' },
+          '75%': { transform: 'translate(4px, 1px) scale(1.01)' },
+          '100%': { transform: 'translate(0, 0) scale(1)' },
+        },
+        grain: {
+          '0%, 100%': { transform: 'translate(0, 0)' },
+          '10%': { transform: 'translate(-1%, -1%)' },
+          '30%': { transform: 'translate(1%, 0%)' },
+          '50%': { transform: 'translate(-1%, 1%)' },
+          '70%': { transform: 'translate(1%, -1%)' },
+          '90%': { transform: 'translate(0%, 1%)' },
         },
       },
     },

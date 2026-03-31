@@ -12,57 +12,35 @@ export default function FinalCta() {
 
       if (!sectionRef.current) return;
 
-      const scrollTrigger = onScroll({
+      const trigger = onScroll({
         target: sectionRef.current,
         enter: 'bottom -= 100px',
       });
 
-      // Logo mark — scale in + fade
-      animate(sectionRef.current.querySelector('.anim-logo'), {
-        opacity: [0, 1],
-        scale: [0.8, 1],
-        duration: 800,
-        easing: 'easeOutCubic',
-        autoplay: scrollTrigger,
-      });
-
-      // Headline lines — slide up with stagger
       animate(sectionRef.current.querySelectorAll('.anim-heading'), {
         opacity: [0, 1],
         translateY: [30, 0],
-        delay: (_, i) => 100 + i * 100,
+        delay: (_: unknown, i: number) => i * 120,
         duration: 800,
         easing: 'easeOutCubic',
-        autoplay: scrollTrigger,
+        autoplay: trigger,
       });
 
-      // Subtitle
-      animate(sectionRef.current.querySelector('.anim-subtitle'), {
+      animate(sectionRef.current.querySelector('.anim-form'), {
         opacity: [0, 1],
-        translateY: [30, 0],
+        translateY: [20, 0],
         delay: 300,
         duration: 800,
         easing: 'easeOutCubic',
-        autoplay: scrollTrigger,
+        autoplay: trigger,
       });
 
-      // Waitlist form container
-      animate(sectionRef.current.querySelector('.anim-form'), {
+      animate(sectionRef.current.querySelector('.anim-social'), {
         opacity: [0, 1],
-        translateY: [30, 0],
         delay: 400,
         duration: 800,
         easing: 'easeOutCubic',
-        autoplay: scrollTrigger,
-      });
-
-      // Social links
-      animate(sectionRef.current.querySelector('.anim-social'), {
-        opacity: [0, 1],
-        delay: 500,
-        duration: 800,
-        easing: 'easeOutCubic',
-        autoplay: scrollTrigger,
+        autoplay: trigger,
       });
     };
 
@@ -71,82 +49,21 @@ export default function FinalCta() {
 
   return (
     <section
-      id="waitlist"
+      id="waitlist-final"
       ref={sectionRef}
       className="min-h-[80vh] flex items-center justify-center relative overflow-hidden px-6"
     >
-      {/* Ambient gradient orbs */}
+      {/* Breathing gradient orbs */}
       <div className="absolute inset-0 pointer-events-none">
-        <div
-          className="absolute top-1/4 left-1/4 w-[600px] h-[600px] rounded-full blur-[180px] opacity-20"
-          style={{
-            background: 'radial-gradient(circle, #00FF88 0%, transparent 70%)',
-            animation: 'floatOrb1 8s ease-in-out infinite',
-          }}
-        />
-        <div
-          className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] rounded-full blur-[160px] opacity-15"
-          style={{
-            background: 'radial-gradient(circle, #00CC6A 0%, transparent 70%)',
-            animation: 'floatOrb2 10s ease-in-out infinite',
-          }}
-        />
-        <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] rounded-full blur-[200px] opacity-10"
-          style={{
-            background: 'radial-gradient(circle, #00FFAA 0%, transparent 70%)',
-            animation: 'floatOrb3 12s ease-in-out infinite',
-          }}
-        />
+        <div className="absolute top-1/4 left-1/4 w-[600px] h-[600px] rounded-full blur-[200px] animate-breathe-glow bg-[#00FF88]/[0.08]" />
+        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] rounded-full blur-[180px] animate-flutter bg-[#00FF88]/[0.05]" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[400px] rounded-full blur-[220px] animate-float-slow bg-[#00FFAA]/[0.04]" />
       </div>
 
-      {/* Keyframes */}
-      <style jsx>{`
-        @keyframes floatOrb1 {
-          0%, 100% { transform: translate(0, 0); }
-          50% { transform: translate(30px, -20px); }
-        }
-        @keyframes floatOrb2 {
-          0%, 100% { transform: translate(0, 0); }
-          50% { transform: translate(-25px, 15px); }
-        }
-        @keyframes floatOrb3 {
-          0%, 100% { transform: translate(-50%, -50%) scale(1); }
-          50% { transform: translate(-50%, -50%) scale(1.1); }
-        }
-      `}</style>
-
       {/* Content */}
-      <div className="relative z-10 max-w-3xl mx-auto text-center">
-        {/* Logo mark */}
-        <div
-          className="anim-logo flex justify-center mb-8"
-          style={{ opacity: 0, transform: 'scale(0.8)' }}
-        >
-          <svg
-            width="48"
-            height="48"
-            viewBox="0 0 48 48"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <rect width="48" height="48" rx="12" fill="#00FF88" fillOpacity="0.15" />
-            <text
-              x="24"
-              y="32"
-              textAnchor="middle"
-              fill="#00FF88"
-              fontSize="24"
-              fontWeight="bold"
-              fontFamily="system-ui, sans-serif"
-            >
-              M
-            </text>
-          </svg>
-        </div>
-
+      <div className="relative z-10 max-w-4xl mx-auto text-center">
         {/* Headline */}
-        <h2 className="text-5xl md:text-7xl font-black text-center">
+        <h2 className="font-display text-6xl md:text-8xl lg:text-9xl font-bold tracking-tight">
           <span
             className="anim-heading text-white block"
             style={{ opacity: 0, transform: 'translateY(30px)' }}
@@ -161,18 +78,10 @@ export default function FinalCta() {
           </span>
         </h2>
 
-        {/* Subtitle */}
-        <p
-          className="anim-subtitle text-lg text-momento-text-secondary text-center max-w-xl mx-auto mt-6"
-          style={{ opacity: 0, transform: 'translateY(30px)' }}
-        >
-          Join the waitlist for early access to Momento. Be part of the future of the creator economy.
-        </p>
-
-        {/* Waitlist form */}
+        {/* Waitlist */}
         <div
-          className="anim-form mt-10 flex justify-center"
-          style={{ opacity: 0, transform: 'translateY(30px)' }}
+          className="anim-form mt-12 flex justify-center"
+          style={{ opacity: 0, transform: 'translateY(20px)' }}
         >
           <WaitlistForm />
         </div>
@@ -186,7 +95,7 @@ export default function FinalCta() {
             href="https://x.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-momento-text-secondary hover:text-white transition-colors duration-200"
+            className="text-[#444444] hover:text-white transition-colors duration-200"
             aria-label="Follow on X"
           >
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
@@ -197,7 +106,7 @@ export default function FinalCta() {
             href="https://www.instagram.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-momento-text-secondary hover:text-white transition-colors duration-200"
+            className="text-[#444444] hover:text-white transition-colors duration-200"
             aria-label="Follow on Instagram"
           >
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">

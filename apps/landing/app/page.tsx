@@ -1,12 +1,9 @@
 import Navbar from '@/components/Navbar';
 import Hero from '@/components/Hero';
 import TickerBanner from '@/components/TickerBanner';
-import ProblemHook from '@/components/ProblemHook';
-import HowItWorks from '@/components/HowItWorks';
-import AppShowcase from '@/components/AppShowcase';
-import TokenEconomics from '@/components/TokenEconomics';
-import SocialProof from '@/components/SocialProof';
-import Team from '@/components/Team';
+import Manifesto from '@/components/Manifesto';
+import Product from '@/components/Product';
+import Proof from '@/components/Proof';
 import FinalCta from '@/components/FinalCta';
 import Footer from '@/components/Footer';
 
@@ -16,12 +13,9 @@ export default function Home() {
       <Navbar />
       <Hero />
       <TickerBanner />
-      <ProblemHook />
-      <HowItWorks />
-      <AppShowcase />
-      <TokenEconomics />
-      <SocialProof />
-      <Team />
+      <Manifesto />
+      <Product />
+      <Proof />
       <FinalCta />
       <Footer />
     </main>

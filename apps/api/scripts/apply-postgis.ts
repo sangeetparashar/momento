@@ -19,6 +19,12 @@ import { PrismaClient } from '@prisma/client';
 // but fall back to DATABASE_URL for environments where DIRECT_URL isn't reachable
 // (e.g. Vercel build — can't reach Supabase direct port).
 const dbUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
+
+if (!dbUrl) {
+  console.log('[PostGIS] No DATABASE_URL or DIRECT_URL found — skipping PostGIS migration.');
+  process.exit(0);
+}
+
 const prisma = new PrismaClient({
   datasources: { db: { url: dbUrl } },
 });

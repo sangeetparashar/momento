@@ -15,24 +15,22 @@ export default function TickerBanner() {
   ];
 
   const tickerContent = tokens.map((token, i) => (
-    <span key={i} className="inline-flex items-center gap-1.5 mx-6">
-      <span className="text-white font-bold">{token.symbol}</span>
+    <span key={i} className="inline-flex items-center gap-1.5 mx-8">
+      <span className="text-white/80 font-mono font-medium text-sm">{token.symbol}</span>
       <span
-        className={`font-mono font-bold ${
+        className={`font-mono font-bold text-sm ${
           token.positive ? 'text-momento-primary' : 'text-momento-error'
         }`}
       >
         {token.change}
       </span>
-      <span className="text-momento-text-tertiary mx-2">&middot;</span>
     </span>
   ));
 
   return (
-    <div className="w-full bg-momento-bg-secondary border-y border-momento-border py-4 overflow-hidden">
-      <div className="animate-ticker-scroll whitespace-nowrap font-mono text-sm">
+    <div className="w-full border-y border-white/[0.04] py-6 overflow-hidden">
+      <div className="animate-ticker-scroll whitespace-nowrap">
         {tickerContent}
-        {/* Duplicate for seamless loop */}
         {tickerContent}
       </div>
     </div>
