@@ -12,11 +12,7 @@
     "turbo": "^2.0.0"
   },
   "packageManager": "pnpm@10.30.0",
-  "pnpm": {
-    "overrides": {
-      "styled-jsx>react": "^18.2.0"
-    }
-  },
+  "pnpm": {},
   "dependencies": {
     "@solana/web3.js": "^1.98.0",
     "docx": "^9.6.1"
