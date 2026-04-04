@@ -11,6 +11,8 @@ export enum KycStatus {
   REJECTED = 'REJECTED',
 }
 
+export type ChainType = 'solana' | 'base';
+
 export enum PostType {
   TEXT = 'TEXT',
   IMAGE = 'IMAGE',
@@ -34,6 +36,8 @@ export interface User {
   id: string;
   privyUserId: string;
   walletAddress: string;
+  baseWalletAddress?: string;
+  primaryChain?: ChainType;
   email?: string;
   username?: string;
   displayName?: string;
@@ -126,6 +130,10 @@ export interface TokenHolding {
 }
 
 export interface WalletBalance {
+  chain: ChainType;
+  nativeBalance: number;
+  nativePriceUsd?: number;
+  nativeSymbol: string;
   solBalance: number;
   solPriceUsd?: number;
   tokens: TokenHolding[];
@@ -142,6 +150,7 @@ export interface PricePoint {
 export interface PortfolioPoint {
   t: number;      // timestamp ms
   p: number;      // total portfolio value usd
+  native: number; // native token value usd
   sol: number;    // sol value usd
   tokens: number; // token value usd
 }
@@ -155,10 +164,12 @@ export interface OnrampUrlResponse {
   provider: OnrampProvider;
   coin: string;
   walletAddress: string;
+  chain: ChainType;
 }
 
 // Swap types
 export interface SwapQuote {
+  chain: ChainType;
   inputMint: string;
   outputMint: string;
   inAmount: string;
