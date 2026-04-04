@@ -74,6 +74,26 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
       filePath: path.resolve(privyExpoDist, `${subpath}.js`),
     };
   }
+  // Ensure @solana-mobile packages resolve to their react-native builds
+  // (not the browser builds which require a secure HTTPS context).
+  if (moduleName === '@solana-mobile/mobile-wallet-adapter-protocol') {
+    return {
+      type: 'sourceFile',
+      filePath: path.resolve(
+        monorepoRoot,
+        'node_modules/@solana-mobile/mobile-wallet-adapter-protocol/lib/cjs/index.native.js',
+      ),
+    };
+  }
+  if (moduleName === '@solana-mobile/mobile-wallet-adapter-protocol-web3js') {
+    return {
+      type: 'sourceFile',
+      filePath: path.resolve(
+        monorepoRoot,
+        'node_modules/@solana-mobile/mobile-wallet-adapter-protocol-web3js/lib/cjs/index.native.js',
+      ),
+    };
+  }
   // Default resolution
   if (originalResolveRequest) {
     return originalResolveRequest(context, moduleName, platform);
