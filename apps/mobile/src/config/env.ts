@@ -15,6 +15,15 @@ export const ENV = {
   /** Solana network: 'devnet' | 'mainnet-beta' */
   SOLANA_NETWORK: (process.env.EXPO_PUBLIC_SOLANA_NETWORK ?? 'devnet') as 'devnet' | 'mainnet-beta',
 
+  /** Base L2 RPC endpoint URL */
+  BASE_RPC_URL: process.env.EXPO_PUBLIC_BASE_RPC_URL ?? 'https://mainnet.base.org',
+
+  /** Base L2 chain ID (8453 = mainnet, 84532 = Sepolia testnet) */
+  BASE_CHAIN_ID: parseInt(process.env.EXPO_PUBLIC_BASE_CHAIN_ID ?? '8453', 10),
+
+  /** Base network: 'mainnet' | 'testnet' */
+  BASE_NETWORK: (process.env.EXPO_PUBLIC_BASE_NETWORK ?? 'mainnet') as 'mainnet' | 'testnet',
+
   /** Whether the app is running in development mode */
   IS_DEV: __DEV__,
 } as const;
