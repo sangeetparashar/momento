@@ -20,7 +20,7 @@ export interface AuthUser {
   privyUserId: string;
   walletAddress: string;
   baseWalletAddress: string | null;
-  primaryChain: string;
+  primaryChain: 'solana' | 'base';
   role: string;
   isAdmin: boolean;
 }
@@ -115,8 +115,8 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
         isAdmin: true,
       },
     });
-  } else if (user.walletAddress.startsWith('pending-') || !user.baseWalletAddress) {
-    // User exists but wallet(s) may need syncing
+  } else if (user.walletAddress.startsWith('pending-')) {
+    // User exists but Solana wallet needs syncing — also attempt Base wallet sync
     try {
       const privyUser = await getPrivy().getUser(privyUserId);
 
@@ -155,7 +155,7 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
     }
   }
 
-  return user;
+  return user as AuthUser;
 }
 
 /**

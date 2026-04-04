@@ -81,6 +81,10 @@ export const DUMMY_MARKET_DATA: TokenHolding[] = [
  * Hardcoded wallet balance for unauthenticated / demo state.
  */
 export const DUMMY_WALLET_BALANCE: WalletBalance = {
+  chain: 'solana',
+  nativeBalance: 2.45,
+  nativePriceUsd: 145.0,
+  nativeSymbol: 'SOL',
   solBalance: 2.45,
   tokens: DUMMY_MARKET_DATA,
   totalValueUsd: 3506.65,

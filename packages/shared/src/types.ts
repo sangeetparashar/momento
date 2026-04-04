@@ -37,7 +37,7 @@ export interface User {
   privyUserId: string;
   walletAddress: string;
   baseWalletAddress?: string;
-  primaryChain?: ChainType;
+  primaryChain: ChainType;
   email?: string;
   username?: string;
   displayName?: string;

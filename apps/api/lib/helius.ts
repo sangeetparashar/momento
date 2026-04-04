@@ -126,6 +126,10 @@ export async function fetchWalletBalance(walletAddress: string): Promise<WalletB
   const totalValueUsd = solValueUsd + tokenTotalValueUsd;
 
   return {
+    chain: 'solana' as const,
+    nativeBalance: solBalance,
+    nativePriceUsd: solPriceUsd || undefined,
+    nativeSymbol: 'SOL',
     solBalance,
     solPriceUsd: solPriceUsd || undefined,
     tokens,

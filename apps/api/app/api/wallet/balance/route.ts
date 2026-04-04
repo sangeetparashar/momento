@@ -16,6 +16,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({
         success: true,
         data: {
+          chain: 'solana',
+          nativeBalance: 0,
+          nativePriceUsd: 0,
+          nativeSymbol: 'SOL',
           solBalance: 0,
           tokens: [],
           totalValueUsd: 0,
