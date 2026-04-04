@@ -29,8 +29,10 @@ enum PostType {
 model User {
   id              String    @id @default(uuid())
   privyUserId     String    @unique
-  walletAddress   String    @unique
-  email           String?
+  walletAddress     String    @unique
+  baseWalletAddress String?   @unique
+  primaryChain      String    @default("solana")
+  email             String?
   username        String?   @unique
   displayName     String?
   bio             String?
@@ -181,6 +183,7 @@ model Notification {
 model PortfolioSnapshot {
   id             String   @id @default(uuid())
   userId         String
+  chain          String   @default("solana")
   totalValueUsd  Float
   solBalance     Float
   solValueUsd    Float
@@ -188,5 +191,6 @@ model PortfolioSnapshot {
   createdAt      DateTime @default(now())
 
   @@index([userId, createdAt])
+  @@index([userId, chain, createdAt])
   @@map("portfolio_snapshots")
 }

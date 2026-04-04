@@ -19,6 +19,8 @@ export interface AuthUser {
   id: string;
   privyUserId: string;
   walletAddress: string;
+  baseWalletAddress: string | null;
+  primaryChain: string;
   role: string;
   isAdmin: boolean;
 }
@@ -62,18 +64,32 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
       id: true,
       privyUserId: true,
       walletAddress: true,
+      baseWalletAddress: true,
+      primaryChain: true,
       role: true,
       isAdmin: true,
     },
   });
 
   if (!user) {
-    // Fetch Privy user to get wallet address and email
+    // Fetch Privy user to get wallet addresses and email
     const privyUser = await getPrivy().getUser(privyUserId);
-    const wallet = privyUser.wallet;
     const email = privyUser.email?.address || privyUser.google?.email;
-    // Use wallet address if available, otherwise generate a placeholder
-    const walletAddress = wallet?.address || `pending-${privyUserId}`;
+
+    // Extract Solana and Ethereum wallet addresses from linked accounts
+    const solanaWallet = privyUser.linkedAccounts?.find(
+      (a: any) => a.type === 'wallet' && a.chainType === 'solana'
+    ) as { address: string } | undefined;
+    const ethWallet = privyUser.linkedAccounts?.find(
+      (a: any) => a.type === 'wallet' && a.chainType === 'ethereum'
+    ) as { address: string } | undefined;
+
+    // Fall back to privyUser.wallet for Solana if not found in linkedAccounts
+    const walletAddress = solanaWallet?.address || privyUser.wallet?.address || `pending-${privyUserId}`;
+    const baseWalletAddress = ethWallet?.address || null;
+
+    // Determine primary chain based on which wallets exist
+    const primaryChain = baseWalletAddress && !solanaWallet?.address ? 'base' : 'solana';
 
     // Use upsert to avoid race condition when two concurrent first-login
     // requests both pass the findUnique check above. The second request
@@ -85,36 +101,57 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
       create: {
         privyUserId,
         walletAddress,
+        baseWalletAddress,
+        primaryChain,
         email: email || null,
       },
       select: {
         id: true,
         privyUserId: true,
         walletAddress: true,
+        baseWalletAddress: true,
+        primaryChain: true,
         role: true,
         isAdmin: true,
       },
     });
-  } else if (user.walletAddress.startsWith('pending-')) {
-    // User exists but wallet was created after initial signup — sync it
+  } else if (user.walletAddress.startsWith('pending-') || !user.baseWalletAddress) {
+    // User exists but wallet(s) may need syncing
     try {
       const privyUser = await getPrivy().getUser(privyUserId);
-      const wallet = privyUser.wallet;
-      if (wallet?.address) {
+
+      const solanaWallet = privyUser.linkedAccounts?.find(
+        (a: any) => a.type === 'wallet' && a.chainType === 'solana'
+      ) as { address: string } | undefined;
+      const ethWallet = privyUser.linkedAccounts?.find(
+        (a: any) => a.type === 'wallet' && a.chainType === 'ethereum'
+      ) as { address: string } | undefined;
+
+      const updateData: Record<string, string> = {};
+      if (user.walletAddress.startsWith('pending-') && (solanaWallet?.address || privyUser.wallet?.address)) {
+        updateData.walletAddress = solanaWallet?.address || privyUser.wallet!.address;
+      }
+      if (!user.baseWalletAddress && ethWallet?.address) {
+        updateData.baseWalletAddress = ethWallet.address;
+      }
+
+      if (Object.keys(updateData).length > 0) {
         user = await prisma.user.update({
           where: { privyUserId },
-          data: { walletAddress: wallet.address },
+          data: updateData,
           select: {
             id: true,
             privyUserId: true,
             walletAddress: true,
+            baseWalletAddress: true,
+            primaryChain: true,
             role: true,
             isAdmin: true,
           },
         });
       }
     } catch (error: any) {
-      console.error('Failed to sync wallet address:', error?.message || error);
+      console.error('Failed to sync wallet addresses:', error?.message || error);
     }
   }
 
@@ -167,4 +204,26 @@ export async function requireAdmin(
     );
   }
   return user;
+}
+
+/**
+ * Returns the wallet address for a given chain, or null if unavailable.
+ */
+export function getWalletForChain(user: AuthUser, chain: string): string | null {
+  if (chain === 'base') {
+    return user.baseWalletAddress || null;
+  }
+  const addr = user.walletAddress;
+  return addr && !addr.startsWith('pending-') ? addr : null;
+}
+
+/**
+ * Extracts the chain parameter from the request URL query string.
+ * Defaults to 'solana' if not specified or invalid.
+ */
+export function getChainParam(request: NextRequest): 'solana' | 'base' {
+  const url = new URL(request.url);
+  const chain = url.searchParams.get('chain');
+  if (chain === 'base') return 'base';
+  return 'solana';
 }
