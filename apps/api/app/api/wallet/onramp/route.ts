@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, getWalletForChain } from '@/lib/auth';
 import { readLimiter, applyRateLimit } from '@/lib/ratelimit';
 
 /**
@@ -22,7 +22,7 @@ const SUPPORTED_COINS: Record<string, { cryptoCurrency: string; network: string 
  * Apple Pay, Google Pay, cards, and bank transfers across 150+ countries.
  * Asset code format: SOLANA_USDC
  */
-function buildRampUrl(walletAddress: string): string {
+function buildRampUrl(walletAddress: string, chain: string): string {
   const apiKey = process.env.RAMP_API_KEY || '';
   const env = process.env.RAMP_ENVIRONMENT || 'sandbox';
 
@@ -31,12 +31,15 @@ function buildRampUrl(walletAddress: string): string {
       ? 'https://app.rampnetwork.com'
       : 'https://app.demo.rampnetwork.com';
 
+  // Ramp asset code format is {NETWORK}_{ASSET}, e.g. SOLANA_USDC, BASE_USDC
+  const swapAsset = chain === 'base' ? 'BASE_USDC' : 'SOLANA_USDC';
+
   const params = new URLSearchParams({
     hostApiKey: apiKey,
     hostAppName: 'Momento',
-    swapAsset: 'SOLANA_USDC',
+    swapAsset,
     userAddress: walletAddress,
-    defaultAsset: 'SOLANA_USDC',
+    defaultAsset: swapAsset,
     fiatCurrency: 'USD',
   });
 
@@ -49,7 +52,7 @@ function buildRampUrl(walletAddress: string): string {
  * MoonPay supports Apple Pay, Google Pay, PayPal, Venmo, cards, and bank
  * transfers across 180+ countries. Currency code: usdc_sol.
  */
-function buildMoonPayUrl(walletAddress: string): string {
+function buildMoonPayUrl(walletAddress: string, chain: string): string {
   const apiKey = process.env.MOONPAY_API_KEY;
   const env = process.env.MOONPAY_ENVIRONMENT || 'sandbox';
 
@@ -58,9 +61,12 @@ function buildMoonPayUrl(walletAddress: string): string {
       ? 'https://buy.moonpay.com'
       : 'https://buy-sandbox.moonpay.com';
 
+  // MoonPay currency codes are network-suffixed: usdc_sol, usdc_base
+  const currencyCode = chain === 'base' ? 'usdc_base' : 'usdc_sol';
+
   const params = new URLSearchParams({
     apiKey: apiKey || 'pk_test_123',
-    currencyCode: 'usdc_sol',
+    currencyCode,
     walletAddress,
     baseCurrencyCode: 'usd',
     colorCode: '#00FF88',
@@ -146,7 +152,7 @@ async function getTransakAccessToken(): Promise<string> {
  *
  * Falls back to the 2-step API flow only if needed for advanced features.
  */
-function buildTransakDirectUrl(walletAddress: string): string {
+function buildTransakDirectUrl(walletAddress: string, chain: string): string {
   const { env, apiKey } = getTransakConfig();
 
   const base =
@@ -154,10 +160,13 @@ function buildTransakDirectUrl(walletAddress: string): string {
       ? 'https://global.transak.com'
       : 'https://global-stg.transak.com';
 
+  // Transak network slug is lowercase chain name
+  const network = chain === 'base' ? 'base' : 'solana';
+
   const params = new URLSearchParams({
     apiKey,
     cryptoCurrencyCode: 'USDC',
-    network: 'solana',
+    network,
     walletAddress,
     defaultCryptoCurrency: 'USDC',
     fiatCurrency: 'USD',
@@ -170,7 +179,9 @@ function buildTransakDirectUrl(walletAddress: string): string {
   return `${base}?${params.toString()}`;
 }
 
-async function buildTransakUrl(walletAddress: string): Promise<string> {
+async function buildTransakUrl(walletAddress: string, chain: string): Promise<string> {
+  const network = chain === 'base' ? 'base' : 'solana';
+
   // Try the 2-step API flow first (better UX, pre-authenticated session)
   try {
     const { apiKey, gatewayBase } = getTransakConfig();
@@ -187,7 +198,7 @@ async function buildTransakUrl(walletAddress: string): Promise<string> {
           apiKey,
           referrerDomain: 'momento-api-ten.vercel.app',
           cryptoCurrencyCode: 'USDC',
-          network: 'solana',
+          network,
           walletAddress,
           defaultCryptoCurrency: 'USDC',
           fiatCurrency: 'USD',
@@ -205,7 +216,7 @@ async function buildTransakUrl(walletAddress: string): Promise<string> {
       // Clear cached token so next attempt re-authenticates
       _transakAccessToken = null;
       _transakTokenExpiry = 0;
-      return buildTransakDirectUrl(walletAddress);
+      return buildTransakDirectUrl(walletAddress, chain);
     }
 
     const json = await res.json();
@@ -215,7 +226,7 @@ async function buildTransakUrl(walletAddress: string): Promise<string> {
     // Clear cached token
     _transakAccessToken = null;
     _transakTokenExpiry = 0;
-    return buildTransakDirectUrl(walletAddress);
+    return buildTransakDirectUrl(walletAddress, chain);
   }
 }
 
@@ -234,15 +245,9 @@ export async function GET(request: NextRequest) {
 
     const user = await requireAuth(request);
 
-    if (!user.walletAddress || user.walletAddress.startsWith('pending-')) {
-      return NextResponse.json(
-        { success: false, error: 'Wallet not ready. Please try again in a moment.' },
-        { status: 400 }
-      );
-    }
-
     const { searchParams } = new URL(request.url);
     const provider = (searchParams.get('provider') || 'ramp') as OnrampProvider;
+    const chain = searchParams.get('chain') || 'solana';
 
     if (!PROVIDERS.includes(provider)) {
       return NextResponse.json(
@@ -251,16 +256,25 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Resolve wallet address for the requested chain
+    const walletAddress = getWalletForChain(user, chain);
+    if (!walletAddress) {
+      return NextResponse.json(
+        { success: false, error: `No ${chain} wallet found. Please try again in a moment.` },
+        { status: 400 }
+      );
+    }
+
     let url: string;
     switch (provider) {
       case 'ramp':
-        url = buildRampUrl(user.walletAddress);
+        url = buildRampUrl(walletAddress, chain);
         break;
       case 'moonpay':
-        url = buildMoonPayUrl(user.walletAddress);
+        url = buildMoonPayUrl(walletAddress, chain);
         break;
       case 'transak':
-        url = await buildTransakUrl(user.walletAddress);
+        url = await buildTransakUrl(walletAddress, chain);
         break;
     }
 
@@ -270,7 +284,8 @@ export async function GET(request: NextRequest) {
         url,
         provider,
         coin: 'USDC',
-        walletAddress: user.walletAddress,
+        walletAddress,
+        chain,
       },
     });
   } catch (error) {

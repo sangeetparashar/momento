@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, getWalletForChain, type AuthUser } from '@/lib/auth';
 import { writeLimiter, applyRateLimit } from '@/lib/ratelimit';
+import { CHAIN_CONFIG } from '@momento/shared';
 import {
   Connection,
   PublicKey,
@@ -43,7 +44,7 @@ export async function POST(request: NextRequest) {
     const user = await requireAuth(request);
 
     const body = await request.json();
-    const { recipientAddress, amount, token } = body;
+    const { recipientAddress, amount, token, chain = 'solana' } = body;
 
     // Validate inputs
     if (!recipientAddress || !amount || !token) {
@@ -53,9 +54,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!['SOL', 'USDC'].includes(token)) {
+    if (!['SOL', 'USDC', 'ETH'].includes(token)) {
       return NextResponse.json(
-        { success: false, error: 'token must be SOL or USDC' },
+        { success: false, error: 'token must be SOL, USDC, or ETH' },
         { status: 400 },
       );
     }
@@ -66,6 +67,11 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'amount must be a positive number' },
         { status: 400 },
       );
+    }
+
+    // --- BASE CHAIN ---
+    if (chain === 'base') {
+      return handleBaseSend(user, recipientAddress, parsedAmount, token);
     }
 
     // Validate addresses
@@ -168,4 +174,87 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+}
+
+/**
+ * Builds an unsigned EVM transaction for Base chain.
+ * Returns raw EVM tx params (to/value/data) instead of a serialized transaction —
+ * the mobile client signs and submits via the Privy ETH wallet provider.
+ */
+function handleBaseSend(
+  user: AuthUser,
+  recipientAddress: string,
+  amount: number,
+  token: string,
+) {
+  const walletAddress = getWalletForChain(user, 'base');
+  if (!walletAddress) {
+    return NextResponse.json(
+      { success: false, error: 'No Base wallet found for user' },
+      { status: 400 },
+    );
+  }
+
+  // Validate Base address format (0x + 40 hex chars)
+  if (!/^0x[a-fA-F0-9]{40}$/.test(recipientAddress)) {
+    return NextResponse.json(
+      { success: false, error: 'Invalid Base/Ethereum address' },
+      { status: 400 },
+    );
+  }
+
+  // Prevent self-send (case-insensitive for hex addresses)
+  if (recipientAddress.toLowerCase() === walletAddress.toLowerCase()) {
+    return NextResponse.json(
+      { success: false, error: 'Cannot send to yourself' },
+      { status: 400 },
+    );
+  }
+
+  if (token === 'ETH') {
+    // Native ETH transfer — simple value transfer
+    const weiAmount = BigInt(Math.floor(amount * 1e18));
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        chain: 'base',
+        transactionType: 'native',
+        to: recipientAddress,
+        value: '0x' + weiAmount.toString(16),
+        from: walletAddress,
+        chainId: 8453,
+      },
+    });
+  }
+
+  if (token === 'USDC') {
+    // ERC-20 transfer — encode transfer(address,uint256) calldata
+    const usdcAddress = CHAIN_CONFIG.base.usdcAddress;
+    const usdcDecimals = CHAIN_CONFIG.base.usdcDecimals; // 6
+    const rawAmount = BigInt(Math.floor(amount * Math.pow(10, usdcDecimals)));
+
+    // Function selector for transfer(address,uint256): 0xa9059cbb
+    const recipientPadded = recipientAddress.slice(2).toLowerCase().padStart(64, '0');
+    const amountPadded = rawAmount.toString(16).padStart(64, '0');
+    const data = '0xa9059cbb' + recipientPadded + amountPadded;
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        chain: 'base',
+        transactionType: 'erc20',
+        to: usdcAddress,
+        value: '0x0',
+        data,
+        from: walletAddress,
+        chainId: 8453,
+      },
+    });
+  }
+
+  return NextResponse.json(
+    { success: false, error: 'Unsupported token for Base chain. Use ETH or USDC.' },
+    { status: 400 },
+  );
 }
