@@ -44,7 +44,13 @@ export async function GET(request: NextRequest) {
         );
       }
 
-      const takerAddress = getWalletForChain(user, 'base') || undefined;
+      const takerAddress = getWalletForChain(user, 'base');
+      if (!takerAddress) {
+        return NextResponse.json(
+          { success: false, error: 'No Base wallet found for this user' },
+          { status: 400 }
+        );
+      }
 
       const quote = await getBaseSwapQuote({
         sellToken,
@@ -135,9 +141,13 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // The quote was tagged with the originating taker inside getBaseSwapQuote.
+      // buildBaseSwapTransaction cross-checks that taker against this session
+      // wallet and throws if they don't match (HIGH security fix — prevents
+      // building one user's quote against another user's wallet).
       const result = await buildBaseSwapTransaction({
         quoteResponse,
-        userAddress: walletAddress,
+        userPublicKey: walletAddress,
       });
 
       return NextResponse.json({
