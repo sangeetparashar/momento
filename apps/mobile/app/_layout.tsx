@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryProvider, QueryCacheCleaner } from '@/providers/QueryProvider';
 import { PrivyGuard } from '@/providers/PrivyGuard';
+import { ChainProvider } from '@/providers/ChainProvider';
 import { LocationProvider } from '@/providers/LocationProvider';
 import { NotificationProvider } from '@/providers/NotificationProvider';
 import { useAuth } from '@/hooks/useAuth';
@@ -87,6 +88,7 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <QueryProvider>
           <PrivyGuard>
+            <ChainProvider>
             <AuthAwareQueryCacheCleaner />
             <LocationProvider>
               <NotificationProvider>
@@ -169,6 +171,7 @@ export default function RootLayout() {
                 </ErrorBoundary>
               </NotificationProvider>
             </LocationProvider>
+            </ChainProvider>
           </PrivyGuard>
         </QueryProvider>
       </SafeAreaProvider>

@@ -313,6 +313,33 @@ function MWAWalletLogin({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
+// ── Base (Ethereum) wallet login ────────────────────────────────────────────
+// Wired to useAuth.loginWithEthWallet via SIWE. Currently shows a "coming
+// soon" alert because external Base wallet connection (WalletConnect / Coinbase
+// Wallet SDK) is not yet integrated. The SIWE flow itself is fully implemented
+// and ready to wire up once an external EVM wallet connector is in place.
+function BaseWalletLogin() {
+  const handleConnect = useCallback(() => {
+    Alert.alert(
+      'Coming Soon',
+      'External Base wallet connection (WalletConnect / Coinbase) is coming in the next release. OAuth users automatically get a Base wallet alongside their Solana wallet.',
+    );
+  }, []);
+
+  return (
+    <TouchableOpacity
+      onPress={handleConnect}
+      style={[styles.walletButton, styles.baseWalletButton]}
+      activeOpacity={0.7}
+    >
+      <Ionicons name="wallet-outline" size={20} color="#0052FF" />
+      <Text style={[styles.walletButtonText, styles.baseWalletButtonText]}>
+        CONNECT BASE WALLET
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 // ── Main login screen ────────────────────────────────────────────────────────
 
 export default function LoginScreen() {
@@ -390,6 +417,8 @@ export default function LoginScreen() {
                 /* Fallback: Phantom deeplink (two round-trips) */
                 <PhantomWalletLogin onSuccess={handleWalletSuccess} />
               )}
+              {/* Base / Ethereum wallet login (placeholder until WalletConnect wired) */}
+              <BaseWalletLogin />
             </>
           )}
 
@@ -437,6 +466,13 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: COLORS.primary + '40', gap: SPACING.sm,
   },
   walletButtonText: { ...TYPOGRAPHY.body, color: COLORS.primary, fontWeight: '700', letterSpacing: 1.5, fontSize: 14 },
+  baseWalletButton: {
+    marginTop: SPACING.sm,
+    borderColor: '#0052FF' + '60',
+  },
+  baseWalletButtonText: {
+    color: '#0052FF',
+  },
   loginLink: { marginTop: SPACING.lg, paddingVertical: SPACING.sm },
   loginText: { ...TYPOGRAPHY.bodySmall, color: COLORS.textSecondary, letterSpacing: 1.5, fontWeight: '600', fontSize: 12 },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },

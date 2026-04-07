@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { usePrivyGuard } from '@/providers/PrivyGuard';
+import { useChain } from '@/providers/ChainProvider';
 import { queryClient } from '@/providers/QueryProvider';
+import type { ChainType } from '@momento/shared';
 
 // Re-export for convenience
 export { usePrivyGuard };
@@ -17,7 +19,9 @@ let _privyHooks: {
   usePrivy: any;
   useLoginWithOAuth: any;
   useEmbeddedSolanaWallet: any;
+  useEmbeddedEthereumWallet: any;
   useLoginWithSiws: any;
+  useLoginWithSiwe: any;
 } | false | null = null;
 
 function getPrivyHooks() {
@@ -28,7 +32,9 @@ function getPrivyHooks() {
         usePrivy: privy.usePrivy,
         useLoginWithOAuth: privy.useLoginWithOAuth,
         useEmbeddedSolanaWallet: privy.useEmbeddedSolanaWallet,
+        useEmbeddedEthereumWallet: privy.useEmbeddedEthereumWallet,
         useLoginWithSiws: privy.useLoginWithSiws,
+        useLoginWithSiwe: privy.useLoginWithSiwe,
       };
     } catch {
       _privyHooks = false;
@@ -66,6 +72,15 @@ const GUEST_AUTH = {
   walletAddress: null as string | null,
   walletStatus: 'disconnected' as string,
   getWalletProvider: async () => null as any,
+  // Multi-chain (Base/ETH) fields
+  ethWalletAddress: null as string | null,
+  ethWalletStatus: 'disconnected' as string,
+  getEthWalletProvider: async () => null as any,
+  loginWithEthWallet: async () => {
+    console.warn('[useAuth] Privy not available in Expo Go — use a development build.');
+  },
+  generateSiweMessage: async () => '',
+  siweLogin: async () => {},
 };
 
 /**
@@ -76,6 +91,7 @@ const GUEST_AUTH = {
 export function useAuth() {
   const { isPrivyAvailable } = usePrivyGuard();
   const creatingRef = useRef(false);
+  const ethCreatingRef = useRef(false);
 
   if (!isPrivyAvailable) {
     return GUEST_AUTH;
@@ -90,6 +106,17 @@ export function useAuth() {
   const { login: oauthLogin } = hooks.useLoginWithOAuth();
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const siws = hooks.useLoginWithSiws();
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const siwe = hooks.useLoginWithSiwe({
+    onSuccess: () => {
+      console.log('[useAuth] SIWE login success');
+    },
+    onError: (err: any) => {
+      console.warn('[useAuth] SIWE login error:', err?.message || err);
+    },
+  });
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const { setAvailableChains } = useChain();
 
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const solanaWallet = hooks.useEmbeddedSolanaWallet({
@@ -103,9 +130,11 @@ export function useAuth() {
     },
   });
 
-  // Auto-create wallet when user is logged in but wallet doesn't exist yet.
-  // Skip if already attempted (creatingRef) to avoid retrying on 'error' status
-  // caused by the wallet already existing (race between SDK connect and our effect).
+  // ETH wallet hook takes NO callbacks/options in @privy-io/expo 0.63.9
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const ethWallet = hooks.useEmbeddedEthereumWallet();
+
+  // Auto-create Solana wallet when user is logged in but wallet doesn't exist yet.
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     if (
@@ -113,13 +142,11 @@ export function useAuth() {
       solanaWallet.status === 'not-created' &&
       !creatingRef.current
     ) {
-      // Small delay to let the SDK finish connecting an existing wallet
       const timer = setTimeout(() => {
         if (creatingRef.current) return;
         console.log('[useAuth] User logged in but no Solana wallet — creating...');
         creatingRef.current = true;
         solanaWallet.create({ recoveryMethod: 'privy' }).catch((err: any) => {
-          // "already exists" is expected if SDK connected between our check and create call
           if (err?.message?.includes('already exists')) {
             console.log('[useAuth] Wallet already exists — skipping creation');
           } else {
@@ -132,15 +159,45 @@ export function useAuth() {
     }
   }, [privy.user, solanaWallet.status]);
 
-  // Log wallet status changes for debugging
+  // ETH wallet doesn't have a `status` field — derive from `wallets.length`.
+  // Auto-create when user is logged in but no ETH wallet exists yet.
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
-    console.log('[useAuth] Wallet status:', solanaWallet.status);
+    const hasEthWallet = (ethWallet?.wallets?.length ?? 0) > 0;
+    if (privy.user && !hasEthWallet && !ethCreatingRef.current) {
+      // 2000ms delay (after Solana's 1500ms) to avoid hammering Privy on cold start.
+      const timer = setTimeout(() => {
+        if (ethCreatingRef.current) return;
+        console.log('[useAuth] User logged in but no ETH wallet — creating...');
+        ethCreatingRef.current = true;
+        ethWallet
+          .create()
+          .then((res: any) => {
+            console.log('[useAuth] ETH wallet created successfully:', res?.user?.id);
+            ethCreatingRef.current = false;
+          })
+          .catch((err: any) => {
+            if (err?.message?.includes('already exists')) {
+              console.log('[useAuth] ETH wallet already exists — skipping creation');
+            } else {
+              console.warn('[useAuth] ETH wallet create() rejected:', err?.message || err);
+            }
+            ethCreatingRef.current = false;
+          });
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [privy.user, ethWallet?.wallets?.length]);
+
+  // Log Solana wallet status changes for debugging
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    console.log('[useAuth] Solana wallet status:', solanaWallet.status);
     if (solanaWallet.status === 'connected' && solanaWallet.wallets?.length > 0) {
-      console.log('[useAuth] Wallet address:', solanaWallet.wallets[0].address);
+      console.log('[useAuth] Solana wallet address:', solanaWallet.wallets[0].address);
     }
     if (solanaWallet.status === 'error') {
-      console.warn('[useAuth] Wallet error (transient on cold start):', (solanaWallet as any).error);
+      console.warn('[useAuth] Solana wallet error (transient on cold start):', (solanaWallet as any).error);
     }
   }, [solanaWallet.status]);
 
@@ -148,6 +205,25 @@ export function useAuth() {
     solanaWallet.status === 'connected' && solanaWallet.wallets?.length > 0
       ? solanaWallet.wallets[0].address
       : null;
+
+  // ETH wallet has no status — derive from wallets array
+  const ethWalletAddress =
+    (ethWallet?.wallets?.length ?? 0) > 0 ? ethWallet.wallets[0].address : null;
+  const ethWalletStatus: string = ethWalletAddress
+    ? 'connected'
+    : ethCreatingRef.current
+      ? 'creating'
+      : 'not-created';
+
+  // Update available chains when wallet statuses change
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    const chains: ChainType[] = [];
+    if (walletAddress) chains.push('solana');
+    if (ethWalletAddress) chains.push('base');
+    if (chains.length === 0) chains.push('solana'); // sensible default
+    setAvailableChains(chains);
+  }, [walletAddress, ethWalletAddress, setAvailableChains]);
 
   /**
    * Returns the Privy Solana provider for signing transactions.
@@ -170,9 +246,22 @@ export function useAuth() {
   };
 
   /**
+   * Returns the Privy Ethereum (Base) provider for signing transactions.
+   */
+  const getEthWalletProvider = async () => {
+    if (!ethWallet?.wallets?.length) {
+      return null;
+    }
+    try {
+      return await ethWallet.wallets[0].getProvider();
+    } catch (err: any) {
+      console.warn('[useAuth] getEthProvider failed:', err?.message);
+      return null;
+    }
+  };
+
+  /**
    * Login with an external Solana wallet via SIWS (Sign In With Solana).
-   * Takes the wallet address, a signMessage function, and optional wallet metadata.
-   * Works with both Phantom deeplink and MWA (Mobile Wallet Adapter).
    */
   const loginWithWallet = async (
     externalAddress: string,
@@ -181,7 +270,6 @@ export function useAuth() {
   ) => {
     console.log('[useAuth] Starting SIWS login for wallet:', externalAddress);
 
-    // 1. Generate the SIWS message
     const { message } = await siws.generateMessage({
       wallet: { address: externalAddress },
       from: {
@@ -190,10 +278,8 @@ export function useAuth() {
       },
     });
 
-    // 2. Sign with the external wallet
     const { signature } = await signMessage(message);
 
-    // 3. Login via Privy SIWS
     await siws.login({
       signature,
       message,
@@ -204,6 +290,43 @@ export function useAuth() {
     });
 
     console.log('[useAuth] SIWS login complete');
+  };
+
+  /**
+   * Login with an external Ethereum/Base wallet via SIWE (Sign In With Ethereum / EIP-4361).
+   *
+   * Note: Privy's `useLoginWithSiwe` returns `generateSiweMessage` (resolves to a `string`,
+   * NOT `{message}`) and `loginWithSiwe` (which caches the message internally and only
+   * needs the signature).
+   */
+  const loginWithEthWallet = async (
+    externalAddress: string,
+    signMessage: (message: string) => Promise<{ signature: string }>,
+    _walletMeta?: { walletClientType?: string; connectorType?: string },
+  ) => {
+    if (!siwe) {
+      throw new Error('SIWE login not available');
+    }
+    console.log('[useAuth] Starting SIWE login for wallet:', externalAddress);
+
+    const message: string = await siwe.generateSiweMessage({
+      wallet: { address: externalAddress },
+      from: {
+        domain: 'momento.app',
+        uri: 'https://momento.app',
+      },
+    });
+
+    const { signature } = await signMessage(message);
+
+    await siwe.loginWithSiwe({
+      signature,
+      // The hook caches the generated message internally; messageOverride only
+      // needed if the message we sent differs from cache. We pass it for safety.
+      messageOverride: message,
+    });
+
+    console.log('[useAuth] SIWE login complete');
   };
 
   return {
@@ -218,9 +341,6 @@ export function useAuth() {
     /** Complete SIWS login with a pre-signed message. */
     siwsLogin: siws.login,
     logout: async () => {
-      // Cancel all in-flight queries BEFORE logout to prevent
-      // "query dehydrated as pending ended up rejected" errors.
-      // Queries like walletBalance will get 401 after auth is cleared.
       queryClient.cancelQueries();
       queryClient.clear();
       await privy.logout();
@@ -229,5 +349,14 @@ export function useAuth() {
     walletAddress,
     walletStatus: solanaWallet.status,
     getWalletProvider,
+    // Multi-chain (Base / ETH) fields
+    ethWalletAddress,
+    ethWalletStatus,
+    getEthWalletProvider,
+    loginWithEthWallet,
+    /** Generate a SIWE (EIP-4361) message for an external Ethereum wallet. */
+    generateSiweMessage: siwe?.generateSiweMessage,
+    /** Complete SIWE login with a pre-signed message. */
+    siweLogin: siwe?.loginWithSiwe,
   };
 }

@@ -59,6 +59,7 @@ function PrivyWithAuth({ children }: { children: React.ReactNode }) {
         clientId="client-WY6UDfFofojZafsbGzmGDGYExCP86xeQuKCcUvoyGmpqZ"
         config={{
           embedded: {
+            ethereum: { createOnLogin: 'users-without-wallets' },
             solana: { createOnLogin: 'users-without-wallets' },
           },
         }}
