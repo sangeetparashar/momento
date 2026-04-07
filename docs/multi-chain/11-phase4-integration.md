@@ -155,10 +155,12 @@ LIMIT 10;
 |----------|-------|-----------|-------|
 | `BASE_RPC_URL` | API .env | Optional | Defaults to public Base RPC |
 | `ALCHEMY_API_KEY` | API .env | Optional | Enables broader token discovery |
-| `ZEROX_API_KEY` | API .env | Recommended | Free tier available at 0x.org |
-| `BASE_FEE_WALLET` | API .env | Optional | 0x address for platform fees |
+| `BASE_FEE_WALLET` | API .env | Optional | 0x address for platform fees (KyberSwap) |
+| `KYBER_CLIENT_ID` | API .env | Optional | Friendlier rate limits, defaults to "momento" |
 | `EXPO_PUBLIC_BASE_RPC_URL` | Mobile .env | Optional | Defaults to public Base RPC |
 | `EXPO_PUBLIC_BASE_CHAIN_ID` | Mobile .env | Optional | Defaults to 8453 |
+
+> **Note:** The original plan called for `ZEROX_API_KEY`. 0x sunset their free Swap API v1 in April 2025, so we replaced 0x with **KyberSwap Aggregator** (free, no API key required, aggregates DEXes on Base). See `apps/api/lib/base-swap.ts`.
 
 ### Existing Variables (Unchanged)
 All Solana-related variables remain unchanged and required for Solana chain to function.
@@ -168,17 +170,21 @@ All Solana-related variables remain unchanged and required for Solana chain to f
 ## Step 6: Known Limitations & Future Work
 
 ### Limitations in This Implementation
-1. **No WalletConnect on mobile yet**: External Base wallet login may be limited to Privy's built-in connectors. Full WalletConnect integration is a follow-up.
-2. **Limited Base token discovery**: Without Alchemy API key, only known tokens (USDC, DAI, WETH) are checked.
-3. **No 24h change tracking for Base**: The `change24h` field returns 0 for Base chain balances.
-4. **Single swap provider (0x)**: No aggregation fallback for Base swaps.
+1. **No WalletConnect on mobile yet**: External Base wallet login button in `login.tsx` shows a "Coming Soon" alert. SIWE wiring is in place in `useAuth.loginWithEthWallet`; just needs an external EVM connector (WalletConnect v2 or Coinbase Wallet SDK) to provide the address + sign function.
+2. **Limited Base token discovery**: Without `ALCHEMY_API_KEY`, only known tokens (USDC, DAI, WETH) are priced. Other tokens discovered via the optional Alchemy path appear in the list but have no `priceUsd`.
+3. **24h change tracking**: ETH price 24h change is now surfaced as the wallet screen's "(24h)" indicator on Base via CoinGecko's `usd_24h_change`. (Previous version returned 0.) Solana still inherits its 24h change behavior from Helius.
+4. **Single swap provider (KyberSwap)**: No aggregation fallback for Base swaps. KyberSwap rate limits are undocumented; sending `X-Client-Id: momento` for friendlier limits.
 5. **Portfolio history**: Price chart shows ETH price (not portfolio value) for Base chain until sufficient snapshots accumulate.
-6. **Fee collection on Base**: Requires 0x feeRecipient parameter — less battle-tested than Jupiter platform fees.
+6. **Fee collection on Base**: Configured via `BASE_FEE_WALLET` env var, threaded through KyberSwap's `chargeFeeBy=currency_out` + `feeAmount` (bps from `MOMENTO_PLATFORM_FEE_BPS`, default 4%) + `feeReceiver`. Gracefully no-ops if `BASE_FEE_WALLET` is unset.
+7. **`solBalance`/`solValueUsd` columns hold ETH on Base snapshots**: cosmetic — both the `native` and `sol` fields in the snapshots response come from the same column. A future migration should rename these columns to `nativeBalance`/`nativeValueUsd`.
+8. **KyberSwap requires separate ERC-20 approval** for non-native sells: mobile client correctly handles this via `requiresApproval` + `allowanceTarget` flow in `useSwap.executeSwap`.
 
 ### Recommended Follow-ups
-1. **Add viem**: Replace raw `eth_call` / `eth_getBalance` with viem for type safety and better error handling.
-2. **WalletConnect v2**: Full WalletConnect integration for mobile Base wallet connections.
-3. **Token metadata API**: Use Alchemy or Moralis for automatic token logo/name resolution on Base.
-4. **Gas estimation**: Show estimated gas cost in USD before Base transactions.
-5. **Multi-chain portfolio chart**: Combine Solana + Base portfolio values in a single chart.
-6. **Bridge integration**: Allow users to bridge assets between Solana and Base (e.g., via Wormhole or deBridge).
+1. **WalletConnect v2**: Full WalletConnect integration so the "Connect Base Wallet" button in `login.tsx` can actually connect a MetaMask / Coinbase Wallet. Wire its address+sign function into `auth.loginWithEthWallet`.
+2. **Add viem**: Replace raw `eth_call` / `eth_getBalance` / `parseUnits` / `formatUnits` helpers with viem for type safety and better error handling.
+3. **Schema rename migration**: `solBalance` → `nativeBalance`, `solValueUsd` → `nativeValueUsd` in `PortfolioSnapshot`. Keeps DB column names honest on Base.
+4. **Token metadata API**: Use Alchemy or Moralis for automatic token logo/name/price resolution on Base.
+5. **Gas estimation**: Show estimated gas cost in USD before Base transactions (call `eth_estimateGas` + `eth_gasPrice`).
+6. **Multi-chain portfolio chart**: Combine Solana + Base portfolio values in a single chart.
+7. **Bridge integration**: Allow users to bridge assets between Solana and Base (e.g., via Wormhole or deBridge).
+8. **Initial `availableChains` flash**: ChainProvider briefly shows single Solana state on first mount until `useAuth`'s effect runs (~2s). Consider initializing from a fast synchronous check.

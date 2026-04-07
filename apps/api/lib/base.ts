@@ -259,19 +259,35 @@ async function getTokenBalancesAlchemy(
  * so caching protects us against bursts of wallet-balance requests.
  */
 async function getEthPriceUsd(): Promise<number> {
-  return getOrSetCache<number>('price:eth-usd', 60, async () => {
-    try {
-      const res = await fetch(
-        'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd',
-        { headers: { Accept: 'application/json' } }
-      );
-      const json = await res.json();
-      return json?.ethereum?.usd ?? 0;
-    } catch (error) {
-      console.error('Failed to fetch ETH price:', error);
-      return 0;
-    }
-  });
+  const { price } = await getEthPriceData();
+  return price;
+}
+
+/**
+ * Fetch ETH price + 24h change from CoinGecko in a single call. Cached for
+ * 60s to protect against bursts and CoinGecko's free-tier rate limits.
+ */
+async function getEthPriceData(): Promise<{ price: number; change24h: number }> {
+  return getOrSetCache<{ price: number; change24h: number }>(
+    'price:eth-usd:full',
+    60,
+    async () => {
+      try {
+        const res = await fetch(
+          'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd&include_24hr_change=true',
+          { headers: { Accept: 'application/json' } }
+        );
+        const json = await res.json();
+        return {
+          price: json?.ethereum?.usd ?? 0,
+          change24h: json?.ethereum?.usd_24h_change ?? 0,
+        };
+      } catch (error) {
+        console.error('Failed to fetch ETH price:', error);
+        return { price: 0, change24h: 0 };
+      }
+    },
+  );
 }
 
 /**
@@ -282,7 +298,7 @@ export async function fetchBaseWalletBalance(walletAddress: string): Promise<Wal
   // ETH price is fetched first so it can be threaded into token pricing
   // (e.g. so WETH gets a valueUsd). It's cached, so this is essentially free
   // on the hot path.
-  const ethPriceUsd = await getEthPriceUsd();
+  const { price: ethPriceUsd, change24h: ethChange24h } = await getEthPriceData();
 
   const [ethBalance, tokens] = await Promise.all([
     getEthBalance(walletAddress),
@@ -305,6 +321,8 @@ export async function fetchBaseWalletBalance(walletAddress: string): Promise<Wal
 
     tokens,
     totalValueUsd: totalValueUsd || undefined,
-    change24h: 0,
+    // Native asset 24h change. The mobile wallet screen displays this
+    // as the headline "(24h)" indicator.
+    change24h: ethChange24h,
   };
 }
