@@ -37,6 +37,8 @@ export const cacheKeys = {
     `post:${postId}:comments:${cursor || 'first'}`,
 
   creatorLeaderboard: () => 'creators:leaderboard',
+
+  priceHistory: (coinId: string, range: string) => `price:history:${coinId}:${range}`,
 };
 
 // ─── TTLs (in seconds) ─────────────────────────────────────────────────────

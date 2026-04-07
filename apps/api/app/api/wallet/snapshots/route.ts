@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, getChainParam } from '@/lib/auth';
 import { readLimiter, applyRateLimit } from '@/lib/ratelimit';
 import prisma from '@/lib/prisma';
 
@@ -16,6 +16,7 @@ export async function GET(request: NextRequest) {
     const rateLimitResponse = await applyRateLimit(request, readLimiter);
     if (rateLimitResponse) return rateLimitResponse;
     const user = await requireAuth(request);
+    const chain = getChainParam(request);
 
     const { searchParams } = new URL(request.url);
     const range = searchParams.get('range') || '1M';
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
     const snapshots = await prisma.portfolioSnapshot.findMany({
       where: {
         userId: user.id,
+        chain,
         createdAt: { gte: since },
       },
       orderBy: { createdAt: 'asc' },
@@ -51,6 +53,7 @@ export async function GET(request: NextRequest) {
     const points = data.map((s) => ({
       t: s.createdAt.getTime(),
       p: Math.round(s.totalValueUsd * 100) / 100,
+      native: Math.round(s.solValueUsd * 100) / 100,
       sol: Math.round(s.solValueUsd * 100) / 100,
       tokens: Math.round(s.tokenValueUsd * 100) / 100,
     }));
