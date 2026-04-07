@@ -20,10 +20,18 @@ import { useSwap, TOKEN_MINTS } from '@/hooks/useSwap';
 import { useAuth } from '@/hooks/useAuth';
 import { useChain } from '@/hooks/useChain';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
+import { useUserProfile } from '@/hooks/useUserProfile';
 import { CHAIN_CONFIG } from '@momento/shared';
+import type { ChainType } from '@momento/shared';
 
-const TX_STORAGE_KEY = 'momento_recent_txs';
+const TX_STORAGE_KEY_BASE = 'momento_recent_txs';
 const MAX_TX_RECORDS = 20;
+
+/** Per-user, per-chain tx storage key — must match wallet.tsx getTxStorageKey */
+function getTxStorageKey(userId: string | undefined, chain: ChainType): string {
+  if (!userId) return `${TX_STORAGE_KEY_BASE}:${chain}`;
+  return `${TX_STORAGE_KEY_BASE}:${userId}:${chain}`;
+}
 
 /** Native ETH placeholder address used by KyberSwap/0x */
 const ETH_NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
@@ -74,6 +82,7 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
   const auth = useAuth();
   const { walletAddress } = auth;
   const { chain } = useChain();
+  const { user: profile } = useUserProfile();
   const { quote, status, error, fetchQuote, executeSwap, reset } = useSwap();
   const balanceQuery = useWalletBalance(visible);
 
@@ -188,7 +197,8 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
 
       // Persist tx record for wallet history
       try {
-        const raw = await AsyncStorage.getItem(TX_STORAGE_KEY);
+        const txKey = getTxStorageKey(profile?.id, chain);
+        const raw = await AsyncStorage.getItem(txKey);
         const existing = raw ? JSON.parse(raw) : [];
         const record = {
           signature,
@@ -197,7 +207,7 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
           timestamp: Date.now(),
         };
         const updated = [record, ...existing].slice(0, MAX_TX_RECORDS);
-        await AsyncStorage.setItem(TX_STORAGE_KEY, JSON.stringify(updated));
+        await AsyncStorage.setItem(txKey, JSON.stringify(updated));
       } catch {
         // non-critical — don't block success flow
       }

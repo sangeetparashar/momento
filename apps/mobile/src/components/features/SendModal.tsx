@@ -21,12 +21,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/hooks/useAuth';
 import { useChain } from '@/hooks/useChain';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
+import { useUserProfile } from '@/hooks/useUserProfile';
 import { apiService } from '@/services/api';
 import { ENV } from '@/config/env';
 import { CHAIN_CONFIG } from '@momento/shared';
+import type { ChainType } from '@momento/shared';
 
-const TX_STORAGE_KEY = 'momento_recent_txs';
+const TX_STORAGE_KEY_BASE = 'momento_recent_txs';
 const MAX_TX_RECORDS = 20;
+
+/** Per-user, per-chain tx storage key — must match wallet.tsx getTxStorageKey */
+function getTxStorageKey(userId: string | undefined, chain: ChainType): string {
+  if (!userId) return `${TX_STORAGE_KEY_BASE}:${chain}`;
+  return `${TX_STORAGE_KEY_BASE}:${userId}:${chain}`;
+}
 const BASE_CHAIN_ID_HEX = '0x2105'; // 8453
 
 interface SendModalProps {
@@ -60,6 +68,7 @@ export function SendModal({ visible, onClose }: SendModalProps) {
   const auth = useAuth();
   const { walletAddress, getWalletProvider } = auth;
   const { chain } = useChain();
+  const { user: profile } = useUserProfile();
   const balanceQuery = useWalletBalance();
   const balance: any = balanceQuery.data;
 
@@ -254,7 +263,8 @@ export function SendModal({ visible, onClose }: SendModalProps) {
 
       // Store in local tx history
       try {
-        const raw = await AsyncStorage.getItem(TX_STORAGE_KEY);
+        const txKey = getTxStorageKey(profile?.id, chain);
+        const raw = await AsyncStorage.getItem(txKey);
         const existing = raw ? JSON.parse(raw) : [];
         const newTx = {
           signature,
@@ -264,7 +274,7 @@ export function SendModal({ visible, onClose }: SendModalProps) {
           timestamp: Date.now(),
         };
         const updated = [newTx, ...existing].slice(0, MAX_TX_RECORDS);
-        await AsyncStorage.setItem(TX_STORAGE_KEY, JSON.stringify(updated));
+        await AsyncStorage.setItem(txKey, JSON.stringify(updated));
       } catch { /* storage failure is non-critical */ }
 
       // Refresh balance
