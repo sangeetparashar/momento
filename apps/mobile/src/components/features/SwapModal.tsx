@@ -18,14 +18,15 @@ import { TYPOGRAPHY } from '@/styles/typography';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSwap, TOKEN_MINTS } from '@/hooks/useSwap';
 import { useAuth } from '@/hooks/useAuth';
+import { useChain } from '@/hooks/useChain';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
+import { CHAIN_CONFIG } from '@momento/shared';
 
 const TX_STORAGE_KEY = 'momento_recent_txs';
 const MAX_TX_RECORDS = 20;
 
-const SOLSCAN_BASE = __DEV__
-  ? 'https://solscan.io'  // devnet: 'https://solscan.io' with ?cluster=devnet
-  : 'https://solscan.io';
+/** Native ETH placeholder address used by KyberSwap/0x */
+const ETH_NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 
 interface SwapModalProps {
   visible: boolean;
@@ -36,10 +37,13 @@ interface SwapModalProps {
 const SOL_DECIMALS = 9;
 const USDC_DECIMALS = 6;
 
-/** Minimum swap amounts */
-const MIN_SWAP: Record<string, number> = { SOL: 0.01, USDC: 1 };
-/** Minimum SOL required in wallet for transaction fees */
-const MIN_SOL_FOR_FEES = 0.005;
+/** Minimum swap amounts (per native symbol) */
+const MIN_SWAP: Record<string, number> = { SOL: 0.01, ETH: 0.001, USDC: 1 };
+/** Minimum native balance required in wallet for transaction fees */
+const MIN_NATIVE_FOR_FEES: Record<'solana' | 'base', number> = {
+  solana: 0.005,
+  base: 0.0002,
+};
 
 interface TokenInfo {
   symbol: string;
@@ -48,9 +52,14 @@ interface TokenInfo {
   icon: string;
 }
 
-const TOKENS: TokenInfo[] = [
+const SOLANA_TOKENS: TokenInfo[] = [
   { symbol: 'SOL', mint: TOKEN_MINTS.SOL, decimals: SOL_DECIMALS, icon: '◎' },
   { symbol: 'USDC', mint: TOKEN_MINTS.USDC, decimals: USDC_DECIMALS, icon: '$' },
+];
+
+const BASE_TOKENS: TokenInfo[] = [
+  { symbol: 'ETH', mint: ETH_NATIVE, decimals: 18, icon: 'Ξ' },
+  { symbol: 'USDC', mint: CHAIN_CONFIG.base.usdcAddress, decimals: USDC_DECIMALS, icon: '$' },
 ];
 
 /**
@@ -62,12 +71,19 @@ const TOKENS: TokenInfo[] = [
 export function SwapModal({ visible, onClose }: SwapModalProps) {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { walletAddress } = useAuth();
+  const auth = useAuth() as any;
+  const { walletAddress } = auth;
+  const { chain } = useChain() as { chain: 'solana' | 'base' };
   const { quote, status, error, fetchQuote, executeSwap, reset } = useSwap();
   const balanceQuery = useWalletBalance(visible);
 
-  const [inputToken, setInputToken] = useState<TokenInfo>(TOKENS[0]);
-  const [outputToken, setOutputToken] = useState<TokenInfo>(TOKENS[1]);
+  const tokens = chain === 'base' ? BASE_TOKENS : SOLANA_TOKENS;
+  const nativeSymbol = CHAIN_CONFIG[chain].symbol;
+  const explorerBase = CHAIN_CONFIG[chain].explorerUrl;
+  const explorerName = CHAIN_CONFIG[chain].explorerName;
+
+  const [inputToken, setInputToken] = useState<TokenInfo>(tokens[0]);
+  const [outputToken, setOutputToken] = useState<TokenInfo>(tokens[1]);
   const [inputAmount, setInputAmount] = useState('');
   const [quoteTimer, setQuoteTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
   // Success/error result state (replaces Alert.alert)
@@ -77,26 +93,34 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
     message?: string;
   } | null>(null);
 
-  // Get available balance for the input token
+  // Get available balance for the input token (chain-aware)
   const availableBalance = (() => {
     if (!balanceQuery.data) return null;
-    if (inputToken.symbol === 'SOL') {
-      // Reserve 0.01 SOL for fees
-      const raw = balanceQuery.data.solBalance ?? 0;
-      return Math.max(0, raw - 0.01);
+    const balanceData: any = balanceQuery.data;
+    const isNative = inputToken.symbol === nativeSymbol;
+    if (isNative) {
+      // Reserve a small buffer of native token for fees
+      const raw =
+        balanceData.nativeBalance ??
+        (chain === 'solana' ? balanceData.solBalance : 0) ??
+        0;
+      const buffer = chain === 'base' ? 0.0002 : 0.01;
+      return Math.max(0, raw - buffer);
     }
-    const tokenHolding = balanceQuery.data.tokens?.find(
-      (t) => t.mint === inputToken.mint
+    const tokenHolding = balanceData.tokens?.find(
+      (t: any) =>
+        t.mint === inputToken.mint ||
+        t.address?.toLowerCase?.() === inputToken.mint.toLowerCase(),
     );
     return tokenHolding?.amount ?? 0;
   })();
 
   const handleMax = useCallback(() => {
     if (availableBalance != null && availableBalance > 0) {
-      const precision = inputToken.symbol === 'SOL' ? 4 : 2;
+      const precision = inputToken.symbol === nativeSymbol ? 4 : 2;
       setInputAmount(availableBalance.toFixed(precision));
     }
-  }, [availableBalance, inputToken]);
+  }, [availableBalance, inputToken, nativeSymbol]);
 
   // Reset state when modal opens/closes
   useEffect(() => {
@@ -107,6 +131,16 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
       if (quoteTimer) clearTimeout(quoteTimer);
     }
   }, [visible]);
+
+  // Reset state and tokens when chain changes
+  useEffect(() => {
+    setInputToken(tokens[0]);
+    setOutputToken(tokens[1]);
+    setInputAmount('');
+    setSwapResult(null);
+    reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chain]);
 
   // Auto-fetch quote with debounce when amount changes
   useEffect(() => {
@@ -203,7 +237,11 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
     : null;
 
   const isQuoting = status === 'quoting';
-  const isBusy = status === 'signing' || status === 'sending' || status === 'confirming';
+  const isBusy =
+    status === 'approving' ||
+    status === 'signing' ||
+    status === 'sending' ||
+    status === 'confirming';
   const inputNum = parseFloat(inputAmount) || 0;
   const insufficientBalance = availableBalance != null && inputNum > availableBalance;
   const isBalanceLoading = balanceQuery.isLoading || !balanceQuery.data;
@@ -212,9 +250,14 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
   const minSwap = MIN_SWAP[inputToken.symbol] ?? 0;
   const belowMinimum = inputNum > 0 && inputNum < minSwap;
 
-  // Check if user has enough SOL for transaction fees
-  const solBalance = balanceQuery.data?.solBalance ?? 0;
-  const insufficientFees = balanceQuery.data != null && solBalance < MIN_SOL_FOR_FEES;
+  // Check if user has enough native token for transaction fees
+  const balanceData: any = balanceQuery.data;
+  const nativeBalance =
+    balanceData?.nativeBalance ??
+    (chain === 'solana' ? balanceData?.solBalance : 0) ??
+    0;
+  const minNativeForFees = MIN_NATIVE_FOR_FEES[chain];
+  const insufficientFees = balanceQuery.data != null && nativeBalance < minNativeForFees;
 
   const canSwap = quote && !isBusy && !isQuoting && inputNum > 0 && !insufficientBalance && !belowMinimum && !insufficientFees;
 
@@ -240,7 +283,7 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
             {swapResult.signature && (
               <Pressable
                 style={styles.signatureCard}
-                onPress={() => Linking.openURL(`${SOLSCAN_BASE}/tx/${swapResult.signature}`)}
+                onPress={() => Linking.openURL(`${explorerBase}/tx/${swapResult.signature}`)}
               >
                 <Text style={styles.signatureLabel}>Transaction Signature</Text>
                 <View style={styles.signatureRow}>
@@ -249,7 +292,7 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
                   </Text>
                   <Ionicons name="open-outline" size={14} color={COLORS.primary} />
                 </View>
-                <Text style={styles.signatureHint}>Tap to view on Solscan</Text>
+                <Text style={styles.signatureHint}>Tap to view on {explorerName}</Text>
               </Pressable>
             )}
 
@@ -287,7 +330,9 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
           </Pressable>
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle}>Swap</Text>
-            <Text style={styles.headerSubtitle}>Powered by Jupiter</Text>
+            <Text style={styles.headerSubtitle}>
+              {chain === 'base' ? 'Powered by KyberSwap' : 'Powered by Jupiter'}
+            </Text>
           </View>
           <View style={styles.headerRight} />
         </View>
@@ -427,17 +472,21 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
             <View style={styles.progressCard}>
               <ActivityIndicator size="large" color={COLORS.primary} />
               <Text style={styles.progressTitle}>
-                {status === 'signing'
+                {status === 'approving'
+                  ? 'Approving Token'
+                  : status === 'signing'
                   ? 'Signing Transaction'
                   : status === 'sending'
                   ? 'Sending Transaction'
-                  : 'Confirming on Solana'}
+                  : `Confirming on ${CHAIN_CONFIG[chain].name}`}
               </Text>
               <Text style={styles.progressSubtitle}>
-                {status === 'signing'
+                {status === 'approving'
+                  ? 'Granting swap router permission to spend your token...'
+                  : status === 'signing'
                   ? 'Approve the transaction in your wallet...'
                   : status === 'sending'
-                  ? 'Broadcasting to the Solana network...'
+                  ? `Broadcasting to the ${CHAIN_CONFIG[chain].name} network...`
                   : 'Waiting for block confirmation...'}
               </Text>
             </View>
@@ -469,7 +518,7 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
                   : belowMinimum
                   ? `Min ${minSwap} ${inputToken.symbol}`
                   : insufficientFees
-                  ? `Need ${MIN_SOL_FOR_FEES} SOL for fees`
+                  ? `Need ${minNativeForFees} ${nativeSymbol} for fees`
                   : insufficientBalance
                   ? `Insufficient ${inputToken.symbol}`
                   : isQuoting
@@ -483,7 +532,9 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
           <View style={styles.infoRow}>
             <Ionicons name="shield-checkmark" size={14} color={COLORS.textTertiary} />
             <Text style={styles.infoText}>
-              Transactions are signed locally with your embedded wallet. Momento never has access to your private keys.
+              {chain === 'base'
+                ? 'Network fees on Base are typically <$0.01. Transactions are signed locally with your embedded wallet.'
+                : 'Transactions are signed locally with your embedded wallet. Momento never has access to your private keys.'}
             </Text>
           </View>
           </>
