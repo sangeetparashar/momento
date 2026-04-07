@@ -66,6 +66,9 @@ const GUEST_AUTH = {
   walletAddress: null as string | null,
   walletStatus: 'disconnected' as string,
   getWalletProvider: async () => null as any,
+  ethWalletAddress: null as string | null,
+  ethWalletStatus: 'not-created' as 'connected' | 'creating' | 'not-created',
+  getEthWalletProvider: async () => null as any,
 };
 
 /**
@@ -229,5 +232,11 @@ export function useAuth() {
     walletAddress,
     walletStatus: solanaWallet.status,
     getWalletProvider,
+    // ETH wallet support — populated by Agent 8 in a future merge.
+    // Currently stubbed as null/'not-created' so the wallet UI compiles
+    // and gracefully shows the "Creating wallet..." state for Base.
+    ethWalletAddress: null as string | null,
+    ethWalletStatus: 'not-created' as 'connected' | 'creating' | 'not-created',
+    getEthWalletProvider: async () => null as any,
   };
 }
