@@ -9,13 +9,6 @@ const PROVIDERS = ['ramp', 'moonpay', 'transak'] as const;
 type OnrampProvider = (typeof PROVIDERS)[number];
 
 /**
- * Supported stablecoins for onramp. USDC is the default and primary coin.
- */
-const SUPPORTED_COINS: Record<string, { cryptoCurrency: string; network: string }> = {
-  USDC: { cryptoCurrency: 'USDC', network: 'solana' },
-};
-
-/**
  * Builds a Ramp Network hosted onramp URL.
  *
  * Ramp has the lowest compliance burden (0.49-2.9% fees), supports
@@ -31,7 +24,8 @@ function buildRampUrl(walletAddress: string, chain: string): string {
       ? 'https://app.rampnetwork.com'
       : 'https://app.demo.rampnetwork.com';
 
-  // Ramp asset code format is {NETWORK}_{ASSET}, e.g. SOLANA_USDC, BASE_USDC
+  // Ramp asset code format is {CHAIN}_{SYMBOL}, e.g. SOLANA_USDC, BASE_USDC.
+  // Verified 2026-04-07 against https://api.ramp.network/api/host-api/v3/assets
   const swapAsset = chain === 'base' ? 'BASE_USDC' : 'SOLANA_USDC';
 
   const params = new URLSearchParams({
@@ -61,7 +55,8 @@ function buildMoonPayUrl(walletAddress: string, chain: string): string {
       ? 'https://buy.moonpay.com'
       : 'https://buy-sandbox.moonpay.com';
 
-  // MoonPay currency codes are network-suffixed: usdc_sol, usdc_base
+  // MoonPay currency codes are network-suffixed: usdc_sol, usdc_base.
+  // Verified 2026-04-07 against https://api.moonpay.com/v3/currencies
   const currencyCode = chain === 'base' ? 'usdc_base' : 'usdc_sol';
 
   const params = new URLSearchParams({
@@ -160,7 +155,8 @@ function buildTransakDirectUrl(walletAddress: string, chain: string): string {
       ? 'https://global.transak.com'
       : 'https://global-stg.transak.com';
 
-  // Transak network slug is lowercase chain name
+  // Transak network slug is lowercase chain name.
+  // Verified 2026-04-07 against https://api.transak.com/api/v2/currencies/crypto-currencies
   const network = chain === 'base' ? 'base' : 'solana';
 
   const params = new URLSearchParams({
