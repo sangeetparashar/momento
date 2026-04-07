@@ -3,6 +3,7 @@ import { AppState } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WalletBalance } from '@momento/shared';
 import { apiService } from '@/services/api';
+import { useChain } from '@/hooks/useChain';
 
 /**
  * Polls the user's wallet balance.
@@ -14,6 +15,7 @@ import { apiService } from '@/services/api';
 export function useWalletBalance(enabled = true) {
   const [isActive, setIsActive] = useState(AppState.currentState === 'active');
   const [fastPoll, setFastPoll] = useState(false);
+  const { chain } = useChain();
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
@@ -23,8 +25,8 @@ export function useWalletBalance(enabled = true) {
   }, []);
 
   const query = useQuery<WalletBalance>({
-    queryKey: ['walletBalance'],
-    queryFn: () => apiService.get<WalletBalance>('/wallet/balance'),
+    queryKey: ['walletBalance', chain],
+    queryFn: () => apiService.get<WalletBalance>(`/wallet/balance?chain=${chain}`),
     enabled,
     refetchInterval: isActive ? (fastPoll ? 10_000 : 30_000) : false,
     staleTime: fastPoll ? 5_000 : 15_000,
