@@ -2,8 +2,11 @@ import { useState, useCallback, useRef } from 'react';
 import { VersionedTransaction, Connection } from '@solana/web3.js';
 import { apiService } from '@/services/api';
 import { useAuth } from './useAuth';
+import { useChain } from './useChain';
 
 const SOLANA_RPC_URL = process.env.EXPO_PUBLIC_HELIUS_RPC_URL || 'https://api.mainnet-beta.solana.com';
+
+const BASE_CHAIN_ID_HEX = '0x2105'; // 8453
 
 /** Decode base64 to Uint8Array without needing Node's Buffer polyfill */
 function base64ToUint8Array(base64: string): Uint8Array {
@@ -30,9 +33,18 @@ export interface SwapQuote {
   priceImpactPct: string;
   platformFee?: { amount: string; feeBps: number };
   raw: any;
+  chain?: 'solana' | 'base';
 }
 
-type SwapStatus = 'idle' | 'quoting' | 'signing' | 'sending' | 'confirming' | 'success' | 'error';
+type SwapStatus =
+  | 'idle'
+  | 'quoting'
+  | 'approving'
+  | 'signing'
+  | 'sending'
+  | 'confirming'
+  | 'success'
+  | 'error';
 
 interface UseSwapReturn {
   quote: SwapQuote | null;
@@ -48,16 +60,53 @@ interface UseSwapReturn {
   reset: () => void;
 }
 
+/** Encode an ERC-20 `approve(address,uint256)` calldata. */
+function encodeApprove(spender: string, amount: bigint): string {
+  // selector for approve(address,uint256)
+  const selector = '0x095ea7b3';
+  const paddedSpender = spender.replace(/^0x/, '').toLowerCase().padStart(64, '0');
+  const paddedAmount = amount.toString(16).padStart(64, '0');
+  return selector + paddedSpender + paddedAmount;
+}
+
+/** Poll eth_getTransactionReceipt until the tx is mined or we time out. */
+async function waitForTransaction(
+  provider: any,
+  txHash: string,
+  timeout = 60000,
+): Promise<any> {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    try {
+      const receipt = await provider.request({
+        method: 'eth_getTransactionReceipt',
+        params: [txHash],
+      });
+      if (receipt) return receipt;
+    } catch {
+      // Ignore transient RPC errors and continue polling.
+    }
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  throw new Error('Transaction confirmation timeout');
+}
+
 /**
- * Hook for fetching Jupiter swap quotes and executing swaps
- * via the Privy embedded wallet.
+ * Hook for fetching swap quotes and executing swaps via the embedded wallet.
  *
- * Flow:
+ * Solana flow:
  * 1. fetchQuote() → GET /api/wallet/swap → Jupiter quote with platform fee
  * 2. executeSwap() → POST /api/wallet/swap → unsigned tx → Privy signs & sends
+ *
+ * Base flow:
+ * 1. fetchQuote() → GET /api/wallet/swap?chain=base → KyberSwap quote
+ * 2. executeSwap() → POST /api/wallet/swap → tx params → Privy ETH provider
+ *    - If `requiresApproval`, send an ERC-20 approve tx first
  */
 export function useSwap(): UseSwapReturn {
-  const { walletAddress, getWalletProvider } = useAuth();
+  const auth = useAuth() as any;
+  const { walletAddress, getWalletProvider } = auth;
+  const { chain } = useChain() as { chain: 'solana' | 'base' };
   const [quote, setQuote] = useState<SwapQuote | null>(null);
   const [status, setStatus] = useState<SwapStatus>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -81,12 +130,22 @@ export function useSwap(): UseSwapReturn {
         setStatus('quoting');
         setError(null);
 
-        const queryParams: Record<string, string> = {
-          amount: params.amount,
-        };
-        if (params.inputMint) queryParams.inputMint = params.inputMint;
-        if (params.outputMint) queryParams.outputMint = params.outputMint;
-        if (params.slippageBps) queryParams.slippageBps = params.slippageBps.toString();
+        const queryParams: Record<string, string> = {};
+
+        if (chain === 'base') {
+          // KyberSwap-backed Base quote
+          queryParams.chain = 'base';
+          if (params.inputMint) queryParams.sellToken = params.inputMint;
+          if (params.outputMint) queryParams.buyToken = params.outputMint;
+          queryParams.sellAmount = params.amount;
+          if (params.slippageBps) queryParams.slippageBps = params.slippageBps.toString();
+        } else {
+          // Solana / Jupiter quote
+          queryParams.amount = params.amount;
+          if (params.inputMint) queryParams.inputMint = params.inputMint;
+          if (params.outputMint) queryParams.outputMint = params.outputMint;
+          if (params.slippageBps) queryParams.slippageBps = params.slippageBps.toString();
+        }
 
         const response = await apiService.get<SwapQuote>('/wallet/swap', queryParams);
         setQuote(response);
@@ -101,7 +160,7 @@ export function useSwap(): UseSwapReturn {
         return null;
       }
     },
-    [],
+    [chain],
   );
 
   const executeSwap = useCallback(async (): Promise<string | null> => {
@@ -112,13 +171,94 @@ export function useSwap(): UseSwapReturn {
       return null;
     }
 
-    if (!walletAddress) {
-      setError('Wallet not connected');
-      setStatus('error');
-      return null;
-    }
-
     try {
+      if (chain === 'base') {
+        // ─── BASE SWAP ───
+        const ethAddress = auth.ethWalletAddress;
+        if (!ethAddress) {
+          throw new Error('Base wallet not connected');
+        }
+
+        setStatus('signing');
+        const txParams = await apiService.post<{
+          chain: 'base';
+          to: string;
+          data: string;
+          value: string;
+          gas?: string;
+          gasPrice?: string;
+          chainId: number;
+          from: string;
+          allowanceTarget?: string;
+          sellTokenAddress?: string;
+          requiresApproval?: boolean;
+        }>('/wallet/swap', {
+          chain: 'base',
+          quoteResponse: currentQuote.raw,
+        });
+
+        const provider = await auth.getEthWalletProvider?.();
+        if (!provider) {
+          throw new Error('ETH wallet provider not available. Please reconnect your wallet.');
+        }
+
+        // ── ERC-20 approval (if needed) ──
+        if (txParams.requiresApproval && txParams.allowanceTarget && txParams.sellTokenAddress) {
+          setStatus('approving');
+          const maxUint256 = BigInt(2) ** BigInt(256) - BigInt(1);
+          const approveData = encodeApprove(txParams.allowanceTarget, maxUint256);
+
+          const approveTxHash: string = await provider.request({
+            method: 'eth_sendTransaction',
+            params: [
+              {
+                from: ethAddress,
+                to: txParams.sellTokenAddress,
+                data: approveData,
+                value: '0x0',
+                chainId: BASE_CHAIN_ID_HEX,
+              },
+            ],
+          });
+
+          await waitForTransaction(provider, approveTxHash);
+        }
+
+        // ── Swap transaction ──
+        setStatus('sending');
+        const swapTx: Record<string, string> = {
+          from: ethAddress,
+          to: txParams.to,
+          data: txParams.data,
+          value: txParams.value || '0x0',
+          chainId: BASE_CHAIN_ID_HEX,
+        };
+        if (txParams.gas) {
+          swapTx.gas = txParams.gas.startsWith('0x')
+            ? txParams.gas
+            : '0x' + parseInt(txParams.gas, 10).toString(16);
+        }
+
+        const txHash: string = await provider.request({
+          method: 'eth_sendTransaction',
+          params: [swapTx],
+        });
+
+        setStatus('confirming');
+        await waitForTransaction(provider, txHash);
+
+        setStatus('success');
+        console.log('[useSwap] Base swap successful, tx:', txHash);
+        return txHash;
+      }
+
+      // ─── SOLANA SWAP (unchanged) ───
+      if (!walletAddress) {
+        setError('Wallet not connected');
+        setStatus('error');
+        return null;
+      }
+
       // Step 1: Build unsigned transaction server-side
       setStatus('signing');
       const { swapTransaction } = await apiService.post<{
@@ -162,7 +302,7 @@ export function useSwap(): UseSwapReturn {
       console.warn('[useSwap] Swap error:', message);
       return null;
     }
-  }, [walletAddress, getWalletProvider]);
+  }, [chain, walletAddress, getWalletProvider, auth]);
 
   return {
     quote,

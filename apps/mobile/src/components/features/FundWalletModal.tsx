@@ -15,10 +15,12 @@ import { Text } from '@/components/primitives';
 import { useOnramp } from '@/hooks/useOnramp';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useAuth } from '@/hooks/useAuth';
+import { useChain } from '@/hooks/useChain';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { ENV } from '@/config/env';
-import type { OnrampProvider } from '@momento/shared';
+import { CHAIN_CONFIG } from '@momento/shared';
+import type { ChainType, OnrampProvider } from '@momento/shared';
 
 type FundingMethod = 'picker' | OnrampProvider | 'onchain';
 
@@ -37,6 +39,7 @@ interface FundWalletModalProps {
 
 export function FundWalletModal({ visible, onClose }: FundWalletModalProps) {
   const insets = useSafeAreaInsets();
+  const { chain } = useChain() as { chain: 'solana' | 'base' };
   const [method, setMethod] = useState<FundingMethod>('picker');
 
   const handleClose = useCallback(() => {
@@ -79,9 +82,15 @@ export function FundWalletModal({ visible, onClose }: FundWalletModalProps) {
           )}
         </View>
 
-        {method === 'picker' && <MethodPicker onSelect={setMethod} />}
-        {isWebView && <OnrampWebView provider={method as OnrampProvider} onClose={handleClose} />}
-        {method === 'onchain' && <OnChainTransfer />}
+        {method === 'picker' && <MethodPicker chain={chain} onSelect={setMethod} />}
+        {isWebView && (
+          <OnrampWebView
+            provider={method as OnrampProvider}
+            chain={chain}
+            onClose={handleClose}
+          />
+        )}
+        {method === 'onchain' && <OnChainTransfer chain={chain} />}
       </View>
     </Modal>
   );
@@ -91,11 +100,18 @@ export function FundWalletModal({ visible, onClose }: FundWalletModalProps) {
 // Method Picker
 // ---------------------------------------------------------------------------
 
-function MethodPicker({ onSelect }: { onSelect: (m: FundingMethod) => void }) {
+function MethodPicker({
+  chain,
+  onSelect,
+}: {
+  chain: ChainType;
+  onSelect: (m: FundingMethod) => void;
+}) {
+  const chainName = CHAIN_CONFIG[chain].name;
   return (
     <ScrollView style={styles.pickerContainer} contentContainerStyle={styles.pickerContent}>
       <Text style={styles.pickerSubtitle}>
-        Choose how you'd like to add USDC to your Solana wallet
+        Choose how you'd like to add USDC to your {chainName} wallet
       </Text>
 
       <Pressable style={styles.methodCard} onPress={() => onSelect('transak')}>
@@ -117,13 +133,20 @@ function MethodPicker({ onSelect }: { onSelect: (m: FundingMethod) => void }) {
       </Pressable>
 
       <Pressable style={styles.methodCard} onPress={() => onSelect('onchain')}>
-        <View style={[styles.methodIcon, { backgroundColor: '#9945FF' }]}>
+        <View
+          style={[
+            styles.methodIcon,
+            { backgroundColor: CHAIN_CONFIG[chain].iconColor },
+          ]}
+        >
           <Ionicons name="wallet" size={24} color="#FFFFFF" />
         </View>
         <View style={styles.methodInfo}>
           <Text style={styles.methodTitle}>Transfer from Wallet</Text>
           <Text style={styles.methodDesc}>
-            Send SOL or USDC from Phantom, Solflare, or any Solana wallet
+            {chain === 'base'
+              ? 'Send ETH or USDC from Coinbase, MetaMask, or any Base-compatible wallet'
+              : 'Send SOL or USDC from Phantom, Solflare, or any Solana wallet'}
           </Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
@@ -168,7 +191,7 @@ function MethodPicker({ onSelect }: { onSelect: (m: FundingMethod) => void }) {
       <View style={styles.pickerFooter}>
         <Ionicons name="shield-checkmark" size={14} color={COLORS.textTertiary} />
         <Text style={styles.pickerFooterText}>
-          All purchases deliver USDC on the Solana network directly to your wallet. Third-party providers may charge a small fee.
+          All purchases deliver USDC on the {chainName} network directly to your wallet. Third-party providers may charge a small fee.
         </Text>
       </View>
     </ScrollView>
@@ -187,12 +210,14 @@ const PROVIDER_LABELS: Record<OnrampProvider, string> = {
 
 function OnrampWebView({
   provider,
+  chain,
   onClose,
 }: {
   provider: OnrampProvider;
+  chain: ChainType;
   onClose: () => void;
 }) {
-  const { data, isLoading, error } = useOnramp(provider, true);
+  const { data, isLoading, error } = useOnramp({ provider, chain, enabled: true });
   const [webViewLoading, setWebViewLoading] = useState(true);
   const webViewRef = useRef<WebView>(null);
 
@@ -218,7 +243,7 @@ function OnrampWebView({
       <View style={styles.infoBanner}>
         <Ionicons name="shield-checkmark" size={16} color={COLORS.primary} />
         <Text style={styles.infoText}>
-          Powered by {label}. USDC on Solana will be sent directly to your wallet.
+          Powered by {label}. USDC on {CHAIN_CONFIG[chain].name} will be sent directly to your wallet.
         </Text>
       </View>
 
@@ -275,18 +300,28 @@ function OnrampWebView({
 // On-Chain Transfer
 // ---------------------------------------------------------------------------
 
-function OnChainTransfer() {
-  const { walletAddress: clientWalletAddress } = useAuth();
+function OnChainTransfer({ chain }: { chain: ChainType }) {
+  const auth = useAuth() as any;
+  const { walletAddress: clientWalletAddress } = auth;
+  const ethWalletAddress = auth.ethWalletAddress as string | null | undefined;
   const { user: profile } = useUserProfile();
   const [copied, setCopied] = useState(false);
 
-  const walletAddress =
+  const solAddress =
     clientWalletAddress ||
     (profile?.walletAddress && !profile.walletAddress.startsWith('pending-')
       ? profile.walletAddress
       : null);
 
-  const network = ENV.SOLANA_NETWORK === 'devnet' ? 'devnet' : 'mainnet';
+  const walletAddress = chain === 'base' ? ethWalletAddress : solAddress;
+
+  const chainName = CHAIN_CONFIG[chain].name;
+  const network =
+    chain === 'base'
+      ? 'mainnet'
+      : ENV.SOLANA_NETWORK === 'devnet'
+      ? 'devnet'
+      : 'mainnet';
 
   const handleCopy = useCallback(async () => {
     if (!walletAddress) return;
@@ -303,12 +338,12 @@ function OnChainTransfer() {
     try {
       await Share.share({
         message: walletAddress,
-        title: 'My Solana Wallet Address',
+        title: `My ${chainName} Wallet Address`,
       });
     } catch {
       // cancelled
     }
-  }, [walletAddress]);
+  }, [walletAddress, chainName]);
 
   if (!walletAddress) {
     return (
@@ -319,10 +354,27 @@ function OnChainTransfer() {
     );
   }
 
+  const instructions =
+    chain === 'base'
+      ? [
+          'Copy your wallet address above',
+          'Open Coinbase, MetaMask, or any ETH wallet',
+          'Select the Base network and send ETH or USDC',
+          'Funds arrive in ~1 minute',
+        ]
+      : [
+          'Copy your wallet address above',
+          'Open Phantom, Solflare, or any Solana wallet',
+          'Send SOL or USDC to the address above',
+          'Your balance will update automatically',
+        ];
+
   return (
     <ScrollView style={styles.onchainContainer} contentContainerStyle={styles.onchainContent}>
       <View style={styles.onchainCard}>
-        <Text style={styles.onchainLabel}>YOUR SOLANA WALLET ADDRESS</Text>
+        <Text style={styles.onchainLabel}>
+          YOUR {chainName.toUpperCase()} WALLET ADDRESS
+        </Text>
 
         <View style={styles.addressBox}>
           <Text style={styles.onchainAddress} selectable>
@@ -355,28 +407,22 @@ function OnChainTransfer() {
       <View style={styles.onchainInstructions}>
         <Text style={styles.instructionTitle}>How to transfer</Text>
 
-        <View style={styles.step}>
-          <View style={styles.stepNumber}><Text style={styles.stepNumberText}>1</Text></View>
-          <Text style={styles.stepText}>Copy your wallet address above</Text>
-        </View>
-        <View style={styles.step}>
-          <View style={styles.stepNumber}><Text style={styles.stepNumberText}>2</Text></View>
-          <Text style={styles.stepText}>Open Phantom, Solflare, or any Solana wallet</Text>
-        </View>
-        <View style={styles.step}>
-          <View style={styles.stepNumber}><Text style={styles.stepNumberText}>3</Text></View>
-          <Text style={styles.stepText}>Send SOL or USDC to the address above</Text>
-        </View>
-        <View style={styles.step}>
-          <View style={styles.stepNumber}><Text style={styles.stepNumberText}>4</Text></View>
-          <Text style={styles.stepText}>Your balance will update automatically</Text>
-        </View>
+        {instructions.map((instr, idx) => (
+          <View key={idx} style={styles.step}>
+            <View style={styles.stepNumber}>
+              <Text style={styles.stepNumberText}>{idx + 1}</Text>
+            </View>
+            <Text style={styles.stepText}>{instr}</Text>
+          </View>
+        ))}
       </View>
 
       <View style={styles.networkBanner}>
         <Ionicons name="information-circle" size={16} color={COLORS.warning} />
         <Text style={styles.networkBannerText}>
-          Make sure to send on the Solana {network} network. Sending on the wrong network may result in lost funds.
+          {chain === 'base'
+            ? 'Make sure to send on the Base network. Sending on other networks (Ethereum, Polygon, etc.) may result in lost funds.'
+            : `Make sure to send on the Solana ${network} network. Sending on the wrong network may result in lost funds.`}
         </Text>
       </View>
     </ScrollView>

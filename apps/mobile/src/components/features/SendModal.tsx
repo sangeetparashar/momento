@@ -19,24 +19,34 @@ import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/hooks/useAuth';
+import { useChain } from '@/hooks/useChain';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
 import { apiService } from '@/services/api';
 import { ENV } from '@/config/env';
+import { CHAIN_CONFIG } from '@momento/shared';
 
 const TX_STORAGE_KEY = 'momento_recent_txs';
 const MAX_TX_RECORDS = 20;
+const BASE_CHAIN_ID_HEX = '0x2105'; // 8453
 
 interface SendModalProps {
   visible: boolean;
   onClose: () => void;
 }
 
-type SendToken = 'SOL' | 'USDC';
+type SendToken = string;
 
-/** Minimum amounts to send */
-const MIN_SEND: Record<SendToken, number> = { SOL: 0.001, USDC: 0.01 };
-/** Minimum SOL to keep for fees */
-const MIN_SOL_FOR_FEES = 0.005;
+/** Minimum amounts to send (per token symbol) */
+const MIN_SEND: Record<string, number> = {
+  SOL: 0.001,
+  ETH: 0.0001,
+  USDC: 0.01,
+};
+/** Minimum native token to keep for fees */
+const MIN_NATIVE_FOR_FEES: Record<'solana' | 'base', number> = {
+  solana: 0.005,
+  base: 0.0002,
+};
 
 type SendStep = 'form' | 'confirming' | 'success' | 'error';
 
@@ -47,11 +57,19 @@ type SendStep = 'form' | 'confirming' | 'success' | 'error';
  */
 export function SendModal({ visible, onClose }: SendModalProps) {
   const insets = useSafeAreaInsets();
-  const { walletAddress, getWalletProvider } = useAuth();
+  const auth = useAuth() as any;
+  const { walletAddress, getWalletProvider } = auth;
+  const { chain } = useChain() as { chain: 'solana' | 'base' };
   const balanceQuery = useWalletBalance();
-  const balance = balanceQuery.data;
+  const balance: any = balanceQuery.data;
 
-  const [token, setToken] = useState<SendToken>('SOL');
+  const nativeSymbol = CHAIN_CONFIG[chain].symbol; // 'SOL' or 'ETH'
+  const explorerBase = CHAIN_CONFIG[chain].explorerUrl;
+  const explorerName = CHAIN_CONFIG[chain].explorerName;
+  const minNativeForFees = MIN_NATIVE_FOR_FEES[chain];
+  const myAddress = chain === 'base' ? auth.ethWalletAddress : walletAddress;
+
+  const [token, setToken] = useState<SendToken>(nativeSymbol);
   const [amount, setAmount] = useState('');
   const [recipientAddress, setRecipientAddress] = useState('');
   const [step, setStep] = useState<SendStep>('form');
@@ -69,87 +87,167 @@ export function SendModal({ visible, onClose }: SendModalProps) {
     }
   }, [visible]);
 
-  const solBalance = balance?.solBalance ?? 0;
-  const usdcBalance = (() => {
-    const usdc = balance?.tokens.find(t => t.symbol === 'USDC' || t.symbol === 'usdc');
+  // Reset selected token when chain changes
+  useEffect(() => {
+    setToken(CHAIN_CONFIG[chain].symbol);
+    setAmount('');
+    setRecipientAddress('');
+  }, [chain]);
+
+  const nativeBalance: number =
+    balance?.nativeBalance ??
+    (chain === 'solana' ? balance?.solBalance : 0) ??
+    0;
+  const usdcBalance: number = (() => {
+    const usdc = balance?.tokens?.find(
+      (t: any) => t.symbol === 'USDC' || t.symbol === 'usdc',
+    );
     return usdc?.amount ?? 0;
   })();
 
-  const currentBalance = token === 'SOL' ? solBalance : usdcBalance;
+  const currentBalance = token === nativeSymbol ? nativeBalance : usdcBalance;
   const parsedAmount = parseFloat(amount) || 0;
 
-  // Validation
-  const isValidAddress = recipientAddress.length >= 32 && recipientAddress.length <= 44;
-  const isSelfSend = recipientAddress === walletAddress;
-  const isAmountValid = parsedAmount >= MIN_SEND[token];
+  // Address validation (chain-aware)
+  const isValidAddress =
+    chain === 'base'
+      ? /^0x[a-fA-F0-9]{40}$/.test(recipientAddress)
+      : /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(recipientAddress);
+  const isSelfSend =
+    !!myAddress && recipientAddress.toLowerCase() === myAddress.toLowerCase();
+  const minForToken = MIN_SEND[token] ?? 0;
+  const isAmountValid = parsedAmount >= minForToken;
   const hasEnoughBalance = parsedAmount <= currentBalance;
-  const hasEnoughSolForFees = token === 'SOL'
-    ? (currentBalance - parsedAmount) >= MIN_SOL_FOR_FEES
-    : solBalance >= MIN_SOL_FOR_FEES;
+  const hasEnoughNativeForFees =
+    token === nativeSymbol
+      ? currentBalance - parsedAmount >= minNativeForFees
+      : nativeBalance >= minNativeForFees;
 
-  const canSend = isValidAddress && !isSelfSend && isAmountValid && hasEnoughBalance && hasEnoughSolForFees;
+  const canSend =
+    isValidAddress && !isSelfSend && isAmountValid && hasEnoughBalance && hasEnoughNativeForFees;
 
   const getButtonText = () => {
     if (!recipientAddress) return 'Enter recipient address';
-    if (!isValidAddress) return 'Invalid Solana address';
+    if (!isValidAddress) {
+      return chain === 'base'
+        ? 'Invalid Base address'
+        : 'Invalid Solana address';
+    }
     if (isSelfSend) return "Can't send to yourself";
     if (!amount || parsedAmount === 0) return 'Enter amount';
-    if (!isAmountValid) return `Min ${MIN_SEND[token]} ${token}`;
+    if (!isAmountValid) return `Min ${minForToken} ${token}`;
     if (!hasEnoughBalance) return 'Insufficient balance';
-    if (!hasEnoughSolForFees) return `Need ${MIN_SOL_FOR_FEES} SOL for fees`;
+    if (!hasEnoughNativeForFees) return `Need ${minNativeForFees} ${nativeSymbol} for fees`;
     return `Send ${amount} ${token}`;
   };
 
   const handleMax = useCallback(() => {
-    if (token === 'SOL') {
-      const maxSol = Math.max(0, solBalance - MIN_SOL_FOR_FEES);
-      setAmount(maxSol > 0 ? maxSol.toFixed(6) : '0');
+    if (token === nativeSymbol) {
+      const maxNative = Math.max(0, nativeBalance - minNativeForFees);
+      setAmount(maxNative > 0 ? maxNative.toFixed(6) : '0');
     } else {
       setAmount(usdcBalance > 0 ? usdcBalance.toFixed(2) : '0');
     }
-  }, [token, solBalance, usdcBalance]);
+  }, [token, nativeSymbol, nativeBalance, usdcBalance, minNativeForFees]);
 
   const handleSend = useCallback(async () => {
-    if (!canSend || !walletAddress) return;
+    if (!canSend || !myAddress) return;
 
     try {
       setStep('confirming');
 
-      // Request unsigned transaction from API
-      const { transaction: serializedTx } = await apiService.post<{ transaction: string }>(
-        '/wallet/send',
-        {
+      let signature: string;
+
+      if (chain === 'base') {
+        // ─── BASE SEND ───
+        const txParams = await apiService.post<{
+          chain: 'base';
+          to: string;
+          value: string;
+          data?: string;
+          gas?: string;
+          chainId?: number;
+          from?: string;
+        }>('/wallet/send', {
+          chain: 'base',
           recipientAddress,
           amount: parsedAmount.toString(),
           token,
-        },
-      );
+        });
 
-      // Sign with Privy embedded wallet
-      const provider = await getWalletProvider();
-      if (!provider) {
-        throw new Error('Wallet provider not available — try again in a moment');
+        const provider = await auth.getEthWalletProvider?.();
+        if (!provider) {
+          throw new Error('ETH wallet provider not available — try again in a moment');
+        }
+
+        const sendTx: Record<string, string> = {
+          from: myAddress,
+          to: txParams.to,
+          value: txParams.value || '0x0',
+          data: txParams.data || '0x',
+          chainId: BASE_CHAIN_ID_HEX,
+        };
+        if (txParams.gas) {
+          sendTx.gas = txParams.gas.startsWith('0x')
+            ? txParams.gas
+            : '0x' + parseInt(txParams.gas, 10).toString(16);
+        }
+
+        const txHash: string = await provider.request({
+          method: 'eth_sendTransaction',
+          params: [sendTx],
+        });
+
+        // Poll for receipt
+        const start = Date.now();
+        let receipt: any = null;
+        while (Date.now() - start < 60000) {
+          try {
+            receipt = await provider.request({
+              method: 'eth_getTransactionReceipt',
+              params: [txHash],
+            });
+            if (receipt) break;
+          } catch {
+            // ignore transient errors
+          }
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+
+        signature = txHash;
+      } else {
+        // ─── SOLANA SEND (unchanged) ───
+        const { transaction: serializedTx } = await apiService.post<{ transaction: string }>(
+          '/wallet/send',
+          {
+            recipientAddress,
+            amount: parsedAmount.toString(),
+            token,
+          },
+        );
+
+        const provider = await getWalletProvider();
+        if (!provider) {
+          throw new Error('Wallet provider not available — try again in a moment');
+        }
+
+        const { Buffer } = require('buffer');
+        const { VersionedTransaction, Connection } = require('@solana/web3.js');
+
+        const txBytes = Buffer.from(serializedTx, 'base64');
+        const tx = VersionedTransaction.deserialize(txBytes);
+
+        const connection = new Connection(ENV.SOLANA_RPC_URL, 'confirmed');
+
+        const signedResult = await provider.signTransaction(tx);
+        const rawTx = signedResult.serialize();
+        signature = await connection.sendRawTransaction(rawTx, {
+          skipPreflight: false,
+          preflightCommitment: 'confirmed',
+        });
+
+        await connection.confirmTransaction(signature, 'confirmed');
       }
-
-      // Decode the base64 transaction and sign + send
-      const { Buffer } = require('buffer');
-      const { VersionedTransaction, Connection } = require('@solana/web3.js');
-
-      const txBytes = Buffer.from(serializedTx, 'base64');
-      const tx = VersionedTransaction.deserialize(txBytes);
-
-      const connection = new Connection(ENV.SOLANA_RPC_URL, 'confirmed');
-
-      // Sign the transaction
-      const signedResult = await provider.signTransaction(tx);
-      const rawTx = signedResult.serialize();
-      const signature = await connection.sendRawTransaction(rawTx, {
-        skipPreflight: false,
-        preflightCommitment: 'confirmed',
-      });
-
-      // Wait for confirmation
-      await connection.confirmTransaction(signature, 'confirmed');
 
       setTxSignature(signature);
       setStep('success');
@@ -161,6 +259,7 @@ export function SendModal({ visible, onClose }: SendModalProps) {
         const newTx = {
           signature,
           type: 'send',
+          chain,
           label: `Sent ${parsedAmount} ${token}`,
           timestamp: Date.now(),
         };
@@ -177,15 +276,17 @@ export function SendModal({ visible, onClose }: SendModalProps) {
       setErrorMessage(err?.message || 'Transaction failed. Please try again.');
       setStep('error');
     }
-  }, [canSend, walletAddress, recipientAddress, parsedAmount, token, getWalletProvider, balanceQuery]);
+  }, [canSend, myAddress, chain, recipientAddress, parsedAmount, token, getWalletProvider, auth, balanceQuery]);
 
   const handleClose = useCallback(() => {
     setStep('form');
     onClose();
   }, [onClose]);
 
-  const solscanUrl = txSignature
-    ? `https://solscan.io/tx/${txSignature}${ENV.SOLANA_NETWORK === 'devnet' ? '?cluster=devnet' : ''}`
+  const explorerUrl = txSignature
+    ? chain === 'base'
+      ? `${explorerBase}/tx/${txSignature}`
+      : `${explorerBase}/tx/${txSignature}${ENV.SOLANA_NETWORK === 'devnet' ? '?cluster=devnet' : ''}`
     : null;
 
   return (
@@ -212,20 +313,32 @@ export function SendModal({ visible, onClose }: SendModalProps) {
           <ScrollView style={styles.content} contentContainerStyle={styles.contentInner} keyboardShouldPersistTaps="handled">
             {/* Token Selector */}
             <View style={styles.tokenSelector}>
-              {(['SOL', 'USDC'] as SendToken[]).map(t => (
-                <Pressable
-                  key={t}
-                  onPress={() => { setToken(t); setAmount(''); }}
-                  style={[styles.tokenTab, token === t && styles.tokenTabActive]}
-                >
-                  <Text style={[styles.tokenTabIcon, { color: t === 'SOL' ? '#9945FF' : '#2775CA' }]}>
-                    {t === 'SOL' ? '◎' : '$'}
-                  </Text>
-                  <Text style={[styles.tokenTabText, token === t && styles.tokenTabTextActive]}>
-                    {t}
-                  </Text>
-                </Pressable>
-              ))}
+              {([nativeSymbol, 'USDC'] as SendToken[]).map(t => {
+                const isNative = t === nativeSymbol;
+                return (
+                  <Pressable
+                    key={t}
+                    onPress={() => { setToken(t); setAmount(''); }}
+                    style={[styles.tokenTab, token === t && styles.tokenTabActive]}
+                  >
+                    <Text
+                      style={[
+                        styles.tokenTabIcon,
+                        {
+                          color: isNative
+                            ? CHAIN_CONFIG[chain].iconColor
+                            : '#2775CA',
+                        },
+                      ]}
+                    >
+                      {isNative ? CHAIN_CONFIG[chain].nativeIcon : '$'}
+                    </Text>
+                    <Text style={[styles.tokenTabText, token === t && styles.tokenTabTextActive]}>
+                      {t}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
 
             {/* Balance info */}
@@ -233,7 +346,7 @@ export function SendModal({ visible, onClose }: SendModalProps) {
               <Text style={styles.balanceLabel}>Available</Text>
               <Pressable onPress={handleMax}>
                 <Text style={styles.balanceValue}>
-                  {token === 'SOL' ? solBalance.toFixed(4) : usdcBalance.toFixed(2)} {token}
+                  {token === nativeSymbol ? nativeBalance.toFixed(4) : usdcBalance.toFixed(2)} {token}
                   <Text style={styles.maxHint}> (MAX)</Text>
                 </Text>
               </Pressable>
@@ -260,14 +373,22 @@ export function SendModal({ visible, onClose }: SendModalProps) {
                 style={styles.addressInput}
                 value={recipientAddress}
                 onChangeText={setRecipientAddress}
-                placeholder="Enter Solana wallet address..."
+                placeholder={
+                  chain === 'base'
+                    ? 'Enter Base (0x...) wallet address...'
+                    : 'Enter Solana wallet address...'
+                }
                 placeholderTextColor={COLORS.textTertiary}
                 autoCapitalize="none"
                 autoCorrect={false}
                 spellCheck={false}
               />
               {recipientAddress.length > 0 && !isValidAddress && (
-                <Text style={styles.inputError}>Enter a valid Solana address (32-44 chars)</Text>
+                <Text style={styles.inputError}>
+                  {chain === 'base'
+                    ? 'Enter a valid Base address (0x... 40 hex chars)'
+                    : 'Enter a valid Solana address (32-44 chars)'}
+                </Text>
               )}
               {isSelfSend && (
                 <Text style={styles.inputError}>Cannot send to your own wallet</Text>
@@ -278,7 +399,7 @@ export function SendModal({ visible, onClose }: SendModalProps) {
             <View style={styles.warningCard}>
               <Ionicons name="warning-outline" size={18} color={COLORS.warning} />
               <Text style={styles.warningText}>
-                Double-check the recipient address. Transactions on the Solana blockchain are irreversible.
+                Double-check the recipient address. Transactions on the {CHAIN_CONFIG[chain].name} blockchain are irreversible.
               </Text>
             </View>
 
@@ -287,7 +408,11 @@ export function SendModal({ visible, onClose }: SendModalProps) {
               <Text style={styles.networkLabel}>Network</Text>
               <View style={styles.networkBadge}>
                 <Text style={styles.networkText}>
-                  {ENV.SOLANA_NETWORK === 'devnet' ? 'DEVNET' : 'MAINNET'}
+                  {chain === 'base'
+                    ? 'BASE'
+                    : ENV.SOLANA_NETWORK === 'devnet'
+                    ? 'SOLANA DEVNET'
+                    : 'SOLANA MAINNET'}
                 </Text>
               </View>
             </View>
@@ -313,12 +438,12 @@ export function SendModal({ visible, onClose }: SendModalProps) {
             <Text style={styles.statusSubtitle}>
               {amount} {token} sent to {recipientAddress.slice(0, 6)}...{recipientAddress.slice(-4)}
             </Text>
-            {solscanUrl && (
+            {explorerUrl && (
               <Pressable
-                onPress={() => Linking.openURL(solscanUrl)}
+                onPress={() => Linking.openURL(explorerUrl)}
                 style={styles.solscanLink}
               >
-                <Text style={styles.solscanLinkText}>View on Solscan</Text>
+                <Text style={styles.solscanLinkText}>View on {explorerName}</Text>
                 <Ionicons name="open-outline" size={14} color={COLORS.primary} />
               </Pressable>
             )}
