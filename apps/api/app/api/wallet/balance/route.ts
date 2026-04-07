@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, getChainParam, getWalletForChain } from '@/lib/auth';
 import { fetchWalletBalance } from '@/lib/helius';
+import { fetchBaseWalletBalance } from '@/lib/base';
 import { getOrSetCache, cacheKeys, cacheTTL } from '@/lib/redis';
 import { readLimiter, applyRateLimit } from '@/lib/ratelimit';
 import prisma from '@/lib/prisma';
@@ -11,16 +12,20 @@ export async function GET(request: NextRequest) {
     if (rateLimitResponse) return rateLimitResponse;
     const user = await requireAuth(request);
 
-    if (!user.walletAddress || user.walletAddress.startsWith('pending-')) {
-      // Return empty balance for users without a real wallet
+    const chain = getChainParam(request);
+    const walletAddress = getWalletForChain(user, chain);
+
+    if (!walletAddress) {
+      // Return empty balance for users without a real wallet for this chain
       return NextResponse.json({
         success: true,
         data: {
-          chain: 'solana',
+          chain,
           nativeBalance: 0,
           nativePriceUsd: 0,
-          nativeSymbol: 'SOL',
+          nativeSymbol: chain === 'base' ? 'ETH' : 'SOL',
           solBalance: 0,
+          solPriceUsd: 0,
           tokens: [],
           totalValueUsd: 0,
           change24h: 0,
@@ -29,15 +34,24 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    const cacheKey = cacheKeys.walletBalance(user.walletAddress);
+    const cacheKey = cacheKeys.walletBalance(user.id, chain);
 
     const balance = await getOrSetCache(cacheKey, cacheTTL.walletBalance, async () => {
-      return await fetchWalletBalance(user.walletAddress);
+      if (chain === 'base') {
+        return await fetchBaseWalletBalance(walletAddress);
+      }
+      const solBalance = await fetchWalletBalance(walletAddress);
+      // Ensure legacy Solana balance also has the new chain-aware fields
+      solBalance.chain = 'solana';
+      solBalance.nativeBalance = solBalance.solBalance;
+      solBalance.nativePriceUsd = solBalance.solPriceUsd ?? 0;
+      solBalance.nativeSymbol = 'SOL';
+      return solBalance;
     });
 
     // Record portfolio snapshot (fire-and-forget, don't block response)
     if (balance.totalValueUsd != null) {
-      const solValueUsd = balance.solBalance * (balance.solPriceUsd ?? 0);
+      const nativeValueUsd = (balance.nativeBalance ?? 0) * (balance.nativePriceUsd ?? 0);
       const tokenValueUsd = balance.tokens.reduce(
         (sum: number, t: any) => sum + (t.valueUsd || 0),
         0
@@ -45,9 +59,11 @@ export async function GET(request: NextRequest) {
       prisma.portfolioSnapshot.create({
         data: {
           userId: user.id,
+          chain,
           totalValueUsd: balance.totalValueUsd ?? 0,
-          solBalance: balance.solBalance,
-          solValueUsd,
+          // solBalance column retains the native balance for back-compat
+          solBalance: balance.nativeBalance ?? balance.solBalance ?? 0,
+          solValueUsd: nativeValueUsd,
           tokenValueUsd,
         },
       }).catch((err: any) => console.error('Snapshot write error:', err?.message));

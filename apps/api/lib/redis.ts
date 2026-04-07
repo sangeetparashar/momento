@@ -29,7 +29,7 @@ export const cacheKeys = {
 
   userProfile: (id: string) => `user:${id}`,
 
-  walletBalance: (address: string) => `wallet:${address}`,
+  walletBalance: (userId: string, chain: string = 'solana') => `wallet:balance:${chain}:${userId}`,
 
   postDetail: (id: string) => `post:${id}`,
 
