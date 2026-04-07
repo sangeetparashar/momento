@@ -71,9 +71,9 @@ const BASE_TOKENS: TokenInfo[] = [
 export function SwapModal({ visible, onClose }: SwapModalProps) {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const auth = useAuth() as any;
+  const auth = useAuth();
   const { walletAddress } = auth;
-  const { chain } = useChain() as { chain: 'solana' | 'base' };
+  const { chain } = useChain();
   const { quote, status, error, fetchQuote, executeSwap, reset } = useSwap();
   const balanceQuery = useWalletBalance(visible);
 

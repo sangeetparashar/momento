@@ -104,9 +104,9 @@ async function waitForTransaction(
  *    - If `requiresApproval`, send an ERC-20 approve tx first
  */
 export function useSwap(): UseSwapReturn {
-  const auth = useAuth() as any;
+  const auth = useAuth();
   const { walletAddress, getWalletProvider } = auth;
-  const { chain } = useChain() as { chain: 'solana' | 'base' };
+  const { chain } = useChain();
   const [quote, setQuote] = useState<SwapQuote | null>(null);
   const [status, setStatus] = useState<SwapStatus>('idle');
   const [error, setError] = useState<string | null>(null);

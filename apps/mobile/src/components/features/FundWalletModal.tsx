@@ -301,9 +301,8 @@ function OnrampWebView({
 // ---------------------------------------------------------------------------
 
 function OnChainTransfer({ chain }: { chain: ChainType }) {
-  const auth = useAuth() as any;
-  const { walletAddress: clientWalletAddress } = auth;
-  const ethWalletAddress = auth.ethWalletAddress as string | null | undefined;
+  const auth = useAuth();
+  const { walletAddress: clientWalletAddress, ethWalletAddress } = auth;
   const { user: profile } = useUserProfile();
   const [copied, setCopied] = useState(false);
 

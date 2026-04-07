@@ -57,9 +57,9 @@ type SendStep = 'form' | 'confirming' | 'success' | 'error';
  */
 export function SendModal({ visible, onClose }: SendModalProps) {
   const insets = useSafeAreaInsets();
-  const auth = useAuth() as any;
+  const auth = useAuth();
   const { walletAddress, getWalletProvider } = auth;
-  const { chain } = useChain() as { chain: 'solana' | 'base' };
+  const { chain } = useChain();
   const balanceQuery = useWalletBalance();
   const balance: any = balanceQuery.data;
 
