@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth';
+import { requireAuth, getChainParam } from '@/lib/auth';
 import { getOrSetCache, cacheTTL } from '@/lib/redis';
 import { readLimiter, applyRateLimit } from '@/lib/ratelimit';
 
@@ -17,14 +17,17 @@ export async function GET(request: NextRequest) {
     if (rateLimitResponse) return rateLimitResponse;
     await requireAuth(request);
 
+    const chain = getChainParam(request);
+    const coinId = chain === 'base' ? 'ethereum' : 'solana';
+
     const { searchParams } = new URL(request.url);
     const range = searchParams.get('range') || '1M';
     const days = DAYS_MAP[range] || 30;
 
-    const cacheKey = `sol-price-history:${days}`;
+    const cacheKey = `price:history:${coinId}:${days}`;
     const data = await getOrSetCache(cacheKey, days <= 1 ? 300 : cacheTTL.walletBalance, async () => {
       const response = await fetch(
-        `https://api.coingecko.com/api/v3/coins/solana/market_chart?vs_currency=usd&days=${days}`,
+        `https://api.coingecko.com/api/v3/coins/${coinId}/market_chart?vs_currency=usd&days=${days}`,
         { headers: { 'Accept': 'application/json' } }
       );
 
