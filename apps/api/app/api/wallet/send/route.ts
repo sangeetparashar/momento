@@ -19,6 +19,42 @@ import {
 
 const SOLANA_RPC_URL = process.env.SOLANA_RPC_URL || 'https://api.devnet.solana.com';
 
+/**
+ * Convert a decimal amount string to base units (bigint) with the given decimals.
+ * Preserves precision by working entirely on the string representation rather than
+ * floating-point arithmetic.
+ *
+ * If the fractional part has MORE digits than `decimals`, the excess digits are
+ * floored (truncated) — chosen for safety so we never accidentally send more than
+ * the user requested.
+ *
+ * Examples:
+ *   parseUnits("1.5", 18)      → 1500000000000000000n
+ *   parseUnits("0.000001", 6)  → 1n
+ *   parseUnits("1", 6)         → 1000000n
+ *   parseUnits("0.1234567", 6) → 123456n  (last digit floored)
+ */
+function parseUnits(amountStr: string, decimals: number): bigint {
+  if (typeof amountStr !== 'string') {
+    throw new Error('parseUnits: amountStr must be a string');
+  }
+  // Strip leading + and surrounding whitespace
+  const trimmed = amountStr.trim().replace(/^\+/, '');
+  if (!/^\d*\.?\d*$/.test(trimmed) || trimmed === '' || trimmed === '.') {
+    throw new Error(`parseUnits: invalid amount "${amountStr}"`);
+  }
+
+  const [whole = '0', fracRaw = ''] = trimmed.split('.');
+  // Floor: truncate any fractional digits beyond `decimals`
+  const fracTruncated = fracRaw.slice(0, decimals);
+  // Pad with trailing zeros so total fractional length === decimals
+  const fracPadded = fracTruncated.padEnd(decimals, '0');
+
+  // Combine; strip leading zeros to keep BigInt() happy with very large strings
+  const combined = (whole + fracPadded).replace(/^0+(?=\d)/, '');
+  return BigInt(combined === '' ? '0' : combined);
+}
+
 // USDC mint on devnet and mainnet
 const USDC_MINT_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
 const USDC_MINT_MAINNET = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
@@ -212,8 +248,9 @@ function handleBaseSend(
   }
 
   if (token === 'ETH') {
-    // Native ETH transfer — simple value transfer
-    const weiAmount = BigInt(Math.floor(amount * 1e18));
+    // Native ETH transfer — simple value transfer.
+    // Convert via string to preserve as much precision as float64 carried in.
+    const weiAmount = parseUnits(amount.toString(), 18);
 
     return NextResponse.json({
       success: true,
@@ -232,7 +269,7 @@ function handleBaseSend(
     // ERC-20 transfer — encode transfer(address,uint256) calldata
     const usdcAddress = CHAIN_CONFIG.base.usdcAddress;
     const usdcDecimals = CHAIN_CONFIG.base.usdcDecimals; // 6
-    const rawAmount = BigInt(Math.floor(amount * Math.pow(10, usdcDecimals)));
+    const rawAmount = parseUnits(amount.toString(), usdcDecimals);
 
     // Function selector for transfer(address,uint256): 0xa9059cbb
     const recipientPadded = recipientAddress.slice(2).toLowerCase().padStart(64, '0');

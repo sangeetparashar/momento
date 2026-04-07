@@ -1,7 +1,36 @@
 import type { TokenHolding, WalletBalance } from '@momento/shared';
+import { getOrSetCache } from './redis';
 
 const BASE_RPC_URL = process.env.BASE_RPC_URL || 'https://mainnet.base.org';
 const ALCHEMY_API_KEY = process.env.ALCHEMY_API_KEY;
+
+/**
+ * Convert a raw integer balance (bigint) to a human-readable Number with the
+ * given decimals.
+ *
+ * Precision boundary: results are exact for balances whose WHOLE-unit portion
+ * fits in JS's safe integer range — i.e. < 2^53 ≈ 9.007e15 whole units. For
+ * ETH (18 decimals) that means amounts under ~9 quadrillion ETH are exact;
+ * the float64 mantissa starts losing fractional precision well before that
+ * but is more than enough for any realistic wallet balance. Above the safe
+ * range we extract the whole-unit portion via BigInt division (lossless) and
+ * add the fractional part as a Number, which still keeps ~15 significant
+ * figures of precision.
+ */
+function formatUnits(wei: bigint, decimals: number): number {
+  if (wei === BigInt(0)) return 0;
+  const divisor = BigInt(10) ** BigInt(decimals);
+
+  if (wei < BigInt(Number.MAX_SAFE_INTEGER)) {
+    // Fast path: full bigint fits in a safe Number, single division is exact
+    return Number(wei) / Number(divisor);
+  }
+
+  // Slow path: split into whole + fractional to avoid overflow
+  const whole = wei / divisor;
+  const remainder = wei % divisor;
+  return Number(whole) + Number(remainder) / Number(divisor);
+}
 
 // Well-known Base chain tokens to check balances for
 const BASE_TOKENS: Array<{
@@ -69,7 +98,7 @@ export async function getEthBalance(walletAddress: string): Promise<number> {
   if (!result || result === '0x') return 0;
   // result is hex string of wei
   const wei = BigInt(result);
-  return Number(wei) / 1e18;
+  return formatUnits(wei, 18);
 }
 
 /**
@@ -92,7 +121,7 @@ async function getErc20Balance(
 
     if (!result || result === '0x') return 0;
     const rawBalance = BigInt(result);
-    return Number(rawBalance) / Math.pow(10, decimals);
+    return formatUnits(rawBalance, decimals);
   } catch (error) {
     console.error(`Failed to fetch ERC-20 balance for ${tokenAddress}:`, error);
     return 0;
@@ -100,35 +129,58 @@ async function getErc20Balance(
 }
 
 /**
+ * Compute the USD price for a known Base token symbol given the current ETH price.
+ * - USDC, DAI: stablecoins, hardcoded $1.00
+ * - WETH: tracks ETH price
+ * - anything else: undefined (we don't know how to price it)
+ */
+function knownPriceUsd(symbol: string | undefined, ethPriceUsd: number): number | undefined {
+  if (!symbol) return undefined;
+  if (symbol === 'USDC' || symbol === 'DAI') return 1.0;
+  if (symbol === 'WETH') return ethPriceUsd || undefined;
+  return undefined;
+}
+
+/**
  * Get all known ERC-20 token balances on Base.
  * If Alchemy is configured, uses alchemy_getTokenBalances for discovery.
  * Otherwise, checks a known list of popular Base tokens.
+ *
+ * `ethPriceUsd` is required so that WETH (and any other ETH-denominated token)
+ * can be priced consistently with the wallet's native ETH balance.
  */
-export async function getTokenBalances(walletAddress: string): Promise<TokenHolding[]> {
+export async function getTokenBalances(
+  walletAddress: string,
+  ethPriceUsd: number = 0
+): Promise<TokenHolding[]> {
   // If Alchemy is available, use their token balance API for broader discovery
   if (ALCHEMY_API_KEY) {
-    return getTokenBalancesAlchemy(walletAddress);
+    return getTokenBalancesAlchemy(walletAddress, ethPriceUsd);
   }
-  return getTokenBalancesKnownList(walletAddress);
+  return getTokenBalancesKnownList(walletAddress, ethPriceUsd);
 }
 
 /**
  * Check balances for known token list (no API key required).
  */
-async function getTokenBalancesKnownList(walletAddress: string): Promise<TokenHolding[]> {
+async function getTokenBalancesKnownList(
+  walletAddress: string,
+  ethPriceUsd: number
+): Promise<TokenHolding[]> {
   const holdings: TokenHolding[] = [];
 
   const balancePromises = BASE_TOKENS.map(async (token) => {
     const amount = await getErc20Balance(token.address, walletAddress, token.decimals);
     if (amount > 0) {
+      const priceUsd = knownPriceUsd(token.symbol, ethPriceUsd);
       holdings.push({
         mint: token.address,
         symbol: token.symbol,
         name: token.name,
         amount,
         decimals: token.decimals,
-        priceUsd: token.symbol === 'USDC' ? 1.0 : undefined,
-        valueUsd: token.symbol === 'USDC' ? amount : undefined,
+        priceUsd,
+        valueUsd: priceUsd !== undefined ? amount * priceUsd : undefined,
       });
     }
   });
@@ -140,7 +192,10 @@ async function getTokenBalancesKnownList(walletAddress: string): Promise<TokenHo
 /**
  * Use Alchemy's alchemy_getTokenBalances for comprehensive token discovery.
  */
-async function getTokenBalancesAlchemy(walletAddress: string): Promise<TokenHolding[]> {
+async function getTokenBalancesAlchemy(
+  walletAddress: string,
+  ethPriceUsd: number
+): Promise<TokenHolding[]> {
   const url = `https://base-mainnet.g.alchemy.com/v2/${ALCHEMY_API_KEY}`;
 
   try {
@@ -158,7 +213,7 @@ async function getTokenBalancesAlchemy(walletAddress: string): Promise<TokenHold
     const json = await res.json();
     if (json.error || !json.result?.tokenBalances) {
       console.error('Alchemy token balance error:', json.error);
-      return getTokenBalancesKnownList(walletAddress); // fallback
+      return getTokenBalancesKnownList(walletAddress, ethPriceUsd); // fallback
     }
 
     const holdings: TokenHolding[] = [];
@@ -175,7 +230,10 @@ async function getTokenBalancesAlchemy(walletAddress: string): Promise<TokenHold
       );
 
       const decimals = known?.decimals ?? 18;
-      const amount = Number(rawBalance) / Math.pow(10, decimals);
+      const amount = formatUnits(rawBalance, decimals);
+
+      // Only price tokens we recognise; unknown tokens are left unpriced.
+      const priceUsd = knownPriceUsd(known?.symbol, ethPriceUsd);
 
       holdings.push({
         mint: tb.contractAddress,
@@ -183,33 +241,37 @@ async function getTokenBalancesAlchemy(walletAddress: string): Promise<TokenHold
         name: known?.name ?? 'Unknown Token',
         amount,
         decimals,
-        priceUsd: known?.symbol === 'USDC' ? 1.0 : undefined,
-        valueUsd: known?.symbol === 'USDC' ? amount : undefined,
+        priceUsd,
+        valueUsd: priceUsd !== undefined ? amount * priceUsd : undefined,
       });
     }
 
     return holdings;
   } catch (error) {
     console.error('Alchemy token balance fetch failed:', error);
-    return getTokenBalancesKnownList(walletAddress);
+    return getTokenBalancesKnownList(walletAddress, ethPriceUsd);
   }
 }
 
 /**
- * Fetch ETH price in USD from CoinGecko.
+ * Fetch ETH price in USD from CoinGecko, cached in Redis for 60s.
+ * Prices change much slower than that and CoinGecko's free tier is rate-limited,
+ * so caching protects us against bursts of wallet-balance requests.
  */
 async function getEthPriceUsd(): Promise<number> {
-  try {
-    const res = await fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd',
-      { headers: { Accept: 'application/json' } }
-    );
-    const json = await res.json();
-    return json?.ethereum?.usd ?? 0;
-  } catch (error) {
-    console.error('Failed to fetch ETH price:', error);
-    return 0;
-  }
+  return getOrSetCache<number>('price:eth-usd', 60, async () => {
+    try {
+      const res = await fetch(
+        'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd',
+        { headers: { Accept: 'application/json' } }
+      );
+      const json = await res.json();
+      return json?.ethereum?.usd ?? 0;
+    } catch (error) {
+      console.error('Failed to fetch ETH price:', error);
+      return 0;
+    }
+  });
 }
 
 /**
@@ -217,10 +279,14 @@ async function getEthPriceUsd(): Promise<number> {
  * Equivalent to fetchWalletBalance() in helius.ts.
  */
 export async function fetchBaseWalletBalance(walletAddress: string): Promise<WalletBalance> {
-  const [ethBalance, tokens, ethPriceUsd] = await Promise.all([
+  // ETH price is fetched first so it can be threaded into token pricing
+  // (e.g. so WETH gets a valueUsd). It's cached, so this is essentially free
+  // on the hot path.
+  const ethPriceUsd = await getEthPriceUsd();
+
+  const [ethBalance, tokens] = await Promise.all([
     getEthBalance(walletAddress),
-    getTokenBalances(walletAddress),
-    getEthPriceUsd(),
+    getTokenBalances(walletAddress, ethPriceUsd),
   ]);
 
   const ethValueUsd = ethBalance * ethPriceUsd;
