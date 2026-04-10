@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Image from 'next/image';
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -30,17 +31,13 @@ export default function Navbar() {
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           className="flex items-center gap-3 group"
         >
-          <svg
-            width="28"
-            height="28"
-            viewBox="0 0 40 40"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
+          <Image
+            src="/logo-white.svg"
+            alt="Momento"
+            width={28}
+            height={28}
             className="transition-transform duration-300 group-hover:scale-110"
-          >
-            <path d="M4 32V10L13 20L20 12L27 20L36 10V32" stroke="#00FF88" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-            <circle cx="36" cy="10" r="2.5" fill="#00FF88"/>
-          </svg>
+          />
           <span className="text-white text-[11px] font-mono tracking-[0.3em] uppercase">
             Momento
           </span>

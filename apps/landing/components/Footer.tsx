@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import Modal from './Modal';
 import TermsContent from './TermsContent';
 import PrivacyContent from './PrivacyContent';
@@ -15,16 +16,12 @@ export default function Footer() {
         <div className="max-w-7xl mx-auto py-8 px-6 flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Left — Logo + wordmark */}
           <div className="flex items-center gap-3">
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 40 40"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path d="M4 32V10L13 20L20 12L27 20L36 10V32" stroke="#00FF88" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-              <circle cx="36" cy="10" r="2.5" fill="#00FF88"/>
-            </svg>
+            <Image
+              src="/logo-white.svg"
+              alt="Momento"
+              width={20}
+              height={20}
+            />
             <span className="text-white text-[10px] font-mono tracking-[0.2em] uppercase">
               Momento
             </span>

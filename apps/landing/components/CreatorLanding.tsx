@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import AppShowcaseFlow from './showcase/AppShowcaseFlow';
 
 type Phase = 'loading' | 'polaroid' | 'main';
@@ -50,16 +51,12 @@ export default function CreatorLanding() {
 
             {/* Logo + text */}
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-5">
-              <svg
-                width="48"
-                height="48"
-                viewBox="0 0 40 40"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path d="M4 32V10L13 20L20 12L27 20L36 10V32" stroke="#00FF88" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                <circle cx="36" cy="10" r="2.5" fill="#00FF88"/>
-              </svg>
+              <Image
+                src="/logo-white.svg"
+                alt="Momento"
+                width={48}
+                height={48}
+              />
               <span className="font-serif font-light text-2xl text-white tracking-[0.3em] uppercase">
                 Momento
               </span>

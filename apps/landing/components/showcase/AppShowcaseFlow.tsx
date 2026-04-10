@@ -5,7 +5,7 @@ import PhoneFrame from './PhoneFrame';
 import HomeFeedScreen from './HomeFeedScreen';
 import ExploreScreen from './ExploreScreen';
 import CreatorProfileScreen from './CreatorProfileScreen';
-import OwnershipScreen from './OwnershipScreen';
+import WalletScreen from './WalletScreen';
 import Navbar from '../Navbar';
 import TickerBanner from '../TickerBanner';
 import Manifesto from '../Manifesto';
@@ -35,11 +35,11 @@ const sections = [
     screen: <CreatorProfileScreen />,
   },
   {
-    label: 'Yours',
-    title: 'You own everything.',
+    label: 'Wallet',
+    title: 'Your portfolio. Your wealth.',
     subtitle:
-      'Your holdings. Your data. Your identity. Everything you earn, buy, or build on Momento belongs to you — secured by blockchain.',
-    screen: <OwnershipScreen />,
+      'Track your earnings, trade creator tokens, and watch your portfolio grow — all in one place.',
+    screen: <WalletScreen />,
   },
 ];
 
