@@ -24,7 +24,7 @@ export default function CreatorLanding() {
       >
         <div className="flex items-center gap-3">
           <div className="w-2 h-2 rounded-full bg-momento-primary animate-pulse-dot" />
-          <p className="loading-text text-sm text-[#666666] lowercase">
+          <p className="font-mono text-[10px] text-[#555555] lowercase tracking-[0.15em]">
             loading your momento...
           </p>
         </div>
@@ -43,14 +43,13 @@ export default function CreatorLanding() {
         >
           {/* Photo area */}
           <div className="w-64 h-64 md:w-72 md:h-72 bg-black rounded-sm overflow-hidden relative">
-            {/* Gradient background inside polaroid */}
             <div className="absolute inset-0 bg-gradient-to-br from-black via-[#0a0a0a] to-black" />
 
             {/* Breathing green glow */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 bg-[#00FF88]/[0.08] rounded-full blur-[60px] animate-breathe-glow" />
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 bg-momento-primary/[0.08] rounded-full blur-[60px] animate-breathe-glow" />
 
             {/* Logo + text */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-5">
               <svg
                 width="48"
                 height="48"
@@ -61,20 +60,20 @@ export default function CreatorLanding() {
                 <path d="M4 32V10L13 20L20 12L27 20L36 10V32" stroke="#00FF88" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
                 <circle cx="36" cy="10" r="2.5" fill="#00FF88"/>
               </svg>
-              <span className="font-display text-2xl font-bold text-white tracking-[0.2em] uppercase">
-                MOMENTO
+              <span className="font-serif font-light text-2xl text-white tracking-[0.3em] uppercase">
+                Momento
               </span>
             </div>
           </div>
 
           {/* Polaroid caption area */}
           <p className="text-center text-[#999] text-sm mt-1 italic" style={{ fontFamily: 'Georgia, serif' }}>
-            own the culture
+            the stock market for culture
           </p>
         </button>
 
         {/* Tap hint */}
-        <p className="mt-8 text-[#333] text-xs font-mono animate-pulse-dot">
+        <p className="mt-8 text-[#333] text-[10px] font-mono animate-pulse-dot tracking-[0.15em]">
           tap to enter
         </p>
       </div>

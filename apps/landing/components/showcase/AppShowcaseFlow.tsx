@@ -6,6 +6,10 @@ import HomeFeedScreen from './HomeFeedScreen';
 import ExploreScreen from './ExploreScreen';
 import CreatorProfileScreen from './CreatorProfileScreen';
 import OwnershipScreen from './OwnershipScreen';
+import Navbar from '../Navbar';
+import TickerBanner from '../TickerBanner';
+import Manifesto from '../Manifesto';
+import Footer from '../Footer';
 import WaitlistForm from '../WaitlistForm';
 
 const sections = [
@@ -27,7 +31,7 @@ const sections = [
     label: 'Profile',
     title: 'Support the creators you believe in.',
     subtitle:
-      'Follow their journey, access exclusive content, and back them directly. Every interaction is real. Every supporter matters.',
+      'Follow their journey, access exclusive content, and back them directly. Every supporter matters.',
     screen: <CreatorProfileScreen />,
   },
   {
@@ -45,41 +49,33 @@ export default function AppShowcaseFlow() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
   const ctaRef = useRef<HTMLDivElement>(null);
-  const isScrollingRef = useRef(false);
 
-  // Scroll to a specific section within the showcase
   const scrollToSection = useCallback((index: number) => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
     const containerTop = container.offsetTop;
-    const sectionHeight = container.offsetHeight / sections.length;
-    const targetScroll = containerTop + sectionHeight * index + sectionHeight * 0.5;
+    const scrollableHeight = container.offsetHeight - window.innerHeight;
+    const targetScroll = containerTop + (scrollableHeight * index) / sections.length + scrollableHeight / (sections.length * 2);
 
-    isScrollingRef.current = true;
     window.scrollTo({ top: targetScroll, behavior: 'smooth' });
-
-    // Release lock after animation completes
-    setTimeout(() => {
-      isScrollingRef.current = false;
-    }, 700);
   }, []);
 
-  // Wheel event handler — one scroll = one section transition
+  // Wheel event handler
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
 
     let lastWheelTime = 0;
-    const COOLDOWN = 800; // ms between transitions
+    const COOLDOWN = 800;
 
     const handleWheel = (e: WheelEvent) => {
       const rect = container.getBoundingClientRect();
       const scrolled = -rect.top;
       const totalHeight = container.offsetHeight;
+      const scrollableHeight = totalHeight - window.innerHeight;
 
-      // Only intercept when inside the showcase area
-      const isInShowcase = scrolled >= -10 && scrolled <= totalHeight - 10;
+      const isInShowcase = scrolled >= -10 && scrolled <= scrollableHeight + 10;
       if (!isInShowcase) return;
 
       const now = Date.now();
@@ -89,14 +85,13 @@ export default function AppShowcaseFlow() {
       }
 
       const direction = e.deltaY > 0 ? 1 : -1;
-      const sectionHeight = totalHeight / sections.length;
+      const progress = Math.max(0, scrolled) / scrollableHeight;
       const currentIndex = Math.min(
-        Math.floor(scrolled / sectionHeight),
+        Math.floor(progress * sections.length),
         sections.length - 1
       );
       const nextIndex = currentIndex + direction;
 
-      // Allow normal scroll out of showcase
       if (nextIndex < 0 || nextIndex >= sections.length) return;
 
       e.preventDefault();
@@ -108,7 +103,7 @@ export default function AppShowcaseFlow() {
     return () => window.removeEventListener('wheel', handleWheel);
   }, [scrollToSection]);
 
-  // Touch swipe handler for mobile — one swipe = one section
+  // Touch swipe handler
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -126,8 +121,9 @@ export default function AppShowcaseFlow() {
       const rect = container.getBoundingClientRect();
       const scrolled = -rect.top;
       const totalHeight = container.offsetHeight;
+      const scrollableHeight = totalHeight - window.innerHeight;
 
-      const isInShowcase = scrolled >= -10 && scrolled <= totalHeight - 10;
+      const isInShowcase = scrolled >= -10 && scrolled <= scrollableHeight + 10;
       if (!isInShowcase) return;
 
       const deltaY = touchStartY - e.touches[0].clientY;
@@ -140,9 +136,9 @@ export default function AppShowcaseFlow() {
       }
 
       const direction = deltaY > 0 ? 1 : -1;
-      const sectionHeight = totalHeight / sections.length;
+      const progress = Math.max(0, scrolled) / scrollableHeight;
       const currentIndex = Math.min(
-        Math.floor(scrolled / sectionHeight),
+        Math.floor(progress * sections.length),
         sections.length - 1
       );
       const nextIndex = currentIndex + direction;
@@ -151,7 +147,7 @@ export default function AppShowcaseFlow() {
 
       e.preventDefault();
       lastSwipeTime = now;
-      touchStartY = e.touches[0].clientY; // reset for next swipe
+      touchStartY = e.touches[0].clientY;
       scrollToSection(nextIndex);
     };
 
@@ -163,7 +159,7 @@ export default function AppShowcaseFlow() {
     };
   }, [scrollToSection]);
 
-  // Track scroll position to update activeIndex and inShowcase
+  // Track scroll position
   useEffect(() => {
     const container = scrollContainerRef.current;
     if (!container) return;
@@ -171,27 +167,19 @@ export default function AppShowcaseFlow() {
     const handleScroll = () => {
       const rect = container.getBoundingClientRect();
       const scrolled = -rect.top;
-      const sectionHeight = container.offsetHeight / sections.length;
       const totalHeight = container.offsetHeight;
+      // Reserve one viewport height for the sticky view, distribute rest across sections
+      const scrollableHeight = totalHeight - window.innerHeight;
 
-      const isInArea = scrolled >= -50 && scrolled <= totalHeight + 50;
-      setInShowcase(isInArea);
+      setInShowcase(scrolled >= -50 && scrolled <= totalHeight + 50);
 
-      if (scrolled < 0) {
-        setActiveIndex(0);
-        return;
-      }
+      if (scrolled <= 0) { setActiveIndex(0); return; }
+      if (scrolled >= scrollableHeight) { setActiveIndex(sections.length - 1); return; }
 
-      if (scrolled >= totalHeight) {
-        setActiveIndex(sections.length - 1);
-        return;
-      }
-
-      const newIndex = Math.min(
-        Math.floor(scrolled / sectionHeight),
-        sections.length - 1
+      const progress = scrolled / scrollableHeight;
+      setActiveIndex(
+        Math.min(Math.floor(progress * sections.length), sections.length - 1)
       );
-      setActiveIndex(newIndex);
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
@@ -208,8 +196,8 @@ export default function AppShowcaseFlow() {
         animate(heroElements, {
           opacity: [0, 1],
           translateY: [30, 0],
-          delay: (_: unknown, i: number) => i * 150,
-          duration: 900,
+          delay: (_: unknown, i: number) => i * 200,
+          duration: 1000,
           easing: 'easeOutCubic',
         });
       }
@@ -233,40 +221,55 @@ export default function AppShowcaseFlow() {
 
   return (
     <div className="relative">
+      <Navbar />
+
       {/* ─── Hero / Intro Section ─── */}
       <section
         ref={heroRef}
-        className="min-h-screen flex flex-col items-center justify-center px-6 relative"
+        className="min-h-[85vh] md:min-h-screen flex flex-col items-center justify-center px-6 pt-16 relative"
       >
-        {/* Background orbs */}
-        <div className="absolute top-[20%] left-[15%] w-[400px] h-[400px] bg-momento-primary/[0.04] rounded-full blur-[120px] animate-flutter pointer-events-none" />
-        <div className="absolute bottom-[20%] right-[15%] w-[300px] h-[300px] bg-momento-primary/[0.03] rounded-full blur-[100px] animate-breathe-glow pointer-events-none" />
+        {/* Subtle background gradient */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#111111] via-black to-black" />
 
-        <div className="text-center max-w-3xl relative z-10 space-y-6">
+        {/* Breathing orb */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] md:w-[600px] md:h-[600px] bg-momento-primary/[0.03] rounded-full blur-[200px] animate-breathe-glow pointer-events-none" />
+
+        <div className="text-center max-w-3xl relative z-10 space-y-4 md:space-y-6">
           <p
-            className="anim-hero text-momento-primary font-mono text-xs uppercase tracking-[4px]"
+            className="anim-hero font-mono text-[9px] md:text-[10px] text-momento-primary uppercase tracking-[0.3em]"
             style={{ opacity: 0 }}
           >
             Introducing Momento
           </p>
           <h1
-            className="anim-hero font-display text-4xl md:text-6xl lg:text-7xl font-bold text-white leading-[1.1]"
+            className="anim-hero"
             style={{ opacity: 0 }}
           >
-            The creator economy,{' '}
-            <span className="text-shimmer">reimagined.</span>
+            <span className="block font-serif font-light text-3xl md:text-6xl lg:text-8xl text-white tracking-[0.15em] md:tracking-[0.2em] uppercase leading-[1.1]">
+              The Stock Market
+            </span>
+            <span className="block font-serif font-light text-3xl md:text-6xl lg:text-8xl text-momento-primary tracking-[0.15em] md:tracking-[0.2em] uppercase leading-[1.1] mt-1 md:mt-2">
+              for Culture
+            </span>
           </h1>
           <p
-            className="anim-hero text-white/40 text-base md:text-lg lg:text-xl max-w-xl mx-auto leading-relaxed"
+            className="anim-hero text-[#666666] text-xs md:text-base font-mono max-w-xl mx-auto leading-relaxed"
             style={{ opacity: 0 }}
           >
             Discover creators near you. Support them directly. Build together.
           </p>
           <div
-            className="anim-hero flex items-center justify-center gap-2 text-white/20 text-xs font-mono"
+            id="waitlist"
+            className="anim-hero pt-2 md:pt-4"
             style={{ opacity: 0 }}
           >
-            <svg className="w-4 h-4 animate-bounce-gentle" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <WaitlistForm />
+          </div>
+          <div
+            className="anim-hero flex items-center justify-center gap-2 text-white/15 text-[9px] font-mono uppercase tracking-wider pt-2"
+            style={{ opacity: 0 }}
+          >
+            <svg className="w-3.5 h-3.5 animate-bounce-gentle" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
             </svg>
             scroll to explore
@@ -274,19 +277,24 @@ export default function AppShowcaseFlow() {
         </div>
       </section>
 
-      {/* ─── Sticky Showcase Area (both desktop & mobile) ─── */}
+      {/* ─── Ticker ─── */}
+      <TickerBanner />
+
+      {/* ─── Manifesto ─── */}
+      <Manifesto />
+
+      {/* ─── Sticky Showcase Area ─── */}
       <div
         ref={scrollContainerRef}
-        style={{ height: `${sections.length * 100}vh` }}
+        style={{ height: `${sections.length * 80}vh` }}
         className="relative"
       >
-        {/* Sticky inner — stays pinned while scrolling through */}
         <div className="sticky top-0 h-screen flex items-center justify-center px-6 overflow-hidden">
           <div className="max-w-6xl w-full mx-auto">
 
-            {/* ─── Desktop Layout ─── */}
+            {/* Desktop Layout */}
             <div className="hidden md:grid md:grid-cols-2 gap-12 lg:gap-20 items-center">
-              {/* Text side — crossfades */}
+              {/* Text side */}
               <div className="relative min-h-[280px]">
                 {sections.map((section, i) => (
                   <div
@@ -300,25 +308,25 @@ export default function AppShowcaseFlow() {
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="text-momento-primary font-mono text-xs font-bold">
+                      <span className="text-momento-primary font-mono text-[10px] font-bold tracking-wider">
                         0{i + 1}
                       </span>
                       <div className="w-8 h-px bg-momento-primary/30" />
-                      <span className="text-momento-primary/60 text-xs uppercase tracking-[2px] font-mono">
+                      <span className="text-momento-primary/60 text-[9px] uppercase tracking-[0.2em] font-mono">
                         {section.label}
                       </span>
                     </div>
-                    <h2 className="font-display text-3xl lg:text-4xl xl:text-5xl font-bold text-white leading-tight">
+                    <h2 className="font-mono text-2xl lg:text-3xl xl:text-4xl font-bold text-white leading-tight uppercase">
                       {section.title}
                     </h2>
-                    <p className="text-white/50 text-base lg:text-lg leading-relaxed max-w-md">
+                    <p className="text-[#666666] text-sm font-mono leading-relaxed max-w-md">
                       {section.subtitle}
                     </p>
                   </div>
                 ))}
               </div>
 
-              {/* Phone side — stays, screen crossfades */}
+              {/* Phone side */}
               <div className="flex justify-center">
                 <PhoneFrame>
                   <div className="relative w-full h-full">
@@ -337,10 +345,9 @@ export default function AppShowcaseFlow() {
               </div>
             </div>
 
-            {/* ─── Mobile Layout ─── */}
-            <div className="md:hidden flex flex-col items-center gap-3">
-              {/* Text — crossfades */}
-              <div className="relative min-h-[110px] w-full">
+            {/* Mobile Layout */}
+            <div className="md:hidden flex flex-col items-center gap-2">
+              <div className="relative min-h-[100px] w-full">
                 {sections.map((section, i) => (
                   <div
                     key={i}
@@ -357,21 +364,20 @@ export default function AppShowcaseFlow() {
                         0{i + 1}
                       </span>
                       <div className="w-5 h-px bg-momento-primary/30" />
-                      <span className="text-momento-primary/60 text-[9px] uppercase tracking-[2px] font-mono">
+                      <span className="text-momento-primary/60 text-[9px] uppercase tracking-[0.2em] font-mono">
                         {section.label}
                       </span>
                     </div>
-                    <h2 className="font-display text-xl font-bold text-white">
+                    <h2 className="font-mono text-lg font-bold text-white uppercase">
                       {section.title}
                     </h2>
-                    <p className="text-white/50 text-xs leading-relaxed max-w-xs">
+                    <p className="text-[#666666] text-[10px] font-mono leading-relaxed max-w-xs">
                       {section.subtitle}
                     </p>
                   </div>
                 ))}
               </div>
 
-              {/* Screen card — stays centered, content crossfades */}
               <div
                 className="rounded-2xl border border-white/[0.08] overflow-hidden bg-[#0a0a0a] w-full max-w-[240px] relative"
                 style={{ aspectRatio: '9 / 14' }}
@@ -390,7 +396,7 @@ export default function AppShowcaseFlow() {
             </div>
           </div>
 
-          {/* ─── Scroll Navigation (desktop only) ─── */}
+          {/* Scroll Navigation (desktop) */}
           <div
             className={`fixed right-6 md:right-10 top-1/2 -translate-y-1/2 z-30 flex flex-col items-end gap-6 transition-all duration-500 ${
               inShowcase ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4 pointer-events-none'
@@ -403,9 +409,8 @@ export default function AppShowcaseFlow() {
                 className="group flex items-center gap-3 cursor-pointer"
                 aria-label={`Go to ${section.label}`}
               >
-                {/* Label — desktop only */}
                 <span
-                  className={`hidden md:block text-[11px] font-mono uppercase tracking-[2px] transition-all duration-300 whitespace-nowrap ${
+                  className={`hidden md:block text-[10px] font-mono uppercase tracking-[0.15em] transition-all duration-300 whitespace-nowrap ${
                     activeIndex === i
                       ? 'text-momento-primary'
                       : 'text-white/25 group-hover:text-white/50'
@@ -413,83 +418,34 @@ export default function AppShowcaseFlow() {
                 >
                   {section.label}
                 </span>
-                {/* Dot */}
                 <div
                   className={`rounded-full transition-all duration-300 flex-shrink-0 ${
                     activeIndex === i
-                      ? 'w-3 h-3 bg-momento-primary shadow-[0_0_12px_rgba(0,255,136,0.5)]'
-                      : 'w-2 h-2 bg-white/20 group-hover:bg-white/40'
+                      ? 'w-2.5 h-2.5 bg-momento-primary shadow-[0_0_10px_rgba(0,255,136,0.5)]'
+                      : 'w-1.5 h-1.5 bg-white/20 group-hover:bg-white/40'
                   }`}
                 />
               </button>
             ))}
-            {/* Connecting line */}
-            <div className="absolute top-2 bottom-2 right-[5px] w-px bg-white/[0.08] -z-10" />
+            <div className="absolute top-2 bottom-2 right-[4px] w-px bg-white/[0.06] -z-10" />
           </div>
 
-          {/* ─── Scroll Down Hint ─── */}
+          {/* Scroll hint */}
           <div
             className={`absolute bottom-8 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1 transition-opacity duration-300 ${
               activeIndex < sections.length - 1 ? 'opacity-100' : 'opacity-0'
             }`}
           >
-            <span className="text-white/20 text-[10px] font-mono">scroll</span>
-            <svg className="w-4 h-4 text-white/20 animate-bounce-gentle" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <span className="text-white/15 text-[9px] font-mono uppercase tracking-wider">Scroll</span>
+            <svg className="w-3.5 h-3.5 text-white/15 animate-bounce-gentle" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3" />
             </svg>
           </div>
         </div>
       </div>
 
-      {/* ─── Final CTA ─── */}
-      <section className="min-h-screen flex items-center justify-center px-6 py-20">
-        <div
-          ref={ctaRef}
-          className="text-center max-w-2xl space-y-6"
-          style={{ opacity: 0 }}
-        >
-          <h2 className="font-display text-4xl md:text-5xl lg:text-6xl font-bold text-white">
-            Be First.
-          </h2>
-          <h2 className="font-display text-4xl md:text-5xl lg:text-6xl font-bold text-shimmer">
-            Own the Culture.
-          </h2>
-          <p className="text-white/40 text-sm md:text-base max-w-md mx-auto">
-            Join the waitlist and be the first to experience a new way to discover and support creators.
-          </p>
-          <div id="waitlist-form">
-            <WaitlistForm />
-          </div>
-        </div>
-      </section>
-
       {/* ─── Footer ─── */}
-      <footer className="border-t border-white/[0.04] mt-8">
-        <div className="max-w-6xl mx-auto py-8 px-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 40 40" fill="none">
-              <path d="M4 32V10L13 20L20 12L27 20L36 10V32" stroke="#00FF88" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-              <circle cx="36" cy="10" r="2.5" fill="#00FF88" />
-            </svg>
-            <span className="text-white text-xs tracking-[0.2em] uppercase">
-              Momento
-            </span>
-          </div>
-          <div className="flex items-center gap-6">
-            <a
-              href="https://x.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-white/30 hover:text-white/60 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-              </svg>
-            </a>
-            <p className="text-white/20 text-xs font-mono">&copy; 2026 Momento</p>
-          </div>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-/* ─── Animated Counter Hook ──────────────────────────────────── */
 function useCountUp(target: number, duration: number, start: boolean): number {
   const [value, setValue] = useState(0);
 
@@ -51,8 +50,8 @@ function StatCard({
 
   return (
     <div className="text-center">
-      <p className="text-5xl md:text-6xl font-black text-white font-mono">{display}</p>
-      <p className="text-sm text-[#666666] mt-2">{stat.label}</p>
+      <p className="text-3xl md:text-5xl font-bold text-white font-mono">{display}</p>
+      <p className="text-[10px] text-[#666666] mt-2 font-mono uppercase tracking-[0.15em]">{stat.label}</p>
     </div>
   );
 }
@@ -80,7 +79,6 @@ export default function Proof() {
   useEffect(() => {
     const init = async () => {
       const { animate, onScroll } = await import('animejs');
-
       if (!sectionRef.current) return;
 
       const trigger = onScroll({
@@ -118,7 +116,7 @@ export default function Proof() {
   }, []);
 
   return (
-    <section id="team" ref={sectionRef} className="py-32 px-6">
+    <section id="team" ref={sectionRef} className="py-16 md:py-24 px-6">
       <div className="max-w-5xl mx-auto">
         {/* Stats */}
         <div
@@ -135,15 +133,15 @@ export default function Proof() {
           className="anim-believers mt-20 text-center"
           style={{ opacity: 0, transform: 'translateY(20px)' }}
         >
-          <p className="font-mono text-xs text-momento-primary uppercase tracking-[4px] mb-6">
+          <p className="font-mono text-[10px] text-momento-primary uppercase tracking-[0.3em] mb-6">
             Early Believers
           </p>
-          <p className="text-[#666666] text-sm md:text-base leading-relaxed">
+          <p className="text-[#666666] text-sm font-mono leading-relaxed">
             Backed by operators from the creator economy, fintech, and Web3
           </p>
         </div>
 
-        {/* Team credits line */}
+        {/* Team credits */}
         <div
           className="anim-credits mt-16 text-center"
           style={{ opacity: 0 }}
@@ -151,18 +149,18 @@ export default function Proof() {
           <div className="section-divider mb-8" />
           <div className="flex items-center justify-center gap-8 flex-wrap">
             <div className="text-center">
-              <p className="text-white text-sm font-medium">JV</p>
-              <p className="text-[#444444] text-xs font-mono">Co-Founder</p>
+              <p className="text-white text-sm font-mono font-bold uppercase">JV</p>
+              <p className="text-[#444444] text-[10px] font-mono uppercase tracking-wider">Co-Founder</p>
             </div>
-            <span className="text-[#222222]">/</span>
+            <span className="text-[#222222] font-mono">/</span>
             <div className="text-center">
-              <p className="text-white text-sm font-medium">SP</p>
-              <p className="text-[#444444] text-xs font-mono">Co-Founder</p>
+              <p className="text-white text-sm font-mono font-bold uppercase">SP</p>
+              <p className="text-[#444444] text-[10px] font-mono uppercase tracking-wider">Co-Founder</p>
             </div>
-            <span className="text-[#222222]">/</span>
+            <span className="text-[#222222] font-mono">/</span>
             <div className="text-center">
-              <p className="text-white text-sm font-medium">JT</p>
-              <p className="text-[#444444] text-xs font-mono">Advisor</p>
+              <p className="text-white text-sm font-mono font-bold uppercase">JT</p>
+              <p className="text-[#444444] text-[10px] font-mono uppercase tracking-wider">Advisor</p>
             </div>
           </div>
         </div>

@@ -27,6 +27,7 @@ const config: Config = {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         display: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'Menlo', 'monospace'],
+        serif: ['Cormorant Garamond', 'Georgia', 'serif'],
       },
       backdropBlur: {
         xs: '2px',

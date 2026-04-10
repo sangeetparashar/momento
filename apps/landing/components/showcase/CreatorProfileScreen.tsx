@@ -1,83 +1,77 @@
 'use client';
 
 const posts = [
-  { color: 'from-emerald-500/20 to-teal-500/10' },
-  { color: 'from-blue-500/20 to-indigo-500/10' },
-  { color: 'from-amber-500/20 to-orange-500/10' },
-  { color: 'from-pink-500/20 to-rose-500/10' },
-  { color: 'from-purple-500/20 to-violet-500/10' },
-  { color: 'from-cyan-500/20 to-sky-500/10' },
+  { color: 'from-[#3d2828] to-[#1a1215]' },
+  { color: 'from-[#282a3d] to-[#12151a]' },
+  { color: 'from-[#3d3528] to-[#1a1512]' },
+  { color: 'from-[#28383d] to-[#121a1a]' },
 ];
 
 export default function CreatorProfileScreen() {
   return (
-    <div className="h-full bg-black overflow-hidden">
-      {/* Cover */}
-      <div className="h-16 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-momento-primary/20 via-momento-primary/5 to-transparent" />
-        <div className="absolute top-1/2 left-1/3 w-16 h-16 bg-momento-primary/10 rounded-full blur-2xl" />
+    <div className="h-full bg-black flex flex-col overflow-hidden">
+      {/* Status bar */}
+      <div className="flex items-center justify-between px-3 pt-1.5 pb-1">
+        <span className="text-white/50 text-[8px] font-mono">7:05</span>
+        <div className="flex items-center gap-1">
+          <div className="w-3 h-2 border border-white/40 rounded-[2px] relative">
+            <div className="absolute inset-[1px] right-[2px] bg-momento-primary rounded-[1px]" />
+          </div>
+        </div>
       </div>
 
-      {/* Profile info */}
-      <div className="px-2.5 -mt-4 relative z-10">
-        {/* Avatar */}
-        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-momento-primary/30 to-momento-primary/10 border-2 border-black flex items-center justify-center">
-          <span className="text-momento-primary text-[9px] font-bold">NB</span>
+      {/* Top tabs */}
+      <div className="flex items-center gap-4 px-3 py-1.5">
+        <svg className="w-3 h-3 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+        </svg>
+        <div className="flex items-center gap-3 ml-auto">
+          <span className="text-white text-[7px] font-mono uppercase tracking-[0.1em] font-bold">Profile</span>
+          <span className="text-[#555555] text-[7px] font-mono uppercase tracking-[0.1em]">Posts</span>
+          <span className="text-[#555555] text-[7px] font-mono uppercase tracking-[0.1em]">Token</span>
         </div>
+      </div>
 
-        <div className="mt-1.5">
-          <div className="flex items-center gap-1">
-            <h3 className="text-white text-[10px] font-bold">Nash Bryant</h3>
-            <svg className="w-2.5 h-2.5 text-momento-primary" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M6.267 3.455a3.066 3.066 0 001.745-.723 3.066 3.066 0 013.976 0 3.066 3.066 0 001.745.723 3.066 3.066 0 012.812 2.812c.051.643.304 1.254.723 1.745a3.066 3.066 0 010 3.976 3.066 3.066 0 00-.723 1.745 3.066 3.066 0 01-2.812 2.812 3.066 3.066 0 00-1.745.723 3.066 3.066 0 01-3.976 0 3.066 3.066 0 00-1.745-.723 3.066 3.066 0 01-2.812-2.812 3.066 3.066 0 00-.723-1.745 3.066 3.066 0 010-3.976 3.066 3.066 0 00.723-1.745 3.066 3.066 0 012.812-2.812zm7.44 5.252a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
+      {/* Hero image area */}
+      <div className="flex-1 relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-[#2a1f1f] via-[#1a1215] to-black" />
+
+        {/* Creator name + verified dot overlay at bottom of hero */}
+        <div className="absolute bottom-12 left-3">
+          <div className="flex items-center gap-1.5">
+            <span className="text-white text-base font-mono font-bold">deela</span>
+            <div className="w-2 h-2 rounded-full bg-momento-primary" />
           </div>
-          <p className="text-white/30 text-[7px] mt-0.5">Musician & Producer · Toronto</p>
+          <span className="text-[#888888] text-[7px] font-mono uppercase tracking-wider">$DEEL</span>
+          <p className="text-[#888888] text-[7px] font-mono mt-1 max-w-[140px] leading-relaxed">
+            Musician, Producer, and Savant from NYC...
+          </p>
         </div>
+      </div>
 
-        {/* Stats row */}
-        <div className="flex gap-3 mt-2">
-          <div>
-            <p className="text-white text-[9px] font-bold font-mono">2.4K</p>
-            <p className="text-white/25 text-[6px]">Supporters</p>
-          </div>
-          <div>
-            <p className="text-white text-[9px] font-bold font-mono">186</p>
-            <p className="text-white/25 text-[6px]">Posts</p>
-          </div>
-          <div>
-            <p className="text-momento-primary text-[9px] font-bold font-mono">$1.24</p>
-            <p className="text-white/25 text-[6px]">Token Price</p>
-          </div>
+      {/* Post grid preview at bottom */}
+      <div className="px-1 pb-1">
+        <div className="grid grid-cols-2 gap-[2px]">
+          {posts.map((p, i) => (
+            <div
+              key={i}
+              className={`aspect-square bg-gradient-to-br ${p.color}`}
+            />
+          ))}
         </div>
+      </div>
 
-        {/* Action buttons */}
-        <div className="flex gap-1.5 mt-2">
-          <button className="flex-1 bg-momento-primary text-black text-[8px] font-bold py-1 rounded-md">
-            Support
-          </button>
-          <button className="flex-1 bg-white/[0.06] border border-white/[0.08] text-white text-[8px] font-bold py-1 rounded-md">
-            Follow
-          </button>
-        </div>
-
-        {/* Bio */}
-        <p className="text-white/40 text-[7px] leading-relaxed mt-2">
-          Independent artist pushing boundaries. Every supporter gets exclusive access to unreleased tracks and studio sessions.
-        </p>
-
-        {/* Post grid */}
-        <div className="mt-2">
-          <p className="text-white/25 text-[6px] uppercase tracking-wider font-mono mb-1.5">Posts</p>
-          <div className="grid grid-cols-3 gap-0.5">
-            {posts.map((p, i) => (
-              <div
-                key={i}
-                className={`aspect-square bg-gradient-to-br ${p.color} rounded-md`}
-              />
-            ))}
-          </div>
-        </div>
+      {/* Bottom tab bar */}
+      <div className="flex items-center justify-around px-4 py-2 border-t border-white/[0.04]">
+        <svg className="w-4 h-4 text-[#666666]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+        </svg>
+        <svg className="w-4 h-4 text-[#666666]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+        </svg>
+        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+        </svg>
       </div>
     </div>
   );
