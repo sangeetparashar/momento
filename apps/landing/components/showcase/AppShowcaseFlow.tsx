@@ -8,7 +8,6 @@ import CreatorProfileScreen from './CreatorProfileScreen';
 import WalletScreen from './WalletScreen';
 import Navbar from '../Navbar';
 import TickerBanner from '../TickerBanner';
-import Manifesto from '../Manifesto';
 import Footer from '../Footer';
 import WaitlistForm from '../WaitlistForm';
 
@@ -279,9 +278,6 @@ export default function AppShowcaseFlow() {
 
       {/* ─── Ticker ─── */}
       <TickerBanner />
-
-      {/* ─── Manifesto ─── */}
-      <Manifesto />
 
       {/* ─── Sticky Showcase Area ─── */}
       <div
