@@ -10,17 +10,18 @@ export const COLORS = {
   primaryMuted: 'rgba(0, 255, 136, 0.15)',
 
   // Backgrounds
-  background: '#0D0D0D',
+  background: '#000000',
   backgroundSecondary: '#1A1A1A',
   backgroundTertiary: '#242424',
   surface: '#1A1A1A',
   surfaceElevated: '#242424',
+  tabBar: '#0A0A0A',
 
   // Text
   textPrimary: '#FFFFFF',
-  textSecondary: '#8A8A8A',
+  textSecondary: '#888888',
   textTertiary: '#555555',
-  textInverse: '#0D0D0D',
+  textInverse: '#000000',
 
   // Semantic
   success: '#00FF88',

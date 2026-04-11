@@ -71,7 +71,7 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: COLORS.background,
+          backgroundColor: COLORS.tabBar,
           borderTopColor: COLORS.border,
           borderTopWidth: 0.5,
           height: 64 + bottomPadding,
@@ -80,7 +80,7 @@ export default function TabLayout() {
         },
         tabBarShowLabel: false,
         tabBarActiveTintColor: COLORS.textPrimary,
-        tabBarInactiveTintColor: COLORS.textTertiary,
+        tabBarInactiveTintColor: '#666666',
         tabBarButton: (props) => <AnimatedTabButton {...props} />,
         animation: 'none',
         sceneStyle: { backgroundColor: COLORS.background },

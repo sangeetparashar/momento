@@ -3,6 +3,7 @@ import { Linking, StyleSheet } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
+import { useFonts } from 'expo-font';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { QueryProvider, QueryCacheCleaner } from '@/providers/QueryProvider';
@@ -76,10 +77,17 @@ function useWalletDeeplinkInterceptor() {
 }
 
 export default function RootLayout() {
-  // Hide splash screen once the root layout has mounted (providers + nav ready)
+  const [fontsLoaded] = useFonts({
+    'SpaceMono-Regular': require('../assets/fonts/SpaceMono-Regular.ttf'),
+    'SpaceMono-Bold': require('../assets/fonts/SpaceMono-Bold.ttf'),
+  });
+
+  // Hide splash screen once fonts are loaded and layout is ready
   const onLayoutReady = useCallback(() => {
-    SplashScreen.hideAsync().catch(() => {});
-  }, []);
+    if (fontsLoaded) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded]);
 
   useWalletDeeplinkInterceptor();
 
