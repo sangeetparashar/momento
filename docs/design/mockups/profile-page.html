@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=900, initial-scale=1.0">
+<title>Momento — Profile Pages</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+
+  :root {
+    --bg: #000000;
+    --surface: #1A1A1A;
+    --surface-elevated: #222222;
+    --primary: #00FF88;
+    --text-primary: #FFFFFF;
+    --text-secondary: #888888;
+    --text-tertiary: #555555;
+    --border: #2A2A2A;
+    --negative: #FF4444;
+    --font-mono: 'Space Mono', 'Courier New', monospace;
+    --radius-full: 9999px;
+    --radius-md: 12px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #111;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    padding: 40px 20px;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+  }
+
+  h1 {
+    font-size: 20px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: var(--primary);
+    margin-bottom: 8px;
+  }
+
+  .subtitle {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-tertiary);
+    margin-bottom: 40px;
+  }
+
+  .phones {
+    display: flex;
+    gap: 40px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .phone-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .phone-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+  }
+
+  /* Phone frame */
+  .phone {
+    width: 390px;
+    height: 844px;
+    background: var(--bg);
+    border-radius: 40px;
+    border: 2px solid #333;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .status-bar {
+    height: 54px;
+    padding: 14px 24px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 14px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .status-bar .time { font-size: 15px; }
+  .status-bar .icons { font-size: 12px; letter-spacing: 4px; color: var(--text-secondary); }
+
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 20px;
+  }
+
+  /* Header with settings icon */
+  .profile-header {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 8px 0;
+  }
+
+  .settings-icon {
+    width: 28px;
+    height: 28px;
+    color: var(--text-secondary);
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  /* User name */
+  .user-name {
+    text-align: center;
+    font-size: 28px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 16px;
+  }
+
+  /* Wallet pill */
+  .wallet-pill {
+    display: block;
+    margin: 0 auto 24px;
+    padding: 8px 24px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    border: 1px solid var(--text-secondary);
+    border-radius: var(--radius-full);
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+
+  /* Stats cards row */
+  .stats-cards {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+
+  .stats-card {
+    flex: 1;
+    background: var(--surface);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+  }
+
+  .stats-card .card-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-tertiary);
+    margin-bottom: 8px;
+  }
+
+  .stats-card .card-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--primary);
+  }
+
+  /* Chart */
+  .chart-section {
+    width: 100%;
+    margin-bottom: 16px;
+  }
+
+  .chart-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  .chart-area {
+    width: 100%;
+    height: 150px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 6px;
+  }
+
+  .chart-area svg { width: 100%; height: 100%; }
+
+  .chart-months {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 2px;
+    margin-bottom: 16px;
+  }
+
+  .chart-month {
+    font-size: 7px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-tertiary);
+  }
+
+  /* Time pills */
+  .time-pills {
+    display: flex;
+    gap: 0;
+    background: var(--surface);
+    border-radius: var(--radius-full);
+    padding: 3px;
+    width: fit-content;
+    margin: 0 auto 28px;
+  }
+
+  .time-pill {
+    padding: 6px 14px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+  }
+
+  .time-pill.active {
+    background: var(--surface-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+  }
+
+  /* Portfolio section */
+  .section-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+  }
+
+  .portfolio-header {
+    display: grid;
+    grid-template-columns: 20px 1fr 52px 80px 40px 40px;
+    gap: 6px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+  }
+
+  .portfolio-header span {
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-tertiary);
+  }
+
+  .portfolio-row {
+    display: grid;
+    grid-template-columns: 20px 1fr 52px 80px 40px 40px;
+    gap: 6px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+  }
+
+  .fav-star { color: var(--text-tertiary); font-size: 12px; }
+
+  .token-info {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .token-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+  }
+
+  .token-name {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .token-change {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--primary);
+  }
+
+  .token-change.neg { color: var(--negative); }
+
+  .token-price {
+    font-size: 10px;
+    color: var(--text-secondary);
+  }
+
+  .btn-sm {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .btn-buy { color: var(--primary); }
+  .btn-sell { color: var(--text-secondary); }
+
+  /* Wallet / Swap section */
+  .swap-section {
+    margin-top: 28px;
+    margin-bottom: 24px;
+  }
+
+  .swap-card {
+    width: 100%;
+    background: linear-gradient(135deg, var(--surface) 0%, var(--surface-elevated) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  .swap-card .dollar { font-size: 28px; color: var(--text-secondary); }
+  .swap-card .swap-label { font-size: 10px; color: var(--text-secondary); margin-bottom: 4px; }
+
+  .select-token-btn {
+    padding: 6px 12px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border: 1px solid var(--text-secondary);
+    border-radius: var(--radius-full);
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+
+  .swap-arrow {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: var(--text-primary);
+    margin: 0 auto 12px;
+  }
+
+  /* Pill tabs (creator account) */
+  .pill-tabs {
+    display: flex;
+    gap: 0;
+    background: var(--surface);
+    border-radius: var(--radius-full);
+    padding: 3px;
+    margin-bottom: 20px;
+  }
+
+  .pill-tab {
+    flex: 1;
+    padding: 8px 8px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .pill-tab.active {
+    background: var(--surface-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+  }
+
+  /* Tab bar */
+  .tab-bar {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    height: 56px;
+    background: #0A0A0A;
+    border-top: 0.5px solid var(--border);
+    flex-shrink: 0;
+    padding-bottom: 8px;
+  }
+
+  .tab-icon {
+    font-size: 22px;
+    color: #666;
+    cursor: pointer;
+    padding: 8px 20px;
+  }
+
+  .tab-icon.active { color: var(--text-primary); }
+
+  /* Comparison box */
+  .compare-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    margin: 24px 0;
+    width: 100%;
+    max-width: 830px;
+  }
+
+  .compare-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--primary);
+    margin-bottom: 12px;
+  }
+
+  .compare-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .compare-item {
+    font-size: 10px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  .compare-label {
+    color: var(--text-primary);
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 9px;
+    letter-spacing: 1px;
+    display: block;
+    margin-bottom: 2px;
+  }
+</style>
+</head>
+<body>
+
+<h1>Profile Pages</h1>
+<div class="subtitle">User Account (viewer) vs Creator Account (own profile)</div>
+
+<div class="phones">
+
+  <!-- ===== USER ACCOUNT (viewer) ===== -->
+  <div class="phone-wrapper">
+    <div class="phone-label">User Account — Portfolio View</div>
+    <div class="phone">
+      <div class="status-bar">
+        <span class="time">7:05</span>
+        <span class="icons">▮▮▮ ▸ ▮</span>
+      </div>
+
+      <div class="content">
+        <div class="profile-header">
+          <div class="settings-icon">⚙</div>
+        </div>
+
+        <div class="user-name">ANDREW</div>
+
+        <button class="wallet-pill">Wallet</button>
+
+        <!-- Stats -->
+        <div class="stats-cards">
+          <div class="stats-card">
+            <div class="card-label">24H Change</div>
+            <div class="card-value">0.9%</div>
+          </div>
+          <div class="stats-card">
+            <div class="card-label">Earnings to Date</div>
+            <div class="card-value">12.2K</div>
+          </div>
+        </div>
+
+        <!-- Chart -->
+        <div class="chart-section">
+          <div class="chart-title">Portfolio Performance</div>
+          <div class="chart-area">
+            <svg viewBox="0 0 350 140" preserveAspectRatio="none">
+              <linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#00FF88" stop-opacity="0.1"/>
+                <stop offset="100%" stop-color="#00FF88" stop-opacity="0"/>
+              </linearGradient>
+              <polygon fill="url(#pg)" points="0,130 25,125 55,118 85,108 115,112 145,100 175,78 205,85 235,65 265,55 295,60 330,42 350,45 350,140 0,140"/>
+              <polyline fill="none" stroke="#00FF88" stroke-width="2" stroke-linejoin="round"
+                points="0,130 25,125 55,118 85,108 115,112 145,100 175,78 205,85 235,65 265,55 295,60 330,42 350,45"/>
+            </svg>
+          </div>
+          <div class="chart-months">
+            <span class="chart-month">Jan</span><span class="chart-month">Feb</span><span class="chart-month">Mar</span>
+            <span class="chart-month">Apr</span><span class="chart-month">May</span><span class="chart-month">Jun</span>
+            <span class="chart-month">Jul</span><span class="chart-month">Aug</span><span class="chart-month">Sep</span>
+            <span class="chart-month">Oct</span><span class="chart-month">Nov</span><span class="chart-month">Dec</span>
+          </div>
+        </div>
+
+        <div class="time-pills">
+          <button class="time-pill active">24H</button>
+          <button class="time-pill">7D</button>
+          <button class="time-pill">1M</button>
+          <button class="time-pill">3M</button>
+          <button class="time-pill">1Y</button>
+        </div>
+
+        <!-- Portfolio -->
+        <div class="section-label">Portfolio</div>
+        <div class="portfolio-header">
+          <span></span>
+          <span>Token</span>
+          <span>24HR</span>
+          <span>Market Cap</span>
+          <span>Buy</span>
+          <span>Sell</span>
+        </div>
+
+        <div class="portfolio-row">
+          <span class="fav-star">☆</span>
+          <div class="token-info"><div class="token-avatar" style="background:#8B5CF6"></div><span class="token-name">DEEL</span></div>
+          <span class="token-change">17%</span>
+          <span class="token-price">10,631USD</span>
+          <button class="btn-sm btn-buy">Buy</button>
+          <button class="btn-sm btn-sell">Sell</button>
+        </div>
+        <div class="portfolio-row">
+          <span class="fav-star">☆</span>
+          <div class="token-info"><div class="token-avatar" style="background:#EC4899"></div><span class="token-name">Belle</span></div>
+          <span class="token-change">0.5%</span>
+          <span class="token-price">10.67M USD</span>
+          <button class="btn-sm btn-buy">Buy</button>
+          <button class="btn-sm btn-sell">Sell</button>
+        </div>
+        <div class="portfolio-row">
+          <span class="fav-star">☆</span>
+          <div class="token-info"><div class="token-avatar" style="background:#F97316"></div><span class="token-name">NAAN</span></div>
+          <span class="token-change neg">3%</span>
+          <span class="token-price">3,050USD</span>
+          <button class="btn-sm btn-buy">Buy</button>
+          <button class="btn-sm btn-sell">Sell</button>
+        </div>
+        <div class="portfolio-row">
+          <span class="fav-star">☆</span>
+          <div class="token-info"><div class="token-avatar" style="background:#06B6D4"></div><span class="token-name">AURA</span></div>
+          <span class="token-change">2%</span>
+          <span class="token-price">17,019USD</span>
+          <button class="btn-sm btn-buy">Buy</button>
+          <button class="btn-sm btn-sell">Sell</button>
+        </div>
+        <div class="portfolio-row">
+          <span class="fav-star">☆</span>
+          <div class="token-info"><div class="token-avatar" style="background:#10B981"></div><span class="token-name">SEAM</span></div>
+          <span class="token-change">267%</span>
+          <span class="token-price">93,780USD</span>
+          <button class="btn-sm btn-buy">Buy</button>
+          <button class="btn-sm btn-sell">Sell</button>
+        </div>
+        <div class="portfolio-row">
+          <span class="fav-star">☆</span>
+          <div class="token-info"><div class="token-avatar" style="background:#EF4444"></div><span class="token-name">CACTS</span></div>
+          <span class="token-change neg">0.1%</span>
+          <span class="token-price">103,026USD</span>
+          <button class="btn-sm btn-buy">Buy</button>
+          <button class="btn-sm btn-sell">Sell</button>
+        </div>
+
+        <!-- Wallet swap -->
+        <div class="swap-section">
+          <div class="section-label">Wallet</div>
+          <div class="swap-card">
+            <div>
+              <div class="swap-label">Select Payment</div>
+              <div class="dollar">$</div>
+            </div>
+            <button class="select-token-btn">Select Token</button>
+          </div>
+          <div class="swap-arrow">⇅</div>
+          <div class="swap-card">
+            <div></div>
+            <button class="select-token-btn">Select Token</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-bar">
+        <span class="tab-icon">⌂</span>
+        <span class="tab-icon">⊕</span>
+        <span class="tab-icon active">◉</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== CREATOR ACCOUNT (own profile) ===== -->
+  <div class="phone-wrapper">
+    <div class="phone-label">Creator Account — Own Profile</div>
+    <div class="phone">
+      <div class="status-bar">
+        <span class="time">7:05</span>
+        <span class="icons">▮▮▮ ▸ ▮</span>
+      </div>
+
+      <div class="content">
+        <!-- Pill tabs at top -->
+        <div style="padding: 8px 0 4px;">
+          <div class="pill-tabs">
+            <button class="pill-tab active">Edit Profile</button>
+            <button class="pill-tab">New Post</button>
+            <button class="pill-tab">Account</button>
+          </div>
+        </div>
+
+        <div class="user-name">ANDREW</div>
+
+        <button class="wallet-pill">Wallet</button>
+
+        <!-- Same stats -->
+        <div class="stats-cards">
+          <div class="stats-card">
+            <div class="card-label">24H Change</div>
+            <div class="card-value">0.9%</div>
+          </div>
+          <div class="stats-card">
+            <div class="card-label">Earnings to Date</div>
+            <div class="card-value">12.2K</div>
+          </div>
+        </div>
+
+        <!-- Chart -->
+        <div class="chart-section">
+          <div class="chart-title">Portfolio Performance</div>
+          <div class="chart-area">
+            <svg viewBox="0 0 350 140" preserveAspectRatio="none">
+              <polygon fill="url(#pg)" points="0,130 25,125 55,118 85,108 115,112 145,100 175,78 205,85 235,65 265,55 295,60 330,42 350,45 350,140 0,140"/>
+              <polyline fill="none" stroke="#00FF88" stroke-width="2" stroke-linejoin="round"
+                points="0,130 25,125 55,118 85,108 115,112 145,100 175,78 205,85 235,65 265,55 295,60 330,42 350,45"/>
+            </svg>
+          </div>
+          <div class="chart-months">
+            <span class="chart-month">Jan</span><span class="chart-month">Feb</span><span class="chart-month">Mar</span>
+            <span class="chart-month">Apr</span><span class="chart-month">May</span><span class="chart-month">Jun</span>
+            <span class="chart-month">Jul</span><span class="chart-month">Aug</span><span class="chart-month">Sep</span>
+            <span class="chart-month">Oct</span><span class="chart-month">Nov</span><span class="chart-month">Dec</span>
+          </div>
+        </div>
+
+        <div class="time-pills">
+          <button class="time-pill active">24H</button>
+          <button class="time-pill">7D</button>
+          <button class="time-pill">1M</button>
+          <button class="time-pill">3M</button>
+          <button class="time-pill">1Y</button>
+        </div>
+
+        <!-- Portfolio -->
+        <div class="section-label">Portfolio</div>
+        <div class="portfolio-header">
+          <span></span>
+          <span>Token</span>
+          <span>24HR</span>
+          <span>Market Cap</span>
+          <span>Buy</span>
+          <span>Sell</span>
+        </div>
+
+        <div class="portfolio-row">
+          <span class="fav-star">☆</span>
+          <div class="token-info"><div class="token-avatar" style="background:#8B5CF6"></div><span class="token-name">DEEL</span></div>
+          <span class="token-change">17%</span>
+          <span class="token-price">10,631USD</span>
+          <button class="btn-sm btn-buy">Buy</button>
+          <button class="btn-sm btn-sell">Sell</button>
+        </div>
+        <div class="portfolio-row">
+          <span class="fav-star">☆</span>
+          <div class="token-info"><div class="token-avatar" style="background:#EC4899"></div><span class="token-name">Belle</span></div>
+          <span class="token-change">0.5%</span>
+          <span class="token-price">10.67M USD</span>
+          <button class="btn-sm btn-buy">Buy</button>
+          <button class="btn-sm btn-sell">Sell</button>
+        </div>
+        <div class="portfolio-row">
+          <span class="fav-star">☆</span>
+          <div class="token-info"><div class="token-avatar" style="background:#F97316"></div><span class="token-name">NAAN</span></div>
+          <span class="token-change neg">3%</span>
+          <span class="token-price">3,050USD</span>
+          <button class="btn-sm btn-buy">Buy</button>
+          <button class="btn-sm btn-sell">Sell</button>
+        </div>
+        <div class="portfolio-row">
+          <span class="fav-star">☆</span>
+          <div class="token-info"><div class="token-avatar" style="background:#06B6D4"></div><span class="token-name">AURA</span></div>
+          <span class="token-change">2%</span>
+          <span class="token-price">17,019USD</span>
+          <button class="btn-sm btn-buy">Buy</button>
+          <button class="btn-sm btn-sell">Sell</button>
+        </div>
+        <div class="portfolio-row">
+          <span class="fav-star">☆</span>
+          <div class="token-info"><div class="token-avatar" style="background:#10B981"></div><span class="token-name">SEAM</span></div>
+          <span class="token-change">267%</span>
+          <span class="token-price">93,780USD</span>
+          <button class="btn-sm btn-buy">Buy</button>
+          <button class="btn-sm btn-sell">Sell</button>
+        </div>
+
+        <!-- Wallet swap -->
+        <div class="swap-section">
+          <div class="section-label">Wallet</div>
+          <div class="swap-card">
+            <div>
+              <div class="swap-label">Select Payment</div>
+              <div class="dollar">$</div>
+            </div>
+            <button class="select-token-btn">Select Token</button>
+          </div>
+          <div class="swap-arrow">⇅</div>
+          <div class="swap-card">
+            <div></div>
+            <button class="select-token-btn">Select Token</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-bar">
+        <span class="tab-icon">⌂</span>
+        <span class="tab-icon">⊕</span>
+        <span class="tab-icon active">◉</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Comparison notes -->
+<div class="compare-box">
+  <div class="compare-title">Key Differences: Current vs Figma</div>
+  <div class="compare-grid">
+    <div class="compare-item">
+      <span class="compare-label">Current Profile</span>
+      Avatar + stats row (posts/followers/following) + bio + social links + edit/create/wallet buttons + masonry post grid.
+      Looks like a social media profile.
+    </div>
+    <div class="compare-item">
+      <span class="compare-label">Figma Profile</span>
+      Name centered + WALLET pill + stats cards (24H change / earnings) + portfolio performance chart + token portfolio table + swap widget.
+      Looks like a financial dashboard.
+    </div>
+    <div class="compare-item">
+      <span class="compare-label">Missing from current</span>
+      Portfolio chart, token table with BUY/SELL, time range pills, stats cards, token swap widget, settings gear icon.
+    </div>
+    <div class="compare-item">
+      <span class="compare-label">Missing from Figma</span>
+      Avatar image, post count, follower/following count, bio text, social link icons, masonry post grid.
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

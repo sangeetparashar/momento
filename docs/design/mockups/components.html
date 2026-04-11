@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Momento — Component Library</title>
+<style>
+  /* ========== DESIGN TOKENS ========== */
+  :root {
+    --bg: #000000;
+    --surface: #1A1A1A;
+    --surface-elevated: #222222;
+    --primary: #00FF88;
+    --primary-dark: #00CC6A;
+    --text-primary: #FFFFFF;
+    --text-secondary: #888888;
+    --text-tertiary: #555555;
+    --border: #2A2A2A;
+    --negative: #FF4444;
+    --font-mono: 'Space Mono', 'Courier New', monospace;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-full: 9999px;
+  }
+
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #111;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    padding: 40px;
+  }
+
+  h1 {
+    font-size: 28px;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    color: var(--primary);
+    margin-bottom: 8px;
+  }
+
+  .subtitle {
+    color: var(--text-secondary);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 48px;
+  }
+
+  .section {
+    margin-bottom: 64px;
+  }
+
+  .section-title {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 12px;
+    margin-bottom: 24px;
+  }
+
+  .section-desc {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    margin-bottom: 20px;
+    line-height: 1.6;
+  }
+
+  .demo-row {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+
+  .demo-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-tertiary);
+    margin-bottom: 8px;
+  }
+
+  .demo-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 24px;
+  }
+
+  /* ========== 1. PILL TABS ========== */
+  .pill-tabs {
+    display: flex;
+    gap: 0;
+    background: var(--surface);
+    border-radius: var(--radius-full);
+    padding: 3px;
+    width: fit-content;
+  }
+
+  .pill-tab {
+    padding: 8px 16px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+  }
+
+  .pill-tab:hover {
+    color: var(--text-primary);
+  }
+
+  .pill-tab.active {
+    background: var(--surface-elevated);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+  }
+
+  /* Small variant */
+  .pill-tabs.sm .pill-tab {
+    padding: 6px 12px;
+    font-size: 10px;
+  }
+
+  /* Primary variant (for BUY/SELL) */
+  .pill-tab.primary-outline {
+    border: 1px solid var(--text-secondary);
+    color: var(--text-primary);
+    background: transparent;
+  }
+
+  .pill-tab.primary-fill {
+    border: 1px solid var(--text-primary);
+    color: var(--bg);
+    background: var(--text-primary);
+  }
+
+  /* ========== 2. STATS CARD ========== */
+  .stats-card {
+    background: var(--surface);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    min-width: 140px;
+  }
+
+  .stats-card .stats-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-tertiary);
+    margin-bottom: 8px;
+  }
+
+  .stats-card .stats-value {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--primary);
+    font-family: var(--font-mono);
+  }
+
+  .stats-card .stats-value.negative {
+    color: var(--negative);
+  }
+
+  /* Inline stats (for token page — 3 across) */
+  .stats-row-inline {
+    display: flex;
+    gap: 0;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .stat-inline {
+    text-align: center;
+    flex: 1;
+  }
+
+  .stat-inline .stat-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-tertiary);
+    margin-bottom: 6px;
+  }
+
+  .stat-inline .stat-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--primary);
+    font-family: var(--font-mono);
+  }
+
+  /* ========== 3. PERFORMANCE CHART ========== */
+  .chart-container {
+    width: 100%;
+  }
+
+  .chart-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+
+  .chart-area {
+    width: 100%;
+    height: 160px;
+    position: relative;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+
+  .chart-svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .chart-months {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 4px;
+    margin-bottom: 16px;
+  }
+
+  .chart-month {
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-tertiary);
+  }
+
+  /* ========== 4. PORTFOLIO ROW ========== */
+  .portfolio-table {
+    width: 100%;
+  }
+
+  .portfolio-header {
+    display: grid;
+    grid-template-columns: 20px 1fr 60px 90px 50px 50px;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+  }
+
+  .portfolio-header span {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-tertiary);
+  }
+
+  .portfolio-row {
+    display: grid;
+    grid-template-columns: 20px 1fr 60px 90px 50px 50px;
+    gap: 8px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+  }
+
+  .portfolio-row .fav-star {
+    color: var(--text-tertiary);
+    font-size: 14px;
+    cursor: pointer;
+  }
+
+  .token-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .token-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: var(--surface);
+    overflow: hidden;
+  }
+
+  .token-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .token-name {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .token-change {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--primary);
+    font-family: var(--font-mono);
+  }
+
+  .token-change.negative {
+    color: var(--negative);
+  }
+
+  .token-price {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+  }
+
+  .btn-sm {
+    padding: 4px 0;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    background: none;
+    border: none;
+    text-align: center;
+  }
+
+  .btn-buy {
+    color: var(--primary);
+  }
+
+  .btn-sell {
+    color: var(--text-secondary);
+  }
+
+  .expand-arrow {
+    color: var(--text-tertiary);
+    font-size: 10px;
+    cursor: pointer;
+  }
+
+  /* Expanded row detail */
+  .portfolio-row-expanded {
+    display: grid;
+    grid-template-columns: 20px 1fr;
+    gap: 8px;
+    padding: 0 0 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .expanded-stats {
+    display: flex;
+    gap: 24px;
+    padding-left: 32px;
+  }
+
+  .expanded-stat .expanded-label {
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-tertiary);
+    margin-bottom: 2px;
+  }
+
+  .expanded-stat .expanded-value {
+    font-size: 12px;
+    color: var(--primary);
+    font-family: var(--font-mono);
+  }
+
+  /* ========== 5. BUY/SELL PILLS ========== */
+  .buy-sell-group {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+  }
+
+  .btn-pill {
+    padding: 10px 32px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .btn-pill.outline {
+    background: transparent;
+    border: 1px solid var(--text-secondary);
+    color: var(--text-primary);
+  }
+
+  .btn-pill.outline:hover {
+    border-color: var(--text-primary);
+  }
+
+  .btn-pill.filled {
+    background: var(--text-primary);
+    border: 1px solid var(--text-primary);
+    color: var(--bg);
+  }
+
+  .btn-pill.filled:hover {
+    background: #ddd;
+  }
+
+  /* ========== 6. TOKEN SWAP ========== */
+  .swap-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .swap-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-primary);
+    align-self: flex-start;
+    margin-bottom: 4px;
+  }
+
+  .swap-card {
+    width: 100%;
+    background: linear-gradient(135deg, var(--surface) 0%, var(--surface-elevated) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .swap-card .swap-icon {
+    font-size: 28px;
+    color: var(--text-secondary);
+  }
+
+  .swap-card .swap-label {
+    font-size: 10px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+  }
+
+  .swap-card .select-token-btn {
+    padding: 6px 14px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border: 1px solid var(--text-secondary);
+    border-radius: var(--radius-full);
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+
+  .swap-arrow {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: var(--text-primary);
+  }
+
+  /* ========== 7. TICKER BANNER ========== */
+  .ticker-banner {
+    overflow: hidden;
+    white-space: nowrap;
+    width: 100%;
+    padding: 8px 0;
+  }
+
+  .ticker-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-tertiary);
+    margin-bottom: 4px;
+  }
+
+  .ticker-track {
+    display: inline-block;
+    animation: ticker 20s linear infinite;
+    font-family: var(--font-mono);
+    font-size: 16px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+
+  .ticker-track .green { color: var(--primary); }
+  .ticker-track .red { color: var(--negative); }
+  .ticker-track .sep { color: var(--text-tertiary); margin: 0 16px; }
+
+  @keyframes ticker {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  /* ========== 8. VERIFIED BADGE ========== */
+  .verified-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--primary);
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+
+  /* ========== 9. BOTTOM TAB BAR ========== */
+  .tab-bar {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    height: 56px;
+    background: #0A0A0A;
+    border-top: 0.5px solid var(--border);
+    width: 100%;
+  }
+
+  .tab-icon {
+    font-size: 22px;
+    color: #666;
+    cursor: pointer;
+    transition: color 0.2s;
+    padding: 8px 20px;
+  }
+
+  .tab-icon.active {
+    color: var(--text-primary);
+  }
+
+  /* ========== 10. SOCIAL LINK ICONS ========== */
+  .social-links {
+    display: flex;
+    gap: 4px;
+    position: absolute;
+    right: 8px;
+    top: 60px;
+    flex-direction: column;
+  }
+
+  .social-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: white;
+    cursor: pointer;
+  }
+
+  .social-icon.yt { background: #FF0000; }
+  .social-icon.ig { background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); }
+  .social-icon.tw { background: #000; border: 1px solid #333; }
+  .social-icon.sp { background: #1DB954; }
+  .social-icon.sc { background: #FF7700; }
+
+  /* ========== 11. BACK BUTTON (S-logo) ========== */
+  .back-btn {
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .back-btn svg {
+    width: 20px;
+    height: 20px;
+    stroke: var(--text-primary);
+    fill: none;
+    stroke-width: 2;
+  }
+
+  /* ========== 12. UPLOAD CARD ========== */
+  .upload-card {
+    background: linear-gradient(135deg, var(--surface) 0%, var(--surface-elevated) 100%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+  }
+
+  .upload-card .upload-icon {
+    font-size: 36px;
+    color: var(--text-secondary);
+  }
+
+  .upload-card .upload-text {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-secondary);
+    font-weight: 700;
+  }
+
+  /* ========== PHONE FRAME ========== */
+  .phone-frame {
+    width: 320px;
+    min-height: 580px;
+    background: var(--bg);
+    border-radius: 32px;
+    border: 2px solid #333;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .phone-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+  }
+
+  /* ========== COLOR SWATCHES ========== */
+  .swatch-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .swatch {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .swatch-color {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+
+  .swatch-name {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-tertiary);
+  }
+
+  .swatch-hex {
+    font-size: 10px;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+  }
+</style>
+</head>
+<body>
+
+<h1>Momento</h1>
+<div class="subtitle">Component Library — Reusable UI Pieces</div>
+
+<!-- ===== COLORS ===== -->
+<div class="section">
+  <div class="section-title">1. Color Palette</div>
+  <div class="swatch-row">
+    <div class="swatch">
+      <div class="swatch-color" style="background:#000000"></div>
+      <div class="swatch-name">Background</div>
+      <div class="swatch-hex">#000000</div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-color" style="background:#1A1A1A"></div>
+      <div class="swatch-name">Surface</div>
+      <div class="swatch-hex">#1A1A1A</div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-color" style="background:#222222"></div>
+      <div class="swatch-name">Elevated</div>
+      <div class="swatch-hex">#222222</div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-color" style="background:#00FF88"></div>
+      <div class="swatch-name">Primary</div>
+      <div class="swatch-hex">#00FF88</div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-color" style="background:#FFFFFF"></div>
+      <div class="swatch-name">Text</div>
+      <div class="swatch-hex">#FFFFFF</div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-color" style="background:#888888"></div>
+      <div class="swatch-name">Secondary</div>
+      <div class="swatch-hex">#888888</div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-color" style="background:#555555"></div>
+      <div class="swatch-name">Tertiary</div>
+      <div class="swatch-hex">#555555</div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-color" style="background:#2A2A2A"></div>
+      <div class="swatch-name">Border</div>
+      <div class="swatch-hex">#2A2A2A</div>
+    </div>
+    <div class="swatch">
+      <div class="swatch-color" style="background:#FF4444"></div>
+      <div class="swatch-name">Negative</div>
+      <div class="swatch-hex">#FF4444</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PILL TABS ===== -->
+<div class="section">
+  <div class="section-title">2. Pill Tabs</div>
+  <div class="section-desc">
+    The most recurring pattern in the app. Used for page-level navigation (PROFILE/POSTS/TOKEN),
+    action groups (EDIT PROFILE/NEW POST/ACCOUNT), market filters (TRENDING/24H GAINERS/TOP CREATORS),
+    and time range selectors (24H/7D/1M/3M/1Y). Always uppercase, monospaced, tight letter-spacing.
+  </div>
+
+  <div class="demo-label">Page Navigation (Creator Detail)</div>
+  <div class="demo-row">
+    <div class="demo-block">
+      <div class="pill-tabs">
+        <button class="pill-tab">Profile</button>
+        <button class="pill-tab">Posts</button>
+        <button class="pill-tab active">Token</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="demo-label">Action Group (Creator Account)</div>
+  <div class="demo-row">
+    <div class="demo-block">
+      <div class="pill-tabs">
+        <button class="pill-tab active">Edit Profile</button>
+        <button class="pill-tab">New Post</button>
+        <button class="pill-tab">Account</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="demo-label">Market Filters</div>
+  <div class="demo-row">
+    <div class="demo-block">
+      <div class="pill-tabs">
+        <button class="pill-tab active">Trending</button>
+        <button class="pill-tab">24H Gainers</button>
+        <button class="pill-tab">Top Creators</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="demo-label">Time Range Selector (small variant)</div>
+  <div class="demo-row">
+    <div class="demo-block">
+      <div class="pill-tabs sm">
+        <button class="pill-tab active">24H</button>
+        <button class="pill-tab">7D</button>
+        <button class="pill-tab">1M</button>
+        <button class="pill-tab">3M</button>
+        <button class="pill-tab">1Y</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="demo-label">Feed Tabs (Home — FOR YOU / CREATORS TO WATCH)</div>
+  <div class="demo-row">
+    <div class="demo-block">
+      <div class="pill-tabs">
+        <button class="pill-tab active">For You</button>
+        <button class="pill-tab">Creators to Watch</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== STATS CARDS ===== -->
+<div class="section">
+  <div class="section-title">3. Stats Cards</div>
+  <div class="section-desc">
+    Dark surface cards showing a single metric. Used in pairs on the profile page
+    (24H CHANGE + EARNINGS TO DATE) and in a 3-across row on the token page (PRICE + 24H CHANGE + MARKET CAP).
+  </div>
+
+  <div class="demo-label">Paired Cards (Profile)</div>
+  <div class="demo-row">
+    <div class="stats-card">
+      <div class="stats-label">24H Change</div>
+      <div class="stats-value">0.9%</div>
+    </div>
+    <div class="stats-card">
+      <div class="stats-label">Earnings to Date</div>
+      <div class="stats-value">12.2K</div>
+    </div>
+  </div>
+
+  <div class="demo-label">Inline Row (Token Page)</div>
+  <div class="demo-row">
+    <div class="demo-block" style="width:320px">
+      <div class="stats-row-inline">
+        <div class="stat-inline">
+          <div class="stat-label">Price</div>
+          <div class="stat-value">0.004</div>
+        </div>
+        <div class="stat-inline">
+          <div class="stat-label">24H Change</div>
+          <div class="stat-value">17%</div>
+        </div>
+        <div class="stat-inline">
+          <div class="stat-label">Market Cap</div>
+          <div class="stat-value">10.6K</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== BUY / SELL PILLS ===== -->
+<div class="section">
+  <div class="section-title">4. Buy / Sell Pills</div>
+  <div class="section-desc">
+    BUY is outlined (ghost), SELL is filled (white bg, black text). Used on the token page
+    and conceptually in portfolio rows. Always side-by-side, centered.
+  </div>
+
+  <div class="demo-row">
+    <div class="demo-block">
+      <div class="buy-sell-group">
+        <button class="btn-pill outline">Buy</button>
+        <button class="btn-pill filled">Sell</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PERFORMANCE CHART ===== -->
+<div class="section">
+  <div class="section-title">5. Performance Chart</div>
+  <div class="section-desc">
+    Green #00FF88 line chart on black background. Month labels below. Time filter pills underneath.
+    Used on both the Profile page (PORTFOLIO PERFORMANCE) and Token page (TOKEN PERFORMANCE).
+  </div>
+
+  <div class="demo-row">
+    <div class="demo-block" style="width:320px">
+      <div class="chart-container">
+        <div class="chart-title">Token Performance</div>
+        <div class="chart-area">
+          <svg class="chart-svg" viewBox="0 0 300 140" preserveAspectRatio="none">
+            <polyline
+              fill="none"
+              stroke="#00FF88"
+              stroke-width="2"
+              points="0,120 25,115 50,100 75,90 100,95 125,80 150,60 175,70 200,40 225,50 250,55 275,30 300,35"
+            />
+            <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#00FF88" stop-opacity="0.15"/>
+              <stop offset="100%" stop-color="#00FF88" stop-opacity="0"/>
+            </linearGradient>
+            <polygon
+              fill="url(#chartGrad)"
+              points="0,120 25,115 50,100 75,90 100,95 125,80 150,60 175,70 200,40 225,50 250,55 275,30 300,35 300,140 0,140"
+            />
+          </svg>
+        </div>
+        <div class="chart-months">
+          <span class="chart-month">Jan</span>
+          <span class="chart-month">Feb</span>
+          <span class="chart-month">Mar</span>
+          <span class="chart-month">Apr</span>
+          <span class="chart-month">May</span>
+          <span class="chart-month">Jun</span>
+          <span class="chart-month">Jul</span>
+          <span class="chart-month">Aug</span>
+          <span class="chart-month">Sep</span>
+          <span class="chart-month">Oct</span>
+          <span class="chart-month">Nov</span>
+          <span class="chart-month">Dec</span>
+        </div>
+        <div style="display:flex;justify-content:center">
+          <div class="pill-tabs sm">
+            <button class="pill-tab active">24H</button>
+            <button class="pill-tab">7D</button>
+            <button class="pill-tab">1M</button>
+            <button class="pill-tab">3M</button>
+            <button class="pill-tab">1Y</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PORTFOLIO TABLE ===== -->
+<div class="section">
+  <div class="section-title">6. Portfolio Table</div>
+  <div class="section-desc">
+    Token list with star, avatar, name, 24H %, market cap, BUY/SELL buttons, and expand arrow.
+    Used on the Profile page (PORTFOLIO section) and Market page (TRENDING list). Expandable rows
+    show 1H, 7D, 24 VOLUME, MARKET CAP when expanded.
+  </div>
+
+  <div class="demo-row">
+    <div class="demo-block" style="width:380px">
+      <div class="portfolio-table">
+        <div class="portfolio-header">
+          <span></span>
+          <span>Token</span>
+          <span>24HR</span>
+          <span>Market Cap</span>
+          <span>Buy</span>
+          <span>Sell</span>
+        </div>
+
+        <div class="portfolio-row">
+          <span class="fav-star">☆</span>
+          <div class="token-info">
+            <div class="token-avatar" style="background:#8B5CF6"></div>
+            <span class="token-name">DEEL</span>
+          </div>
+          <span class="token-change">17%</span>
+          <span class="token-price">10,631USD</span>
+          <button class="btn-sm btn-buy">Buy</button>
+          <span style="display:flex;align-items:center;gap:6px">
+            <button class="btn-sm btn-sell">Sell</button>
+            <span class="expand-arrow">▼</span>
+          </span>
+        </div>
+
+        <!-- Expanded row -->
+        <div class="portfolio-row-expanded">
+          <span></span>
+          <div class="expanded-stats">
+            <div class="expanded-stat">
+              <div class="expanded-label">1H</div>
+              <div class="expanded-value">11%</div>
+            </div>
+            <div class="expanded-stat">
+              <div class="expanded-label">7D</div>
+              <div class="expanded-value">6%</div>
+            </div>
+            <div class="expanded-stat">
+              <div class="expanded-label">24 Volume</div>
+              <div class="expanded-value">2M</div>
+            </div>
+            <div class="expanded-stat">
+              <div class="expanded-label">Market Cap</div>
+              <div class="expanded-value">10M/USD</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="portfolio-row">
+          <span class="fav-star">☆</span>
+          <div class="token-info">
+            <div class="token-avatar" style="background:#EC4899"></div>
+            <span class="token-name">Belle</span>
+          </div>
+          <span class="token-change">0.5%</span>
+          <span class="token-price">10,670,330 USD</span>
+          <button class="btn-sm btn-buy">Buy</button>
+          <span style="display:flex;align-items:center;gap:6px">
+            <button class="btn-sm btn-sell">Sell</button>
+            <span class="expand-arrow">▼</span>
+          </span>
+        </div>
+
+        <div class="portfolio-row">
+          <span class="fav-star">☆</span>
+          <div class="token-info">
+            <div class="token-avatar" style="background:#F97316"></div>
+            <span class="token-name">NAAN</span>
+          </div>
+          <span class="token-change negative">3%</span>
+          <span class="token-price">3,050USD</span>
+          <button class="btn-sm btn-buy">Buy</button>
+          <span style="display:flex;align-items:center;gap:6px">
+            <button class="btn-sm btn-sell">Sell</button>
+            <span class="expand-arrow">▼</span>
+          </span>
+        </div>
+
+        <div class="portfolio-row">
+          <span class="fav-star">☆</span>
+          <div class="token-info">
+            <div class="token-avatar" style="background:#06B6D4"></div>
+            <span class="token-name">AURA</span>
+          </div>
+          <span class="token-change">2%</span>
+          <span class="token-price">17,019USD</span>
+          <button class="btn-sm btn-buy">Buy</button>
+          <span style="display:flex;align-items:center;gap:6px">
+            <button class="btn-sm btn-sell">Sell</button>
+            <span class="expand-arrow">▼</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TOKEN SWAP ===== -->
+<div class="section">
+  <div class="section-title">7. Token Swap</div>
+  <div class="section-desc">
+    Two gradient cards with SELECT TOKEN pills, connected by a circular swap arrow.
+    Used on the Account page bottom section. Top card has "Select Payment" label + $ icon.
+  </div>
+
+  <div class="demo-row">
+    <div class="demo-block">
+      <div class="swap-container">
+        <div class="swap-title">Wallet</div>
+        <div class="swap-card">
+          <div>
+            <div class="swap-label">Select Payment</div>
+            <div class="swap-icon">$</div>
+          </div>
+          <button class="select-token-btn">Select Token</button>
+        </div>
+        <div class="swap-arrow">⇅</div>
+        <div class="swap-card">
+          <div></div>
+          <button class="select-token-btn">Select Token</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TICKER BANNER ===== -->
+<div class="section">
+  <div class="section-title">8. Ticker Banners</div>
+  <div class="section-desc">
+    Horizontally scrolling monospace text showing token names + multipliers/percentages.
+    Two rows on the Market page: "TRENDING" and "CREATORS TO WATCH". Green for positive, red for negative.
+  </div>
+
+  <div class="demo-row">
+    <div class="demo-block" style="width:380px;overflow:hidden">
+      <div class="ticker-label">Trending</div>
+      <div class="ticker-banner">
+        <div class="ticker-track">
+          <span class="green">AURA 2%</span><span class="sep">·</span>
+          <span class="red">NAAN 0.3%</span><span class="sep">·</span>
+          <span class="green">TASH 7%</span><span class="sep">·</span>
+          <span class="green">DEEL 17%</span><span class="sep">·</span>
+          <span class="green">SEAM 267%</span><span class="sep">·</span>
+          <span class="green">AURA 2%</span><span class="sep">·</span>
+          <span class="red">NAAN 0.3%</span><span class="sep">·</span>
+          <span class="green">TASH 7%</span><span class="sep">·</span>
+          <span class="green">DEEL 17%</span><span class="sep">·</span>
+          <span class="green">SEAM 267%</span>
+        </div>
+      </div>
+      <div class="ticker-label" style="margin-top:12px">Creators to Watch</div>
+      <div class="ticker-banner">
+        <div class="ticker-track">
+          <span class="green">BELLE 17%</span><span class="sep">·</span>
+          <span class="green">SEAM 0.9%</span><span class="sep">·</span>
+          <span class="green">NEUV 9%</span><span class="sep">·</span>
+          <span class="green">TEAM 11%</span><span class="sep">·</span>
+          <span class="green">BELLE 17%</span><span class="sep">·</span>
+          <span class="green">SEAM 0.9%</span><span class="sep">·</span>
+          <span class="green">NEUV 9%</span><span class="sep">·</span>
+          <span class="green">TEAM 11%</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== SOCIAL LINK ICONS ===== -->
+<div class="section">
+  <div class="section-title">9. Social Link Icons</div>
+  <div class="section-desc">
+    Vertical stack on the right edge of the edit-profile page. Each platform has its brand color.
+    Positioned absolutely, floating over the hero area.
+  </div>
+
+  <div class="demo-row">
+    <div class="demo-block" style="position:relative;height:200px;width:80px">
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:center;padding-top:20px">
+        <div class="social-icon yt">▶</div>
+        <div class="social-icon ig">◉</div>
+        <div class="social-icon tw">𝕏</div>
+        <div class="social-icon sp">♫</div>
+        <div class="social-icon sc">☁</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== UPLOAD CARD ===== -->
+<div class="section">
+  <div class="section-title">10. Upload Card</div>
+  <div class="section-desc">
+    Gradient surface card with cloud upload icon + text. Used for profile picture and media uploads.
+    Has a subtle gradient from surface to surface-elevated.
+  </div>
+
+  <div class="demo-row">
+    <div class="demo-block">
+      <div class="upload-card" style="width:200px">
+        <div class="upload-icon">☁↑</div>
+        <div class="upload-text">Add Profile Picture</div>
+      </div>
+    </div>
+    <div class="demo-block">
+      <div class="upload-card" style="width:200px;height:180px">
+        <div class="upload-icon">☁↑</div>
+        <div class="upload-text">Add Media</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== BOTTOM TAB BAR ===== -->
+<div class="section">
+  <div class="section-title">11. Bottom Tab Bar</div>
+  <div class="section-desc">
+    3 icon-only tabs: Home (house), Explore (globe), Profile (person).
+    Active = white, inactive = #666. Thin top border. Background #0A0A0A.
+  </div>
+
+  <div class="demo-row">
+    <div class="demo-block" style="width:320px;padding:0;overflow:hidden;border-radius:0 0 12px 12px">
+      <div class="tab-bar">
+        <span class="tab-icon active">⌂</span>
+        <span class="tab-icon">⊕</span>
+        <span class="tab-icon">◉</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TYPOGRAPHY ===== -->
+<div class="section">
+  <div class="section-title">12. Typography Scale</div>
+  <div class="demo-block" style="width:380px">
+    <div style="margin-bottom:16px">
+      <div class="demo-label">H1 — 32px Bold Uppercase</div>
+      <div style="font-size:32px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px">MOMENTO</div>
+    </div>
+    <div style="margin-bottom:16px">
+      <div class="demo-label">H2 — 24px Bold Uppercase</div>
+      <div style="font-size:24px;font-weight:700;text-transform:uppercase;letter-spacing:1px">$DEEL</div>
+    </div>
+    <div style="margin-bottom:16px">
+      <div class="demo-label">H3 — 20px Semibold Uppercase</div>
+      <div style="font-size:20px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Andrew<span class="verified-dot"></span></div>
+    </div>
+    <div style="margin-bottom:16px">
+      <div class="demo-label">Body — 16px Regular</div>
+      <div style="font-size:16px;color:var(--text-secondary);letter-spacing:0.3px">Musician, DJ, Producer. Born and bred in Brooklyn, New York.</div>
+    </div>
+    <div style="margin-bottom:16px">
+      <div class="demo-label">Body Small — 14px Regular</div>
+      <div style="font-size:14px;color:var(--text-secondary);letter-spacing:0.2px">New drop coming soon with the homies. Super excited to share.</div>
+    </div>
+    <div style="margin-bottom:16px">
+      <div class="demo-label">Caption — 12px Regular</div>
+      <div style="font-size:12px;color:var(--text-tertiary);letter-spacing:0.5px">2 HOURS AGO</div>
+    </div>
+    <div>
+      <div class="demo-label">Label — 12px Bold Uppercase</div>
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-secondary)">PORTFOLIO PERFORMANCE</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
