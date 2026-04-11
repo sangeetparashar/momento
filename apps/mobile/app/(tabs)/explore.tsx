@@ -29,7 +29,7 @@ const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.webm'];
 
 type ExploreTab = 'CREATORS' | 'POSTS';
 
-const COLUMN_GAP = SPACING.sm;
+const COLUMN_GAP = 2;
 
 interface GridItem {
   id: string;
@@ -139,39 +139,7 @@ function AnimatedCard({
           </View>
         )}
 
-        {/* Bottom overlay with info */}
-        <View style={[
-          styles.gridOverlay,
-          isCreator && styles.creatorOverlay,
-        ]}>
-          <Text style={styles.gridLabel} numberOfLines={1}>
-            {item.label}
-          </Text>
-          {isCreator && (
-            <View style={styles.creatorMeta}>
-              {item.sublabel && (
-                <Text style={styles.tokenBadge}>{item.sublabel}</Text>
-              )}
-              {item.distanceText && (
-                <View style={styles.distanceRow}>
-                  <Ionicons name="location-outline" size={10} color={COLORS.primary} />
-                  <Text style={styles.distanceText}>{item.distanceText}</Text>
-                </View>
-              )}
-            </View>
-          )}
-          {!isCreator && item.sublabel && (
-            <Text style={styles.gridSublabel} numberOfLines={2}>
-              {item.sublabel}
-            </Text>
-          )}
-          {!isCreator && item.distanceText && (
-            <View style={styles.distanceRow}>
-              <Ionicons name="location-outline" size={10} color={COLORS.primary} />
-              <Text style={styles.distanceText}>{item.distanceText}</Text>
-            </View>
-          )}
-        </View>
+        {/* No overlay — pure image grid per Figma */}
       </Pressable>
     </Animated.View>
   );
@@ -282,9 +250,9 @@ function PostSearchRow({
 
 export default function ExploreScreen() {
   const { width: SCREEN_WIDTH } = useWindowDimensions();
-  const ITEM_WIDTH = useMemo(() => (SCREEN_WIDTH - SPACING.md * 2 - COLUMN_GAP) / 2, [SCREEN_WIDTH]);
+  const ITEM_WIDTH = useMemo(() => (SCREEN_WIDTH - COLUMN_GAP) / 2, [SCREEN_WIDTH]);
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<ExploreTab>('CREATORS');
+  const [activeTab, setActiveTab] = useState<ExploreTab>('POSTS');
   const [searchText, setSearchText] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const inputRef = useRef<TextInput>(null);
@@ -450,87 +418,47 @@ export default function ExploreScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Discover Nearby Creators</Text>
-      </View>
-
-      {/* Search Bar — matches landing page style */}
-      <CoachMark
-        hintId="explore_search"
-        text="Search for creators, tokens, or posts"
-        position="bottom"
-      >
-      <View style={styles.searchContainer}>
-        <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
-          <Ionicons name="search" size={18} color={searchFocused ? COLORS.primary : COLORS.textTertiary} />
-          <TextInput
-            ref={inputRef}
-            style={styles.searchInput}
-            value={searchText}
-            onChangeText={setSearchText}
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setSearchFocused(false)}
-            placeholder="Search nearby creators..."
-            placeholderTextColor={COLORS.textTertiary}
-            returnKeyType="search"
-            autoCorrect={false}
-          />
-          {searchText.length > 0 && (
-            <Pressable onPress={handleClearSearch} hitSlop={8}>
-              <Ionicons name="close-circle" size={18} color={COLORS.textTertiary} />
-            </Pressable>
-          )}
-          {isSearching && (
-            <ActivityIndicator size="small" color={COLORS.primary} style={{ marginLeft: 4 }} />
-          )}
-        </View>
-      </View>
-      </CoachMark>
-
-      {/* Segmented Toggle */}
-      <View style={styles.toggleContainer}>
+      {/* Minimal search trigger when not searching */}
+      {!searchFocused && searchText.length === 0 && (
         <Pressable
-          onPress={() => setActiveTab('CREATORS')}
-          style={[
-            styles.toggleButton,
-            activeTab === 'CREATORS' && styles.toggleButtonActive,
-          ]}
+          onPress={() => {
+            setSearchFocused(true);
+            setTimeout(() => inputRef.current?.focus(), 100);
+          }}
+          style={styles.searchTrigger}
         >
-          <Text
-            style={[
-              styles.toggleText,
-              activeTab === 'CREATORS' && styles.toggleTextActive,
-            ]}
-          >
-            CREATORS
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setActiveTab('POSTS')}
-          style={[
-            styles.toggleButton,
-            activeTab === 'POSTS' && styles.toggleButtonActive,
-          ]}
-        >
-          <Text
-            style={[
-              styles.toggleText,
-              activeTab === 'POSTS' && styles.toggleTextActive,
-            ]}
-          >
-            POSTS
-          </Text>
-        </Pressable>
-      </View>
-
-      {/* Swipe hint — shown once to teach swipe between tabs */}
-      {showSwipeHint && (
-        <Pressable onPress={dismissSwipeHint} style={styles.swipeHint}>
-          <Ionicons name="swap-horizontal" size={14} color={COLORS.primary} />
-          <Text style={styles.swipeHintText}>Swipe left or right to switch tabs</Text>
+          <Ionicons name="search" size={20} color={COLORS.textTertiary} />
         </Pressable>
       )}
+
+      {/* Search Bar — only visible when actively searching */}
+      {searchFocused || searchText.length > 0 ? (
+        <View style={styles.searchContainer}>
+          <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
+            <Ionicons name="search" size={18} color={searchFocused ? COLORS.primary : COLORS.textTertiary} />
+            <TextInput
+              ref={inputRef}
+              style={styles.searchInput}
+              value={searchText}
+              onChangeText={setSearchText}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+              placeholder="Search creators..."
+              placeholderTextColor={COLORS.textTertiary}
+              returnKeyType="search"
+              autoCorrect={false}
+            />
+            {searchText.length > 0 && (
+              <Pressable onPress={handleClearSearch} hitSlop={8}>
+                <Ionicons name="close-circle" size={18} color={COLORS.textTertiary} />
+              </Pressable>
+            )}
+            {isSearching && (
+              <ActivityIndicator size="small" color={COLORS.primary} style={{ marginLeft: 4 }} />
+            )}
+          </View>
+        </View>
+      ) : null}
 
       {/* Content area — swipeable between CREATORS/POSTS */}
       <View style={{ flex: 1 }} {...panResponder.panHandlers}>
@@ -654,15 +582,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  header: {
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.sm,
-    paddingBottom: SPACING.xs,
-  },
-  headerTitle: {
-    ...TYPOGRAPHY.h2,
-    color: COLORS.textPrimary,
-    fontWeight: '800',
+  searchTrigger: {
+    position: 'absolute',
+    top: SPACING.sm,
+    right: SPACING.lg,
+    zIndex: 10,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   // Search
   searchContainer: {
@@ -884,7 +814,7 @@ const styles = StyleSheet.create({
   },
   // Grid
   listContent: {
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: 0,
     paddingBottom: SPACING.xl,
   },
   masonryContainer: {
@@ -896,7 +826,7 @@ const styles = StyleSheet.create({
     gap: COLUMN_GAP,
   },
   gridItem: {
-    borderRadius: RADII.lg,
+    borderRadius: 0,
     overflow: 'hidden',
     backgroundColor: COLORS.surface,
   },
