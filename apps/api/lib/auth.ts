@@ -5,7 +5,7 @@ import prisma from './prisma';
 let _privy: PrivyClient | null = null;
 function getPrivy(): PrivyClient {
   if (!_privy) {
-    const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+    const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID || process.env.PRIVY_APP_ID;
     const appSecret = process.env.PRIVY_APP_SECRET;
     if (!appId || !appSecret) {
       throw new Error('Missing PRIVY_APP_ID or PRIVY_APP_SECRET environment variables');

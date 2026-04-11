@@ -17,6 +17,11 @@ export function AuthBridge({ children }: { children: React.ReactNode }) {
     apiService.setTokenGetter(async () => {
       try {
         const token = await getAccessToken();
+        if (token) {
+          console.log('[AuthBridge] Token obtained, length:', token.length, 'prefix:', token.substring(0, 20) + '...');
+        } else {
+          console.warn('[AuthBridge] getAccessToken returned null/empty');
+        }
         return token;
       } catch (err) {
         console.error('[AuthBridge] getAccessToken failed:', err);
