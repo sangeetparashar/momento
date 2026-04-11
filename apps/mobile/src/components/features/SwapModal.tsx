@@ -18,6 +18,7 @@ import { TYPOGRAPHY } from '@/styles/typography';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSwap, TOKEN_MINTS } from '@/hooks/useSwap';
 import { useAuth } from '@/hooks/useAuth';
+import { apiService } from '@/services/api';
 import { useChain } from '@/hooks/useChain';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
 import { useUserProfile } from '@/hooks/useUserProfile';
@@ -80,8 +81,9 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const auth = useAuth();
-  const { walletAddress } = auth;
+  const { walletAddress, ethWalletAddress } = auth;
   const { chain } = useChain();
+  const activeWalletAddress = chain === 'base' ? ethWalletAddress : walletAddress;
   const { user: profile } = useUserProfile();
   const { quote, status, error, fetchQuote, executeSwap, reset } = useSwap();
   const balanceQuery = useWalletBalance(visible);
@@ -183,7 +185,7 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
   }, [inputToken, outputToken, reset]);
 
   const handleSwap = useCallback(async () => {
-    if (!walletAddress) return;
+    if (!activeWalletAddress) return;
     setSwapResult(null);
 
     const signature = await executeSwap();
@@ -211,10 +213,22 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
       } catch {
         // non-critical — don't block success flow
       }
+
+      // Log to server for persistent history (fire-and-forget)
+      apiService.post('/wallet/transactions/log', {
+        chain,
+        signature,
+        type: 'swap',
+        label: `${inputAmount} ${inputToken.symbol} → ${outputAmount ?? '?'} ${outputToken.symbol}`,
+        inputToken: inputToken.symbol,
+        outputToken: outputToken.symbol,
+        inputAmount,
+        outputAmount: outputAmount ?? undefined,
+      }).catch(() => {});
     } else {
       // error state is already set by useSwap hook
     }
-  }, [walletAddress, executeSwap, queryClient]);
+  }, [activeWalletAddress, executeSwap, queryClient]);
 
   const handleClose = useCallback(() => {
     if (status === 'signing' || status === 'sending') return;
@@ -521,7 +535,7 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
               disabled={!canSwap}
             >
               <Text style={styles.swapButtonText}>
-                {!walletAddress
+                {!activeWalletAddress
                   ? 'Connect Wallet'
                   : !inputAmount || inputNum <= 0
                   ? 'Enter Amount'

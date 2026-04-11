@@ -229,6 +229,7 @@ export function SendModal({ visible, onClose }: SendModalProps) {
         const { transaction: serializedTx } = await apiService.post<{ transaction: string }>(
           '/wallet/send',
           {
+            chain,
             recipientAddress,
             amount: parsedAmount.toString(),
             token,
@@ -276,6 +277,17 @@ export function SendModal({ visible, onClose }: SendModalProps) {
         const updated = [newTx, ...existing].slice(0, MAX_TX_RECORDS);
         await AsyncStorage.setItem(txKey, JSON.stringify(updated));
       } catch { /* storage failure is non-critical */ }
+
+      // Log to server for persistent history (fire-and-forget)
+      apiService.post('/wallet/transactions/log', {
+        chain,
+        signature,
+        type: 'send',
+        label: `Sent ${parsedAmount} ${token}`,
+        inputToken: token,
+        inputAmount: parsedAmount.toString(),
+        recipientAddress,
+      }).catch(() => {});
 
       // Refresh balance
       setTimeout(() => balanceQuery.refetch(), 2000);

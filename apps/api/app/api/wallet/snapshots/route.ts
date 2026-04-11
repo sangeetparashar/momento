@@ -33,8 +33,8 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'asc' },
       select: {
         totalValueUsd: true,
-        solBalance: true,
-        solValueUsd: true,
+        nativeBalance: true,
+        nativeValueUsd: true,
         tokenValueUsd: true,
         createdAt: true,
       },
@@ -53,8 +53,8 @@ export async function GET(request: NextRequest) {
     const points = data.map((s) => ({
       t: s.createdAt.getTime(),
       p: Math.round(s.totalValueUsd * 100) / 100,
-      native: Math.round(s.solValueUsd * 100) / 100,
-      sol: Math.round(s.solValueUsd * 100) / 100,
+      native: Math.round(s.nativeValueUsd * 100) / 100,
+      sol: Math.round(s.nativeValueUsd * 100) / 100, // backward compat alias
       tokens: Math.round(s.tokenValueUsd * 100) / 100,
     }));
 

@@ -181,16 +181,36 @@ model Notification {
 }
 
 model PortfolioSnapshot {
-  id             String   @id @default(uuid())
-  userId         String
-  chain          String   @default("solana")
-  totalValueUsd  Float
-  solBalance     Float
-  solValueUsd    Float
-  tokenValueUsd  Float
-  createdAt      DateTime @default(now())
+  id              String   @id @default(uuid())
+  userId          String
+  chain           String   @default("solana")
+  totalValueUsd   Float
+  nativeBalance   Float
+  nativeValueUsd  Float
+  tokenValueUsd   Float
+  createdAt       DateTime @default(now())
 
   @@index([userId, createdAt])
   @@index([userId, chain, createdAt])
   @@map("portfolio_snapshots")
+}
+
+model WalletTransaction {
+  id               String   @id @default(uuid())
+  userId           String
+  chain            String
+  signature        String
+  type             String   // "swap" | "send" | "receive" | "fund"
+  label            String
+  inputToken       String?
+  outputToken      String?
+  inputAmount      String?
+  outputAmount     String?
+  recipientAddress String?
+  status           String   @default("confirmed")
+  createdAt        DateTime @default(now())
+
+  @@unique([userId, chain, signature])
+  @@index([userId, chain, createdAt])
+  @@map("wallet_transactions")
 }

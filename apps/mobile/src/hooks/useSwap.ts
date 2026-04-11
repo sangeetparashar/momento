@@ -111,12 +111,14 @@ export function useSwap(): UseSwapReturn {
   const [status, setStatus] = useState<SwapStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const quoteRef = useRef<SwapQuote | null>(null);
+  const quoteFetchedAtRef = useRef<number>(0);
 
   const reset = useCallback(() => {
     setQuote(null);
     setStatus('idle');
     setError(null);
     quoteRef.current = null;
+    quoteFetchedAtRef.current = 0;
   }, []);
 
   const fetchQuote = useCallback(
@@ -150,6 +152,7 @@ export function useSwap(): UseSwapReturn {
         const response = await apiService.get<SwapQuote>('/wallet/swap', queryParams);
         setQuote(response);
         quoteRef.current = response;
+        quoteFetchedAtRef.current = Date.now();
         setStatus('idle');
         return response;
       } catch (err: any) {
@@ -167,6 +170,13 @@ export function useSwap(): UseSwapReturn {
     const currentQuote = quoteRef.current;
     if (!currentQuote) {
       setError('No quote available. Fetch a quote first.');
+      setStatus('error');
+      return null;
+    }
+
+    const QUOTE_MAX_AGE_MS = 30_000;
+    if (Date.now() - quoteFetchedAtRef.current > QUOTE_MAX_AGE_MS) {
+      setError('Quote expired. Please refresh and try again.');
       setStatus('error');
       return null;
     }
