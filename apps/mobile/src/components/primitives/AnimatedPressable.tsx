@@ -51,6 +51,7 @@ export function AnimatedPressable({
       <Pressable
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
+        style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
         {...rest}
       >
         {children}

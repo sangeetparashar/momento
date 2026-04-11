@@ -107,6 +107,8 @@ export default function RootLayout() {
                     headerShown: false,
                     contentStyle: { backgroundColor: COLORS.background },
                     animation: 'slide_from_right',
+                    gestureEnabled: true,
+                    gestureDirection: 'horizontal',
                   }}
                 >
                   <Stack.Screen name="index" />

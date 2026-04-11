@@ -231,10 +231,14 @@ export default function HomeScreen() {
   }, []);
 
   const handleTabPress = useCallback((tab: FeedTab) => {
+    if (tab === feedTab) return; // Already on this tab
     setFeedTab(tab);
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
     setCurrentIndex(0);
-  }, []);
+    // Scroll to top after a brief delay to let the query key change trigger
+    setTimeout(() => {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    }, 100);
+  }, [feedTab]);
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: Array<{ index: number | null }> }) => {

@@ -173,7 +173,7 @@ export default function CreatorScreen() {
                     <View key={platform} style={styles.socialIcon}>
                       <Ionicons
                         name={(config as any).icon || 'link'}
-                        size={16}
+                        size={20}
                         color={(config as any).color || COLORS.textSecondary}
                       />
                     </View>
@@ -515,10 +515,10 @@ const styles = StyleSheet.create({
     marginTop: SPACING.sm,
   },
   socialIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.6)',
     alignItems: 'center',
     justifyContent: 'center',
   },
