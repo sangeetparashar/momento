@@ -13,6 +13,19 @@ import { apiService } from '@/services/api';
 /** How often to refresh the user's location (15 minutes). */
 const LOCATION_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
 
+/** How long to wait for GPS before using fallback (seconds). */
+const LOCATION_TIMEOUT_S = 8;
+
+/**
+ * Fallback location used when the device can't provide GPS
+ * (e.g., emulator without GPS fix, airplane mode, etc.).
+ * Toronto, ON — where seed creator data is located.
+ */
+const FALLBACK_LOCATION: LocationCoords = {
+  latitude: 43.6532,
+  longitude: -79.3832,
+};
+
 export interface LocationCoords {
   latitude: number;
   longitude: number;
@@ -46,17 +59,35 @@ export function LocationProvider({ children }: LocationProviderProps) {
 
   const fetchLocation = useCallback(async () => {
     try {
-      const current = await Location.getCurrentPositionAsync({
+      console.log('[Location] Fetching current position...');
+      // Race between real GPS and a timeout — emulators often hang forever
+      const timeoutPromise = new Promise<null>((resolve) =>
+        setTimeout(() => resolve(null), LOCATION_TIMEOUT_S * 1000)
+      );
+      const locationPromise = Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
-      setLocation({
-        latitude: current.coords.latitude,
-        longitude: current.coords.longitude,
-      });
+
+      const result = await Promise.race([locationPromise, timeoutPromise]);
+
+      if (result) {
+        console.log('[Location] Got position:', result.coords.latitude, result.coords.longitude);
+        setLocation({
+          latitude: result.coords.latitude,
+          longitude: result.coords.longitude,
+        });
+      } else {
+        // GPS timed out — use fallback so the feed still works
+        console.log('[Location] GPS timed out, using fallback:', FALLBACK_LOCATION.latitude, FALLBACK_LOCATION.longitude);
+        setLocation(FALLBACK_LOCATION);
+      }
       setError(null);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to get location';
+      console.log('[Location] Error, using fallback:', message);
+      // Use fallback instead of leaving location null
+      setLocation(FALLBACK_LOCATION);
       setError(message);
     }
   }, []);
@@ -64,7 +95,9 @@ export function LocationProvider({ children }: LocationProviderProps) {
   const requestPermissionAndFetch = useCallback(async () => {
     setIsLoading(true);
     try {
+      console.log('[Location] Requesting foreground permission...');
       const { status } = await Location.requestForegroundPermissionsAsync();
+      console.log('[Location] Permission status:', status);
       if (status !== 'granted') {
         setHasPermission(false);
         setError('Location permission was denied. Some features may be limited.');
@@ -76,6 +109,7 @@ export function LocationProvider({ children }: LocationProviderProps) {
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Failed to request location permission';
+      console.log('[Location] Permission error:', message);
       setError(message);
     } finally {
       setIsLoading(false);
