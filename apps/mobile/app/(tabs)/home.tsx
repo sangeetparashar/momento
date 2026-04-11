@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/primitives';
+import { PillTabs } from '@/components/composites';
 import { LikeButton, FeedSkeleton, FeedAlgorithmModal, FundWalletModal, ComingSoonModal } from '@/components/features';
 import { useNotifications } from '@/providers/NotificationProvider';
 import { useFeed } from '@/hooks';
@@ -267,7 +268,17 @@ export default function HomeScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
-          <Text style={styles.headerTabActive}>FOR YOU</Text>
+          <View style={styles.headerIcon} />
+          <PillTabs
+            tabs={[
+              { key: 'FOR_YOU', label: 'For You' },
+              { key: 'CREATORS_TO_WATCH', label: 'Creators to Watch' },
+            ]}
+            activeTab="FOR_YOU"
+            onTabChange={() => {}}
+            style={{ flex: 1, marginHorizontal: SPACING.xs }}
+          />
+          <View style={styles.headerIcon} />
         </View>
         <FeedSkeleton />
       </SafeAreaView>
@@ -286,28 +297,15 @@ export default function HomeScreen() {
           <Ionicons name="options-outline" size={18} color={COLORS.textTertiary} />
         </Pressable>
 
-        <View style={styles.headerTabs}>
-          <Pressable onPress={() => handleTabPress('FOR_YOU')}>
-            <Text
-              style={[
-                styles.headerTab,
-                feedTab === 'FOR_YOU' && styles.headerTabActive,
-              ]}
-            >
-              FOR YOU
-            </Text>
-          </Pressable>
-          <Pressable onPress={() => handleTabPress('CREATORS_TO_WATCH')}>
-            <Text
-              style={[
-                styles.headerTab,
-                feedTab === 'CREATORS_TO_WATCH' && styles.headerTabActive,
-              ]}
-            >
-              CREATORS TO WATCH
-            </Text>
-          </Pressable>
-        </View>
+        <PillTabs
+          tabs={[
+            { key: 'FOR_YOU', label: 'For You' },
+            { key: 'CREATORS_TO_WATCH', label: 'Creators to Watch' },
+          ]}
+          activeTab={feedTab}
+          onTabChange={(key) => handleTabPress(key as FeedTab)}
+          style={{ flex: 1, marginHorizontal: SPACING.xs }}
+        />
 
         <Pressable
           onPress={() => router.push('/market')}

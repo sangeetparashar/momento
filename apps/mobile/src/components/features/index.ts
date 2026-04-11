@@ -24,3 +24,4 @@ export { SwipeIndicator } from './SwipeIndicator';
 export { DisclaimerModal, hasAcceptedDisclaimer } from './DisclaimerModal';
 export { SendModal } from './SendModal';
 export { ChainSwitcher } from './ChainSwitcher';
+export { ProfileDashboard } from './ProfileDashboard';

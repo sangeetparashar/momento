@@ -16,6 +16,7 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 // PagerView removed — using simple tab switching to avoid native module dependency
 import { Text, Avatar } from '@/components/primitives';
+import { PillTabs, StatsCard, BuySellPills, PerformanceChart } from '@/components/composites';
 import { ComingSoonModal, CreatorProfileSkeleton } from '@/components/features';
 import { useCreatorProfile } from '@/hooks';
 import { useUserProfile } from '@/hooks/useUserProfile';
@@ -58,7 +59,24 @@ export default function CreatorScreen() {
   const { user: currentUser } = useUserProfile();
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [activeTab, setActiveTab] = useState<ProfileTab>('PROFILE');
+  const [chartTimeRange, setChartTimeRange] = useState('1Y');
   const isOwnProfile = !!currentUser?.id && !!profile?.id && currentUser.id === profile.id;
+
+  // Sample chart data until real token price API exists
+  const chartData = useMemo(() => [
+    { x: 0, y: 20 }, { x: 1, y: 18 }, { x: 2, y: 25 },
+    { x: 3, y: 30 }, { x: 4, y: 28 }, { x: 5, y: 35 },
+    { x: 6, y: 50 }, { x: 7, y: 45 }, { x: 8, y: 55 },
+    { x: 9, y: 60 }, { x: 10, y: 58 }, { x: 11, y: 70 },
+  ], []);
+
+  // Placeholder token stats
+  const tokenData = useMemo(() => ({
+    price: '0.004',
+    change24h: '17%',
+    changePositive: true,
+    marketCap: '10.6K',
+  }), []);
 
   useEffect(() => {
     if (isOwnProfile) {
@@ -296,44 +314,43 @@ export default function CreatorScreen() {
       </Text>
 
       {/* BUY / SELL pills */}
-      <View style={styles.tokenButtons}>
-        <Pressable
-          onPress={() => setShowComingSoon(true)}
-          style={styles.tokenBuyButton}
-        >
-          <Text style={styles.tokenBuyText}>BUY</Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setShowComingSoon(true)}
-          style={styles.tokenSellButton}
-        >
-          <Text style={styles.tokenSellText}>SELL</Text>
-        </Pressable>
+      <BuySellPills
+        onBuy={() => setShowComingSoon(true)}
+        onSell={() => setShowComingSoon(true)}
+        style={{ marginTop: SPACING.xl }}
+      />
+
+      {/* Stats row — 3 across */}
+      <View style={styles.tokenStatsRow}>
+        <StatsCard
+          label="PRICE"
+          value={tokenData.price}
+          variant="inline"
+        />
+        <StatsCard
+          label="24H CHANGE"
+          value={tokenData.change24h}
+          variant="inline"
+          valueColor={tokenData.changePositive ? 'positive' : 'negative'}
+        />
+        <StatsCard
+          label="MARKET CAP"
+          value={tokenData.marketCap}
+          variant="inline"
+        />
       </View>
 
-      {/* Stats row */}
-      <View style={styles.tokenStats}>
-        <View style={styles.tokenStatItem}>
-          <Text style={styles.tokenStatLabel}>PRICE</Text>
-          <Text style={styles.tokenStatValue}>—</Text>
-        </View>
-        <View style={styles.tokenStatItem}>
-          <Text style={styles.tokenStatLabel}>24H CHANGE</Text>
-          <Text style={styles.tokenStatValue}>—</Text>
-        </View>
-        <View style={styles.tokenStatItem}>
-          <Text style={styles.tokenStatLabel}>MARKET CAP</Text>
-          <Text style={styles.tokenStatValue}>—</Text>
-        </View>
-      </View>
+      {/* Divider */}
+      <View style={styles.tokenDivider} />
 
-      {/* Chart placeholder */}
-      <View style={styles.tokenChartContainer}>
-        <Text style={styles.tokenChartLabel}>TOKEN PERFORMANCE</Text>
-        <View style={styles.tokenChart}>
-          <Text style={styles.tokenChartPlaceholder}>Coming Soon</Text>
-        </View>
-      </View>
+      {/* Performance chart */}
+      <PerformanceChart
+        title="TOKEN PERFORMANCE"
+        data={chartData}
+        timeRange={chartTimeRange}
+        onTimeRangeChange={setChartTimeRange}
+        style={{ width: '100%' }}
+      />
 
       {/* Follow CTA */}
       {!isOwnProfile && (
@@ -356,24 +373,16 @@ export default function CreatorScreen() {
         <Pressable onPress={handleBack} style={styles.backButton} hitSlop={8}>
           <Ionicons name="chevron-back" size={24} color={COLORS.textPrimary} />
         </Pressable>
-        <View style={styles.tabBar}>
-          {TABS.map((tab) => (
-            <Pressable
-              key={tab}
-              onPress={() => handleTabChange(tab)}
-              style={styles.tabItem}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === tab && styles.tabTextActive,
-                ]}
-              >
-                {tab}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <PillTabs
+          tabs={[
+            { key: 'PROFILE', label: 'Profile' },
+            { key: 'POSTS', label: 'Posts' },
+            { key: 'TOKEN', label: 'Token' },
+          ]}
+          activeTab={activeTab}
+          onTabChange={(key) => handleTabChange(key as ProfileTab)}
+          style={{ flex: 1 }}
+        />
       </View>
 
       {/* Content */}
@@ -409,6 +418,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
+    gap: SPACING.sm,
   },
   backButton: {
     padding: SPACING.xs,
@@ -573,6 +583,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1,
   },
+  tokenStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: SPACING.xl,
+  },
+  tokenDivider: {
+    width: '100%',
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: SPACING.xl,
+  },
+  // ─── Old token styles (kept, no longer referenced) ───
   tokenButtons: {
     flexDirection: 'row',
     gap: SPACING.sm,

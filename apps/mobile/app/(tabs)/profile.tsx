@@ -22,6 +22,7 @@ import {
   FollowingModal,
   FavoritesSkeleton,
   FundWalletModal,
+  ProfileDashboard,
 } from '@/components/features';
 import { useUserProfile, useSavedPosts, useProfileComplete, useWalletBalance } from '@/hooks';
 import { useAuth } from '@/hooks/useAuth';
@@ -31,6 +32,10 @@ import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatNumber } from '@/utils/formatters';
 import { UserRole, SOCIAL_PLATFORMS } from '@momento/shared';
+
+// Feature flag: set to true to use the new financial dashboard profile layout.
+// Set to false to revert to the old social-media-style profile.
+const USE_DASHBOARD_PROFILE = true;
 
 const COLUMN_GAP = SPACING.sm;
 const HEIGHT_PATTERN = [1.0, 1.35, 1.15, 1.0, 1.4, 1.0, 1.2, 1.0, 1.3, 1.1];
@@ -396,6 +401,42 @@ export default function ProfileScreen() {
     </>
   );
 
+  // ─── NEW: Financial Dashboard Profile ───
+  if (USE_DASHBOARD_PROFILE) {
+    return (
+      <SafeAreaView style={styles.container} edges={['top']}>
+        {isLoading && !user ? (
+          <ProfileSkeleton />
+        ) : (
+          <ProfileDashboard
+            user={user}
+            isCreator={isCreator}
+            walletBalance={walletBalance}
+            isLoading={isLoading}
+            onRefresh={handleRefresh}
+            refreshing={refreshing}
+            onSettingsPress={handleSettingsPress}
+          />
+        )}
+
+        <SettingsSheet
+          visible={showSettings}
+          onClose={() => setShowSettings(false)}
+          onNavigate={handleSettingsNavigate}
+        />
+        <ComingSoonModal
+          visible={showComingSoon}
+          onClose={() => setShowComingSoon(false)}
+        />
+        <FollowingModal
+          visible={showFollowing}
+          onClose={() => setShowFollowing(false)}
+        />
+      </SafeAreaView>
+    );
+  }
+
+  // ─── OLD: Social-media-style profile (kept for fallback) ───
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header bar */}
