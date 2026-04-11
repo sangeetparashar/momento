@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -14,7 +14,7 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import PagerView from 'react-native-pager-view';
+// PagerView removed — using simple tab switching to avoid native module dependency
 import { Text, Avatar } from '@/components/primitives';
 import { ComingSoonModal, CreatorProfileSkeleton } from '@/components/features';
 import { useCreatorProfile } from '@/hooks';
@@ -58,7 +58,6 @@ export default function CreatorScreen() {
   const { user: currentUser } = useUserProfile();
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [activeTab, setActiveTab] = useState<ProfileTab>('PROFILE');
-  const pagerRef = useRef<PagerView>(null);
   const isOwnProfile = !!currentUser?.id && !!profile?.id && currentUser.id === profile.id;
 
   useEffect(() => {
@@ -87,12 +86,6 @@ export default function CreatorScreen() {
 
   const handleTabChange = useCallback((tab: ProfileTab) => {
     setActiveTab(tab);
-    const index = TABS.indexOf(tab);
-    pagerRef.current?.setPage(index);
-  }, []);
-
-  const handlePageSelected = useCallback((index: number) => {
-    setActiveTab(TABS[index]);
   }, []);
 
   const handleEndReached = useCallback(() => {
@@ -387,24 +380,11 @@ export default function CreatorScreen() {
       {isLoading ? (
         <CreatorProfileSkeleton />
       ) : (
-        <PagerView
-          ref={pagerRef}
-          style={{ flex: 1 }}
-          initialPage={0}
-          scrollEnabled
-          overdrag
-          onPageSelected={(e) => handlePageSelected(e.nativeEvent.position)}
-        >
-          <View key="profile" style={{ flex: 1 }}>
-            {renderProfileTab()}
-          </View>
-          <View key="posts" style={{ flex: 1 }}>
-            {renderPostsTab()}
-          </View>
-          <View key="token" style={{ flex: 1 }}>
-            {renderTokenTab()}
-          </View>
-        </PagerView>
+        <View style={{ flex: 1 }}>
+          {activeTab === 'PROFILE' && renderProfileTab()}
+          {activeTab === 'POSTS' && renderPostsTab()}
+          {activeTab === 'TOKEN' && renderTokenTab()}
+        </View>
       )}
 
       <ComingSoonModal

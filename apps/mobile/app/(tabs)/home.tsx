@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/primitives';
 import { LikeButton, FeedSkeleton, FeedAlgorithmModal, FundWalletModal, ComingSoonModal } from '@/components/features';
+import { useNotifications } from '@/providers/NotificationProvider';
 import { useFeed } from '@/hooks';
 import { useMutation } from '@tanstack/react-query';
 import { apiService } from '@/services/api';
@@ -275,30 +276,45 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header — "FOR YOU" / "CREATORS TO WATCH" tabs */}
+      {/* Header — algo button, feed tabs, market link */}
       <View style={styles.header}>
         <Pressable
-          onPress={() => handleTabPress('FOR_YOU')}
-          onLongPress={() => setShowAlgoModal(true)}
+          onPress={() => setShowAlgoModal(true)}
+          style={styles.headerIcon}
+          hitSlop={8}
         >
-          <Text
-            style={[
-              styles.headerTab,
-              feedTab === 'FOR_YOU' && styles.headerTabActive,
-            ]}
-          >
-            FOR YOU
-          </Text>
+          <Ionicons name="options-outline" size={18} color={COLORS.textTertiary} />
         </Pressable>
-        <Pressable onPress={() => handleTabPress('CREATORS_TO_WATCH')}>
-          <Text
-            style={[
-              styles.headerTab,
-              feedTab === 'CREATORS_TO_WATCH' && styles.headerTabActive,
-            ]}
-          >
-            CREATORS TO WATCH
-          </Text>
+
+        <View style={styles.headerTabs}>
+          <Pressable onPress={() => handleTabPress('FOR_YOU')}>
+            <Text
+              style={[
+                styles.headerTab,
+                feedTab === 'FOR_YOU' && styles.headerTabActive,
+              ]}
+            >
+              FOR YOU
+            </Text>
+          </Pressable>
+          <Pressable onPress={() => handleTabPress('CREATORS_TO_WATCH')}>
+            <Text
+              style={[
+                styles.headerTab,
+                feedTab === 'CREATORS_TO_WATCH' && styles.headerTabActive,
+              ]}
+            >
+              CREATORS TO WATCH
+            </Text>
+          </Pressable>
+        </View>
+
+        <Pressable
+          onPress={() => router.push('/market')}
+          style={styles.headerIcon}
+          hitSlop={8}
+        >
+          <Ionicons name="trending-up" size={18} color={COLORS.textTertiary} />
         </Pressable>
       </View>
 
@@ -373,18 +389,28 @@ const styles = StyleSheet.create({
     height: HEADER_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.xl,
-    paddingHorizontal: SPACING.lg,
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+  },
+  headerTabs: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.lg,
   },
   headerTab: {
     ...TYPOGRAPHY.label,
     color: COLORS.textTertiary,
-    fontSize: 11,
+    fontSize: 10,
     letterSpacing: 1.5,
   },
   headerTabActive: {
     color: COLORS.textPrimary,
+  },
+  headerIcon: {
+    width: 32,
+    height: 32,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
   // ─── Feed Card ───
