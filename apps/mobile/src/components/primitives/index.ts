@@ -9,3 +9,4 @@ export { AnimatedPressable } from './AnimatedPressable';
 export { MomentoLogo } from './MomentoLogo';
 export { LoadingView } from './LoadingView';
 export { CoachMark } from './CoachMark';
+export { PillButton } from './PillButton';
