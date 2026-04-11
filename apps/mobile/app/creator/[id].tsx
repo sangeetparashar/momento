@@ -1,8 +1,9 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
   ScrollView,
+  FlatList,
   Pressable,
   useWindowDimensions,
   Linking,
@@ -13,19 +14,21 @@ import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { Text, Avatar, CoachMark } from '@/components/primitives';
+import PagerView from 'react-native-pager-view';
+import { Text, Avatar } from '@/components/primitives';
 import { ComingSoonModal, CreatorProfileSkeleton } from '@/components/features';
 import { useCreatorProfile } from '@/hooks';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { apiService } from '@/services/api';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
-import { formatNumber, formatDistance } from '@/utils/formatters';
-import { SOCIAL_PLATFORMS } from '@momento/shared';
+import { formatNumber, formatTimeAgo } from '@/utils/formatters';
 
-const BANNER_HEIGHT = 180;
-const COLUMN_GAP = SPACING.sm;
+const COLUMN_GAP = 2;
 const HEIGHT_PATTERN = [1.0, 1.35, 1.15, 1.0, 1.4, 1.0, 1.2, 1.0, 1.3, 1.1];
+
+type ProfileTab = 'PROFILE' | 'POSTS' | 'TOKEN';
+const TABS: ProfileTab[] = ['PROFILE', 'POSTS', 'TOKEN'];
 
 function splitMasonryColumns(posts: any[]) {
   const left: { post: any; height: number }[] = [];
@@ -48,14 +51,16 @@ function splitMasonryColumns(posts: any[]) {
 export default function CreatorScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { width: SCREEN_WIDTH } = useWindowDimensions();
-  const ITEM_WIDTH = useMemo(() => (SCREEN_WIDTH - SPACING.md * 2 - COLUMN_GAP) / 2, [SCREEN_WIDTH]);
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
+  const ITEM_WIDTH = useMemo(() => (SCREEN_WIDTH - COLUMN_GAP) / 2, [SCREEN_WIDTH]);
+  const HERO_HEIGHT = useMemo(() => SCREEN_HEIGHT * 0.55, [SCREEN_HEIGHT]);
   const { profile, isLoading, isFollowing, toggleFollow } = useCreatorProfile(id);
   const { user: currentUser } = useUserProfile();
   const [showComingSoon, setShowComingSoon] = useState(false);
+  const [activeTab, setActiveTab] = useState<ProfileTab>('PROFILE');
+  const pagerRef = useRef<PagerView>(null);
   const isOwnProfile = !!currentUser?.id && !!profile?.id && currentUser.id === profile.id;
 
-  // Redirect to own profile tab if viewing yourself
   useEffect(() => {
     if (isOwnProfile) {
       router.replace('/(tabs)/profile');
@@ -80,20 +85,15 @@ export default function CreatorScreen() {
     router.back();
   }, [router]);
 
-  const handleBuy = useCallback(() => {
-    setShowComingSoon(true);
+  const handleTabChange = useCallback((tab: ProfileTab) => {
+    setActiveTab(tab);
+    const index = TABS.indexOf(tab);
+    pagerRef.current?.setPage(index);
   }, []);
 
-  const handleSocialPress = useCallback(
-    (platform: string, handle?: string) => {
-      if (!handle) return;
-      const config = SOCIAL_PLATFORMS[platform as keyof typeof SOCIAL_PLATFORMS];
-      if (config?.urlPrefix) {
-        Linking.openURL(`${config.urlPrefix}${handle}`);
-      }
-    },
-    []
-  );
+  const handlePageSelected = useCallback((index: number) => {
+    setActiveTab(TABS[index]);
+  }, []);
 
   const handleEndReached = useCallback(() => {
     if (postsQuery.hasNextPage && !postsQuery.isFetchingNextPage) {
@@ -101,260 +101,312 @@ export default function CreatorScreen() {
     }
   }, [postsQuery]);
 
-  const renderSocialLinks = () => {
-    if (!profile?.socialLinks) return null;
-
-    const links = Object.entries(profile.socialLinks).filter(
-      ([_, value]) => value
-    );
-    if (links.length === 0) return null;
-
-    return (
-      <View style={styles.socialLinksRow}>
-        {links.map(([platform, handle]) => {
-          const config =
-            SOCIAL_PLATFORMS[platform as keyof typeof SOCIAL_PLATFORMS];
-          if (!config) return null;
-          return (
-            <Pressable
-              key={platform}
-              onPress={() => handleSocialPress(platform, handle)}
-              style={styles.socialIcon}
-            >
-              <Ionicons
-                name={config.icon as any}
-                size={22}
-                color={config.color}
-              />
-            </Pressable>
-          );
-        })}
-      </View>
-    );
-  };
-
   const postColumns = useMemo(() => splitMasonryColumns(creatorPosts), [creatorPosts]);
 
-  const renderPostsGrid = () => {
-    if (postsQuery.isLoading) {
-      return (
+  // ─── PROFILE TAB ───
+  const renderProfileTab = () => (
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      onScroll={({ nativeEvent }) => {
+        const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
+        if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 400) {
+          handleEndReached();
+        }
+      }}
+      scrollEventThrottle={400}
+      nestedScrollEnabled
+    >
+      {/* Full-bleed hero image */}
+      <View style={[styles.heroContainer, { height: HERO_HEIGHT }]}>
+        {profile?.bannerUrl || profile?.avatarUrl ? (
+          <Image
+            source={{ uri: profile.bannerUrl || profile.avatarUrl }}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            cachePolicy="disk"
+            placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
+          />
+        ) : (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: COLORS.backgroundTertiary }]} />
+        )}
+        {/* Gradient overlay at bottom */}
+        <View style={styles.heroGradient} />
+        {/* Name + verified dot overlaid at bottom */}
+        <View style={styles.heroOverlay}>
+          <View style={styles.heroNameRow}>
+            <Text style={styles.heroName}>
+              {profile?.displayName || profile?.username || 'Creator'}
+            </Text>
+            {profile?.kycStatus === 'VERIFIED' && (
+              <View style={styles.verifiedDot} />
+            )}
+          </View>
+          {profile?.tokenSymbol && (
+            <Text style={styles.heroToken}>${profile.tokenSymbol}</Text>
+          )}
+          {profile?.bio && (
+            <Text style={styles.heroBio} numberOfLines={2}>
+              {profile.bio}
+            </Text>
+          )}
+        </View>
+      </View>
+
+      {/* Masonry post grid */}
+      {creatorPosts.length > 0 ? (
+        <View style={styles.masonryContainer}>
+          <View style={styles.masonryColumn}>
+            {postColumns.left.map(({ post, height }) => (
+              <Pressable
+                key={post.id}
+                onPress={() => router.push(`/post/${post.id}`)}
+                style={[styles.masonryItem, { height: ITEM_WIDTH * height }]}
+              >
+                {post.mediaUrl ? (
+                  <Image
+                    source={{ uri: post.mediaUrl }}
+                    style={styles.masonryImage}
+                    contentFit="cover"
+                    cachePolicy="disk"
+                    recyclingKey={post.mediaUrl}
+                  />
+                ) : (
+                  <View style={styles.masonryTextItem}>
+                    <Text style={styles.masonryText} numberOfLines={6}>
+                      {post.content || post.caption}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.masonryColumn}>
+            {postColumns.right.map(({ post, height }) => (
+              <Pressable
+                key={post.id}
+                onPress={() => router.push(`/post/${post.id}`)}
+                style={[styles.masonryItem, { height: ITEM_WIDTH * height }]}
+              >
+                {post.mediaUrl ? (
+                  <Image
+                    source={{ uri: post.mediaUrl }}
+                    style={styles.masonryImage}
+                    contentFit="cover"
+                    cachePolicy="disk"
+                    recyclingKey={post.mediaUrl}
+                  />
+                ) : (
+                  <View style={styles.masonryTextItem}>
+                    <Text style={styles.masonryText} numberOfLines={6}>
+                      {post.content || post.caption}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : postsQuery.isLoading ? (
         <View style={styles.emptyState}>
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
-      );
-    }
-
-    if (creatorPosts.length === 0) {
-      return (
+      ) : (
         <View style={styles.emptyState}>
           <Ionicons name="images-outline" size={48} color={COLORS.textTertiary} />
           <Text style={styles.emptyText}>No posts yet</Text>
         </View>
-      );
-    }
+      )}
 
-    return (
-      <View style={styles.masonryContainer}>
-        <View style={styles.masonryColumn}>
-          {postColumns.left.map(({ post, height }) => (
-            <Pressable
-              key={post.id}
-              onPress={() => router.push(`/post/${post.id}`)}
-              style={[styles.masonryItem, { height: ITEM_WIDTH * height }]}
-            >
-              {post.mediaUrl ? (
-                <Image
-                  source={{ uri: post.mediaUrl }}
-                  style={styles.masonryImage}
-                  contentFit="cover"
-                  transition={200}
-                  cachePolicy="disk"
-                  recyclingKey={post.mediaUrl}
-                  placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
-                />
-              ) : (
-                <View style={styles.masonryTextItem}>
-                  <Text style={styles.masonryText} numberOfLines={6}>
-                    {post.content || post.caption}
-                  </Text>
-                </View>
-              )}
-            </Pressable>
-          ))}
+      {postsQuery.isFetchingNextPage && (
+        <View style={styles.loadingMore}>
+          <ActivityIndicator size="small" color={COLORS.primary} />
         </View>
-        <View style={styles.masonryColumn}>
-          {postColumns.right.map(({ post, height }) => (
-            <Pressable
-              key={post.id}
-              onPress={() => router.push(`/post/${post.id}`)}
-              style={[styles.masonryItem, { height: ITEM_WIDTH * height }]}
-            >
-              {post.mediaUrl ? (
-                <Image
-                  source={{ uri: post.mediaUrl }}
-                  style={styles.masonryImage}
-                  contentFit="cover"
-                  transition={200}
-                  cachePolicy="disk"
-                  recyclingKey={post.mediaUrl}
-                  placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
-                />
-              ) : (
-                <View style={styles.masonryTextItem}>
-                  <Text style={styles.masonryText} numberOfLines={6}>
-                    {post.content || post.caption}
-                  </Text>
-                </View>
-              )}
-            </Pressable>
-          ))}
+      )}
+    </ScrollView>
+  );
+
+  // ─── POSTS TAB (feed-style) ───
+  const renderPostItem = useCallback(({ item: post }: { item: any }) => (
+    <Pressable
+      onPress={() => router.push(`/post/${post.id}`)}
+      style={styles.feedPost}
+    >
+      {/* Avatar + name + time */}
+      <View style={styles.feedPostHeader}>
+        <Avatar
+          uri={profile?.avatarUrl}
+          name={profile?.displayName || profile?.username}
+          size="sm"
+        />
+        <View style={styles.feedPostMeta}>
+          <Text style={styles.feedPostName}>
+            {profile?.displayName || profile?.username}
+          </Text>
+          <Text style={styles.feedPostTime}>
+            {formatTimeAgo(post.createdAt)}
+          </Text>
         </View>
       </View>
-    );
-  };
+      {/* Caption */}
+      {(post.caption || post.content) && (
+        <Text style={styles.feedPostCaption} numberOfLines={4}>
+          {post.caption || post.content}
+        </Text>
+      )}
+      {/* Image */}
+      {post.mediaUrl && (
+        <Image
+          source={{ uri: post.mediaUrl }}
+          style={styles.feedPostImage}
+          contentFit="cover"
+          cachePolicy="disk"
+          recyclingKey={post.mediaUrl}
+        />
+      )}
+    </Pressable>
+  ), [profile, router]);
+
+  const renderPostsTab = () => (
+    <FlatList
+      data={creatorPosts}
+      keyExtractor={(item) => item.id}
+      renderItem={renderPostItem}
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.feedContent}
+      onEndReached={handleEndReached}
+      onEndReachedThreshold={0.5}
+      nestedScrollEnabled
+      ListEmptyComponent={
+        postsQuery.isLoading ? (
+          <View style={styles.emptyState}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+          </View>
+        ) : (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyText}>No posts yet</Text>
+          </View>
+        )
+      }
+    />
+  );
+
+  // ─── TOKEN TAB ───
+  const renderTokenTab = () => (
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.tokenContent}
+      nestedScrollEnabled
+    >
+      {/* Token symbol hero */}
+      <Text style={styles.tokenHero}>
+        ${profile?.tokenSymbol || '???'}
+      </Text>
+
+      {/* BUY / SELL pills */}
+      <View style={styles.tokenButtons}>
+        <Pressable
+          onPress={() => setShowComingSoon(true)}
+          style={styles.tokenBuyButton}
+        >
+          <Text style={styles.tokenBuyText}>BUY</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setShowComingSoon(true)}
+          style={styles.tokenSellButton}
+        >
+          <Text style={styles.tokenSellText}>SELL</Text>
+        </Pressable>
+      </View>
+
+      {/* Stats row */}
+      <View style={styles.tokenStats}>
+        <View style={styles.tokenStatItem}>
+          <Text style={styles.tokenStatLabel}>PRICE</Text>
+          <Text style={styles.tokenStatValue}>—</Text>
+        </View>
+        <View style={styles.tokenStatItem}>
+          <Text style={styles.tokenStatLabel}>24H CHANGE</Text>
+          <Text style={styles.tokenStatValue}>—</Text>
+        </View>
+        <View style={styles.tokenStatItem}>
+          <Text style={styles.tokenStatLabel}>MARKET CAP</Text>
+          <Text style={styles.tokenStatValue}>—</Text>
+        </View>
+      </View>
+
+      {/* Chart placeholder */}
+      <View style={styles.tokenChartContainer}>
+        <Text style={styles.tokenChartLabel}>TOKEN PERFORMANCE</Text>
+        <View style={styles.tokenChart}>
+          <Text style={styles.tokenChartPlaceholder}>Coming Soon</Text>
+        </View>
+      </View>
+
+      {/* Follow CTA */}
+      {!isOwnProfile && (
+        <Pressable
+          onPress={toggleFollow}
+          style={[styles.tokenFollowButton, isFollowing && styles.tokenFollowingButton]}
+        >
+          <Text style={[styles.tokenFollowText, isFollowing && styles.tokenFollowingText]}>
+            {isFollowing ? 'FOLLOWING' : 'FOLLOW'}
+          </Text>
+        </Pressable>
+      )}
+    </ScrollView>
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Navigation */}
+      {/* Navigation + Tab Bar */}
       <View style={styles.navBar}>
         <Pressable onPress={handleBack} style={styles.backButton} hitSlop={8}>
-          <Ionicons name="chevron-back" size={28} color={COLORS.textPrimary} />
+          <Ionicons name="chevron-back" size={24} color={COLORS.textPrimary} />
         </Pressable>
-        <Text style={styles.navTitle} numberOfLines={1}>
-          {profile?.displayName || profile?.username || 'Creator'}
-        </Text>
-        <View style={styles.navSpacer} />
+        <View style={styles.tabBar}>
+          {TABS.map((tab) => (
+            <Pressable
+              key={tab}
+              onPress={() => handleTabChange(tab)}
+              style={styles.tabItem}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === tab && styles.tabTextActive,
+                ]}
+              >
+                {tab}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
 
       {/* Content */}
       {isLoading ? (
         <CreatorProfileSkeleton />
       ) : (
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          onScroll={({ nativeEvent }) => {
-            const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-            const isCloseToBottom =
-              layoutMeasurement.height + contentOffset.y >= contentSize.height - 400;
-            if (isCloseToBottom) handleEndReached();
-          }}
-          scrollEventThrottle={400}
+        <PagerView
+          ref={pagerRef}
+          style={{ flex: 1 }}
+          initialPage={0}
+          scrollEnabled
+          overdrag
+          onPageSelected={(e) => handlePageSelected(e.nativeEvent.position)}
         >
-          {/* Banner */}
-          <View style={styles.bannerContainer}>
-            {profile?.bannerUrl ? (
-              <Image
-                source={{ uri: profile.bannerUrl }}
-                style={styles.banner}
-                contentFit="cover"
-                cachePolicy="disk"
-                recyclingKey={profile.bannerUrl}
-                placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
-              />
-            ) : (
-              <View style={[styles.banner, styles.bannerPlaceholder]} />
-            )}
-            <View style={styles.bannerGradient} />
+          <View key="profile" style={{ flex: 1 }}>
+            {renderProfileTab()}
           </View>
-
-          {/* Avatar + Social Links */}
-          <View style={styles.avatarSection}>
-            <Avatar
-              uri={profile?.avatarUrl}
-              name={profile?.displayName || profile?.username}
-              size="xl"
-              borderColor={COLORS.background}
-            />
-            {renderSocialLinks()}
+          <View key="posts" style={{ flex: 1 }}>
+            {renderPostsTab()}
           </View>
-
-          {/* Name + Token + Location + Bio */}
-          <View style={styles.infoSection}>
-            <Text style={styles.creatorName}>
-              {profile?.displayName || profile?.username || 'Creator'}
-            </Text>
-            {profile?.tokenSymbol && (
-              <Text style={styles.tokenSymbol}>${profile.tokenSymbol}</Text>
-            )}
-            {(profile?.distanceMeters != null || profile?.city) && (
-              <View style={styles.locationRow}>
-                <Ionicons name="location" size={14} color={COLORS.primary} />
-                <Text style={styles.locationText}>
-                  {[
-                    profile.distanceMeters != null ? formatDistance(profile.distanceMeters) : null,
-                    profile.city,
-                  ].filter(Boolean).join(' · ')}
-                </Text>
-              </View>
-            )}
-            {profile?.bio && <Text style={styles.bio}>{profile.bio}</Text>}
+          <View key="token" style={{ flex: 1 }}>
+            {renderTokenTab()}
           </View>
-
-          {/* Stats Row */}
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>
-                {formatNumber(profile?.followerCount ?? 0)}
-              </Text>
-              <Text style={styles.statLabel}>Followers</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statNumber}>
-                {formatNumber(profile?.postCount ?? 0)}
-              </Text>
-              <Text style={styles.statLabel}>Posts</Text>
-            </View>
-          </View>
-
-          {/* Action Buttons — hidden on own profile */}
-          {!isOwnProfile && (
-            <View style={styles.actionButtons}>
-              <Pressable
-                onPress={toggleFollow}
-                style={[
-                  styles.followButton,
-                  isFollowing && styles.followingButton,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.followButtonText,
-                    isFollowing && styles.followingButtonText,
-                  ]}
-                >
-                  {isFollowing ? 'FOLLOWING' : 'FOLLOW'}
-                </Text>
-              </Pressable>
-              <CoachMark
-                hintId="creator_token"
-                text="Buy this creator's token to support them"
-                position="top"
-                style={{ flex: 1 }}
-              >
-                <Pressable onPress={handleBuy} style={styles.buyButton}>
-                  <Text style={styles.buyButtonText}>BUY</Text>
-                </Pressable>
-              </CoachMark>
-            </View>
-          )}
-
-          {/* Posts Grid */}
-          <View style={styles.postsSection}>
-            <Text style={styles.postsSectionTitle}>Posts</Text>
-            {renderPostsGrid()}
-          </View>
-
-          {/* Loading more indicator */}
-          {postsQuery.isFetchingNextPage && (
-            <View style={styles.loadingMore}>
-              <ActivityIndicator size="small" color={COLORS.primary} />
-            </View>
-          )}
-        </ScrollView>
+        </PagerView>
       )}
 
-      {/* Coming Soon Modal */}
       <ComingSoonModal
         visible={showComingSoon}
         onClose={() => setShowComingSoon(false)}
@@ -370,6 +422,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
+
+  // ─── Nav + Tabs ───
   navBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -378,175 +432,91 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: SPACING.xs,
-    width: 36,
+    width: 32,
   },
-  navTitle: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textPrimary,
-    fontWeight: '700',
+  tabBar: {
     flex: 1,
-    textAlign: 'center',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: SPACING.lg,
+    paddingRight: SPACING.sm,
   },
-  navSpacer: {
-    width: 36,
+  tabItem: {
+    paddingVertical: SPACING.xs,
   },
-  bannerContainer: {
-    height: BANNER_HEIGHT,
-    overflow: 'hidden',
+  tabText: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.textTertiary,
+    fontSize: 11,
+    letterSpacing: 1.5,
+  },
+  tabTextActive: {
+    color: COLORS.textPrimary,
+  },
+
+  // ─── PROFILE TAB: Hero ───
+  heroContainer: {
     position: 'relative',
+    overflow: 'hidden',
   },
-  banner: {
-    width: '100%',
-    height: BANNER_HEIGHT,
-  },
-  bannerPlaceholder: {
-    backgroundColor: COLORS.backgroundTertiary,
-  },
-  bannerGradient: {
+  heroGradient: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: 80,
+    height: 120,
     backgroundColor: COLORS.background,
-    opacity: 0.6,
+    opacity: 0.7,
   },
-  avatarSection: {
+  heroOverlay: {
+    position: 'absolute',
+    bottom: SPACING.lg,
+    left: SPACING.lg,
+    right: SPACING.lg,
+  },
+  heroNameRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    marginTop: -40,
+    alignItems: 'center',
+    gap: SPACING.sm,
   },
-  socialLinksRow: {
-    flexDirection: 'row',
-    gap: SPACING.md,
-    paddingBottom: SPACING.sm,
-  },
-  socialIcon: {
-    padding: SPACING.xs,
-  },
-  infoSection: {
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.sm,
-  },
-  creatorName: {
+  heroName: {
     ...TYPOGRAPHY.h2,
     color: COLORS.textPrimary,
-    fontWeight: '800',
-  },
-  tokenSymbol: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.primary,
     fontWeight: '700',
-    marginTop: 2,
+    textTransform: 'none',
   },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: SPACING.xs,
-  },
-  locationText: {
-    ...TYPOGRAPHY.bodySmall,
-    color: COLORS.textSecondary,
-  },
-  bio: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.textSecondary,
-    marginTop: SPACING.sm,
-    lineHeight: 22,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: SPACING.md,
-    marginTop: SPACING.lg,
-    backgroundColor: COLORS.surface,
-    borderRadius: RADII.lg,
-    paddingVertical: SPACING.md,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statNumber: {
-    ...TYPOGRAPHY.h3,
-    color: COLORS.textPrimary,
-    fontWeight: '800',
-  },
-  statLabel: {
-    ...TYPOGRAPHY.caption,
-    color: COLORS.textTertiary,
-    marginTop: 2,
-  },
-  statDivider: {
-    width: 1,
-    height: 30,
-    backgroundColor: COLORS.border,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-    marginHorizontal: SPACING.md,
-    marginTop: SPACING.md,
-  },
-  followButton: {
-    flex: 1,
-    backgroundColor: COLORS.textPrimary,
-    paddingVertical: SPACING.sm + 2,
-    borderRadius: RADII.full,
-    alignItems: 'center',
-  },
-  followingButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: COLORS.textTertiary,
-  },
-  followButtonText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.background,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  followingButtonText: {
-    color: COLORS.textPrimary,
-  },
-  buyButton: {
-    flex: 1,
+  verifiedDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
     backgroundColor: COLORS.primary,
-    paddingVertical: SPACING.sm + 2,
-    borderRadius: RADII.full,
-    alignItems: 'center',
   },
-  buyButtonText: {
-    ...TYPOGRAPHY.body,
-    color: COLORS.background,
-    fontWeight: '800',
+  heroToken: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    marginTop: 2,
     letterSpacing: 1,
   },
-  postsSection: {
-    marginTop: SPACING.xl,
-    paddingBottom: SPACING.xl,
+  heroBio: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textSecondary,
+    marginTop: SPACING.xs,
+    lineHeight: 16,
   },
-  postsSectionTitle: {
-    ...TYPOGRAPHY.label,
-    color: COLORS.textTertiary,
-    paddingHorizontal: SPACING.md,
-    marginBottom: SPACING.sm,
-  },
+
+  // ─── PROFILE TAB: Grid ───
   masonryContainer: {
     flexDirection: 'row',
     gap: COLUMN_GAP,
-    paddingHorizontal: SPACING.md,
-    paddingTop: SPACING.sm,
+    paddingTop: SPACING.xs,
   },
   masonryColumn: {
     flex: 1,
     gap: COLUMN_GAP,
   },
   masonryItem: {
-    borderRadius: RADII.lg,
+    borderRadius: 0,
     overflow: 'hidden',
     backgroundColor: COLORS.surface,
   },
@@ -560,12 +530,171 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     padding: SPACING.sm,
     justifyContent: 'center',
-    borderRadius: RADII.lg,
   },
   masonryText: {
     ...TYPOGRAPHY.caption,
     color: COLORS.textSecondary,
   },
+
+  // ─── POSTS TAB (feed-style) ───
+  feedContent: {
+    paddingBottom: SPACING.xl,
+  },
+  feedPost: {
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+  },
+  feedPostHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  feedPostMeta: {
+    flex: 1,
+  },
+  feedPostName: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textPrimary,
+    fontWeight: '700',
+  },
+  feedPostTime: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textTertiary,
+    marginTop: 1,
+  },
+  feedPostCaption: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
+    lineHeight: 20,
+    textTransform: 'none',
+  },
+  feedPostImage: {
+    width: '100%',
+    aspectRatio: 4 / 5,
+    borderRadius: RADII.sm,
+    backgroundColor: COLORS.surface,
+  },
+
+  // ─── TOKEN TAB ───
+  tokenContent: {
+    alignItems: 'center',
+    paddingTop: SPACING.xl * 2,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.xl,
+  },
+  tokenHero: {
+    ...TYPOGRAPHY.monoLarge,
+    fontSize: 32,
+    color: COLORS.textPrimary,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  tokenButtons: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.xl,
+    width: '100%',
+  },
+  tokenBuyButton: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.textPrimary,
+    paddingVertical: SPACING.md,
+    borderRadius: RADII.full,
+    alignItems: 'center',
+  },
+  tokenBuyText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.textPrimary,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  tokenSellButton: {
+    flex: 1,
+    backgroundColor: COLORS.textPrimary,
+    paddingVertical: SPACING.md,
+    borderRadius: RADII.full,
+    alignItems: 'center',
+  },
+  tokenSellText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.background,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  tokenStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+    marginTop: SPACING.xl,
+  },
+  tokenStatItem: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  tokenStatLabel: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.textTertiary,
+    fontSize: 9,
+    letterSpacing: 1,
+  },
+  tokenStatValue: {
+    ...TYPOGRAPHY.mono,
+    color: COLORS.primary,
+    fontWeight: '700',
+    fontSize: 18,
+    marginTop: SPACING.xs,
+  },
+  tokenChartContainer: {
+    width: '100%',
+    marginTop: SPACING.xl,
+  },
+  tokenChartLabel: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.textSecondary,
+    fontSize: 10,
+    letterSpacing: 1.5,
+    marginBottom: SPACING.sm,
+  },
+  tokenChart: {
+    height: 160,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADII.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  tokenChartPlaceholder: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textTertiary,
+  },
+  tokenFollowButton: {
+    width: '100%',
+    backgroundColor: COLORS.textPrimary,
+    paddingVertical: SPACING.md,
+    borderRadius: RADII.full,
+    alignItems: 'center',
+    marginTop: SPACING.xl,
+  },
+  tokenFollowingButton: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.textTertiary,
+  },
+  tokenFollowText: {
+    ...TYPOGRAPHY.body,
+    color: COLORS.background,
+    fontWeight: '700',
+    letterSpacing: 1,
+  },
+  tokenFollowingText: {
+    color: COLORS.textPrimary,
+  },
+
+  // ─── Shared ───
   emptyState: {
     justifyContent: 'center',
     alignItems: 'center',
