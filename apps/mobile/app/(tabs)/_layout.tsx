@@ -110,6 +110,13 @@ export default function TabLayout() {
           ),
         }}
       />
+      {/* Hide wallet from tab bar — it's accessed via profile dashboard, not as a tab */}
+      <Tabs.Screen
+        name="wallet"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }
