@@ -131,7 +131,11 @@ export default function WalletScreen() {
           : null);
 
   const handleBack = useCallback(() => {
-    router.back();
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/profile');
+    }
   }, [router]);
 
   const handleBuyPress = useCallback((_token: TokenHolding) => {

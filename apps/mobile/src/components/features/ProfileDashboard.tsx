@@ -5,8 +5,6 @@ import {
   ScrollView,
   Pressable,
   RefreshControl,
-  FlatList,
-  useWindowDimensions,
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -17,44 +15,28 @@ import { PillTabs, StatsCard, TokenSwapWidget } from '@/components/composites';
 import { ComingSoonModal } from '@/components/features/ComingSoonModal';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
-import { FONT_FAMILY_DISPLAY_BOLD, FONT_FAMILY_DISPLAY } from '@/styles/typography';
+import { FONT_FAMILY_DISPLAY_BOLD } from '@/styles/typography';
 import { formatTimeAgo } from '@/utils/formatters';
 
 interface ProfileDashboardProps {
-  /** User data from useUserProfile. */
   user: any;
-  /** Whether the user is a creator. */
   isCreator: boolean;
-  /** Wallet balance data. */
   walletBalance?: any;
-  /** Whether data is loading. */
   isLoading: boolean;
-  /** Pull-to-refresh handler. */
   onRefresh: () => void;
-  /** Whether currently refreshing. */
   refreshing: boolean;
-  /** Settings press handler. */
   onSettingsPress: () => void;
-  /** Creator's own posts. */
   creatorPosts?: any[];
-  /** Whether posts are loading. */
   postsLoading?: boolean;
-  /** Load more posts. */
   onLoadMorePosts?: () => void;
-  /** Whether there are more posts to load. */
   hasMorePosts?: boolean;
 }
 
 /**
- * Profile dashboard with two modes:
- * - Top section: name, action buttons (WALLET / PORTFOLIO), stats
- * - Bottom section: VIEW POSTS (default) | SWAP tabs
- *
- * VIEW POSTS shows the creator's own posts so they can review/manage them.
- * SWAP shows the token swap widget.
- *
- * @see docs/design/screens/user-account-1.png
- * @see docs/design/screens/creator-account-1.png
+ * Profile dashboard:
+ * - Top: name, WALLET/PORTFOLIO buttons, stats
+ * - Bottom: VIEW POSTS / SWAP tabs
+ * - VIEW POSTS uses the same feed-style layout as creator/[id].tsx POSTS tab
  */
 export function ProfileDashboard({
   user,
@@ -70,69 +52,30 @@ export function ProfileDashboard({
   hasMorePosts = false,
 }: ProfileDashboardProps) {
   const router = useRouter();
-  const { width: screenWidth } = useWindowDimensions();
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [contentTab, setContentTab] = useState<'posts' | 'swap'>('posts');
 
   const displayName = user?.displayName || user?.username || 'PROFILE';
-
-  // Derive stats from wallet balance (placeholder fallbacks)
-  const change24h = walletBalance?.change24h ?? '0';
-  const earnings = walletBalance?.totalEarnings ?? '12.2K';
+  const change24h = (walletBalance as any)?.change24h ?? '0';
+  const earnings = (walletBalance as any)?.totalEarnings ?? '12.2K';
 
   const handleComingSoon = useCallback(() => {
     setShowComingSoon(true);
   }, []);
 
-  // Creator header tabs act as action buttons
   const handleCreatorAction = useCallback((key: string) => {
     if (key === 'edit') router.push('/edit-profile');
     else if (key === 'post') router.push('/create-post');
     else if (key === 'account') onSettingsPress();
   }, [router, onSettingsPress]);
 
-  // Render a single post row for the creator's post list
-  const renderPostItem = useCallback(({ item: post }: { item: any }) => (
-    <Pressable
-      onPress={() => router.push(`/post/${post.id}`)}
-      style={styles.postRow}
-    >
-      {/* Thumbnail */}
-      {post.mediaUrl ? (
-        <Image
-          source={{ uri: post.mediaUrl }}
-          style={styles.postThumb}
-          contentFit="cover"
-          cachePolicy="disk"
-        />
-      ) : (
-        <View style={[styles.postThumb, styles.postThumbText]}>
-          <Ionicons name="document-text-outline" size={20} color={COLORS.textTertiary} />
-        </View>
-      )}
-
-      {/* Post info */}
-      <View style={styles.postInfo}>
-        <Text variant="bodySmall" style={styles.postCaption} numberOfLines={2}>
-          {post.caption || post.content || 'Untitled post'}
-        </Text>
-        <Text variant="caption" style={styles.postMeta}>
-          {formatTimeAgo(post.createdAt)} · {post.likeCount ?? 0} likes
-        </Text>
-      </View>
-
-      {/* Actions */}
-      <View style={styles.postActions}>
-        <Pressable
-          onPress={() => router.push(`/post/${post.id}`)}
-          hitSlop={8}
-          style={styles.postActionBtn}
-        >
-          <Ionicons name="open-outline" size={16} color={COLORS.textSecondary} />
-        </Pressable>
-      </View>
-    </Pressable>
-  ), [router]);
+  const handleSafeBack = useCallback(() => {
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/profile');
+    }
+  }, [router]);
 
   return (
     <>
@@ -230,7 +173,7 @@ export function ProfileDashboard({
 
         {/* Tab Content */}
         {contentTab === 'posts' ? (
-          <View style={styles.postsSection}>
+          <View>
             {postsLoading && creatorPosts.length === 0 ? (
               <View style={styles.centered}>
                 <ActivityIndicator size="large" color={COLORS.primary} />
@@ -253,18 +196,48 @@ export function ProfileDashboard({
             ) : (
               <>
                 {creatorPosts.map((post) => (
-                  <View key={post.id}>
-                    {renderPostItem({ item: post })}
-                  </View>
+                  <Pressable
+                    key={post.id}
+                    onPress={() => router.push(`/post/${post.id}`)}
+                    style={styles.feedPost}
+                  >
+                    {/* Avatar + name + time */}
+                    <View style={styles.feedPostHeader}>
+                      <Avatar
+                        uri={user?.avatarUrl}
+                        name={user?.displayName || user?.username}
+                        size="sm"
+                      />
+                      <View style={styles.feedPostMeta}>
+                        <Text style={styles.feedPostName}>
+                          {user?.displayName || user?.username}
+                        </Text>
+                        <Text style={styles.feedPostTime}>
+                          {formatTimeAgo(post.createdAt)}
+                        </Text>
+                      </View>
+                    </View>
+                    {/* Caption */}
+                    {(post.caption || post.content) && (
+                      <Text style={styles.feedPostCaption} numberOfLines={4}>
+                        {post.caption || post.content}
+                      </Text>
+                    )}
+                    {/* Image */}
+                    {post.mediaUrl && (
+                      <Image
+                        source={{ uri: post.mediaUrl }}
+                        style={styles.feedPostImage}
+                        contentFit="cover"
+                        cachePolicy="disk"
+                        recyclingKey={post.mediaUrl}
+                      />
+                    )}
+                  </Pressable>
                 ))}
                 {hasMorePosts && (
-                  <Pressable
-                    style={styles.loadMoreBtn}
-                    onPress={onLoadMorePosts}
-                  >
-                    <Text variant="label" style={styles.loadMoreText}>
-                      LOAD MORE
-                    </Text>
+                  <Pressable style={styles.loadMoreBtn} onPress={onLoadMorePosts}>
+                    <Text variant="label" style={styles.loadMoreText}>LOAD MORE</Text>
                   </Pressable>
                 )}
               </>
@@ -292,7 +265,6 @@ export function ProfileDashboard({
 
 const styles = StyleSheet.create({
   scrollContent: {
-    paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.xxxl,
   },
 
@@ -300,11 +272,13 @@ const styles = StyleSheet.create({
   creatorHeader: {
     paddingTop: SPACING.sm,
     paddingBottom: SPACING.xs,
+    paddingHorizontal: SPACING.lg,
   },
   userHeader: {
     alignItems: 'flex-end',
     paddingTop: SPACING.sm,
     paddingBottom: SPACING.xs,
+    paddingHorizontal: SPACING.lg,
   },
 
   // Name
@@ -316,6 +290,7 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontFamily: FONT_FAMILY_DISPLAY_BOLD,
     marginBottom: SPACING.lg,
+    paddingHorizontal: SPACING.lg,
   },
 
   // Action buttons row (WALLET + PORTFOLIO)
@@ -324,6 +299,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: SPACING.md,
     marginBottom: SPACING.xl,
+    paddingHorizontal: SPACING.lg,
   },
   actionPill: {
     flexDirection: 'row',
@@ -348,51 +324,47 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: SPACING.md,
     marginBottom: SPACING.xl,
+    paddingHorizontal: SPACING.lg,
   },
 
-  // Posts section
-  postsSection: {
-    minHeight: 200,
-  },
-  postRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  // ─── POSTS TAB (feed-style — matches creator/[id].tsx POSTS tab) ───
+  feedPost: {
+    paddingHorizontal: SPACING.lg,
     paddingVertical: SPACING.md,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: COLORS.border,
-    gap: SPACING.md,
   },
-  postThumb: {
-    width: 56,
-    height: 56,
+  feedPostHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  feedPostMeta: {
+    flex: 1,
+  },
+  feedPostName: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textPrimary,
+    fontWeight: '700',
+  },
+  feedPostTime: {
+    ...TYPOGRAPHY.caption,
+    color: COLORS.textTertiary,
+    marginTop: 1,
+  },
+  feedPostCaption: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.sm,
+    lineHeight: 20,
+    textTransform: 'none',
+  },
+  feedPostImage: {
+    width: '100%',
+    aspectRatio: 4 / 5,
     borderRadius: RADII.sm,
     backgroundColor: COLORS.surface,
-    overflow: 'hidden',
-  },
-  postThumbText: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  postInfo: {
-    flex: 1,
-    gap: 4,
-  },
-  postCaption: {
-    color: COLORS.textPrimary,
-    fontFamily: FONT_FAMILY_DISPLAY,
-    fontSize: 13,
-  },
-  postMeta: {
-    color: COLORS.textTertiary,
-    fontSize: 11,
-    fontFamily: FONT_FAMILY_DISPLAY,
-  },
-  postActions: {
-    flexDirection: 'row',
-    gap: SPACING.sm,
-  },
-  postActionBtn: {
-    padding: SPACING.xs,
   },
 
   // Empty state
@@ -400,6 +372,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: SPACING.xxxl,
     gap: SPACING.md,
+    paddingHorizontal: SPACING.lg,
   },
   emptyText: {
     color: COLORS.textTertiary,
@@ -432,5 +405,6 @@ const styles = StyleSheet.create({
   // Swap
   swapSection: {
     marginTop: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
   },
 });
