@@ -24,6 +24,7 @@ import { apiService } from '@/services/api';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatNumber, formatTimeAgo } from '@/utils/formatters';
+import { SOCIAL_PLATFORMS } from '@momento/shared';
 
 const COLUMN_GAP = 2;
 const HEIGHT_PATTERN = [1.0, 1.35, 1.15, 1.0, 1.4, 1.0, 1.2, 1.0, 1.3, 1.1];
@@ -159,6 +160,26 @@ export default function CreatorScreen() {
             <Text style={styles.heroBio} numberOfLines={2}>
               {profile.bio}
             </Text>
+          )}
+          {/* Social links */}
+          {profile?.socialLinks && Object.keys(profile.socialLinks).length > 0 && (
+            <View style={styles.socialRow}>
+              {Object.entries(profile.socialLinks as Record<string, string>)
+                .filter(([_, value]) => !!value)
+                .map(([platform]) => {
+                  const config = SOCIAL_PLATFORMS[platform as keyof typeof SOCIAL_PLATFORMS];
+                  if (!config) return null;
+                  return (
+                    <View key={platform} style={styles.socialIcon}>
+                      <Ionicons
+                        name={(config as any).icon || 'link'}
+                        size={16}
+                        color={(config as any).color || COLORS.textSecondary}
+                      />
+                    </View>
+                  );
+                })}
+            </View>
           )}
         </View>
       </View>
@@ -487,6 +508,19 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginTop: 2,
     letterSpacing: 1,
+  },
+  socialRow: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
+  },
+  socialIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   heroBio: {
     ...TYPOGRAPHY.caption,

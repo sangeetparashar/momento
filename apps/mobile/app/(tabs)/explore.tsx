@@ -418,47 +418,32 @@ export default function ExploreScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Minimal search trigger when not searching */}
-      {!searchFocused && searchText.length === 0 && (
-        <Pressable
-          onPress={() => {
-            setSearchFocused(true);
-            setTimeout(() => inputRef.current?.focus(), 100);
-          }}
-          style={styles.searchTrigger}
-        >
-          <Ionicons name="search" size={20} color={COLORS.textTertiary} />
-        </Pressable>
-      )}
-
-      {/* Search Bar — only visible when actively searching */}
-      {searchFocused || searchText.length > 0 ? (
-        <View style={styles.searchContainer}>
-          <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
-            <Ionicons name="search" size={18} color={searchFocused ? COLORS.primary : COLORS.textTertiary} />
-            <TextInput
-              ref={inputRef}
-              style={styles.searchInput}
-              value={searchText}
-              onChangeText={setSearchText}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setSearchFocused(false)}
-              placeholder="Search creators..."
-              placeholderTextColor={COLORS.textTertiary}
-              returnKeyType="search"
-              autoCorrect={false}
-            />
-            {searchText.length > 0 && (
-              <Pressable onPress={handleClearSearch} hitSlop={8}>
-                <Ionicons name="close-circle" size={18} color={COLORS.textTertiary} />
-              </Pressable>
-            )}
-            {isSearching && (
-              <ActivityIndicator size="small" color={COLORS.primary} style={{ marginLeft: 4 }} />
-            )}
-          </View>
+      {/* Search Bar — always visible */}
+      <View style={styles.searchContainer}>
+        <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
+          <Ionicons name="search" size={18} color={searchFocused ? COLORS.primary : COLORS.textTertiary} />
+          <TextInput
+            ref={inputRef}
+            style={styles.searchInput}
+            value={searchText}
+            onChangeText={setSearchText}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
+            placeholder="Search creators..."
+            placeholderTextColor={COLORS.textTertiary}
+            returnKeyType="search"
+            autoCorrect={false}
+          />
+          {searchText.length > 0 && (
+            <Pressable onPress={handleClearSearch} hitSlop={8}>
+              <Ionicons name="close-circle" size={18} color={COLORS.textTertiary} />
+            </Pressable>
+          )}
+          {isSearching && (
+            <ActivityIndicator size="small" color={COLORS.primary} style={{ marginLeft: 4 }} />
+          )}
         </View>
-      ) : null}
+      </View>
 
       {/* Content area — swipeable between CREATORS/POSTS */}
       <View style={{ flex: 1 }} {...panResponder.panHandlers}>

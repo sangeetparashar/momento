@@ -203,8 +203,8 @@ export default function HomeScreen() {
       .finally(() => setSortLoaded(true));
   }, []);
 
-  // Map tab → sort mode
-  const effectiveSort = feedTab === 'CREATORS_TO_WATCH' ? 'following' : feedSort;
+  // Map tab → sort mode: "Trending" tab uses popular (most liked), "For You" uses user's algo preference
+  const effectiveSort = feedTab === 'CREATORS_TO_WATCH' ? 'popular' : feedSort;
   const feedQuery = useFeed({ sort: effectiveSort, enabled: sortLoaded }, currentIndex);
   const flatListRef = useRef<FlatList<PostWithCreator>>(null);
 
@@ -272,7 +272,7 @@ export default function HomeScreen() {
           <PillTabs
             tabs={[
               { key: 'FOR_YOU', label: 'For You' },
-              { key: 'CREATORS_TO_WATCH', label: 'Creators to Watch' },
+              { key: 'CREATORS_TO_WATCH', label: 'Trending' },
             ]}
             activeTab="FOR_YOU"
             onTabChange={() => {}}
@@ -300,7 +300,7 @@ export default function HomeScreen() {
         <PillTabs
           tabs={[
             { key: 'FOR_YOU', label: 'For You' },
-            { key: 'CREATORS_TO_WATCH', label: 'Creators to Watch' },
+            { key: 'CREATORS_TO_WATCH', label: 'Trending' },
           ]}
           activeTab={feedTab}
           onTabChange={(key) => handleTabPress(key as FeedTab)}
