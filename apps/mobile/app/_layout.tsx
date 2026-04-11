@@ -167,6 +167,13 @@ export default function RootLayout() {
                     }}
                   />
                   <Stack.Screen
+                    name="portfolio"
+                    options={{
+                      headerShown: false,
+                      animation: 'slide_from_right',
+                    }}
+                  />
+                  <Stack.Screen
                     name="notifications"
                     options={{
                       headerShown: false,

@@ -1,19 +1,24 @@
-import React, { useState, useMemo, useCallback } from 'react';
-import { View, StyleSheet, ScrollView, Pressable, RefreshControl } from 'react-native';
-import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
-import { Text } from '@/components/primitives';
+import React, { useState, useCallback } from 'react';
 import {
-  PillTabs,
-  StatsCard,
-  PerformanceChart,
-  PortfolioTable,
-  TokenSwapWidget,
-} from '@/components/composites';
-import type { PortfolioRowProps } from '@/components/composites';
+  View,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  RefreshControl,
+  FlatList,
+  useWindowDimensions,
+  ActivityIndicator,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { Image } from 'expo-image';
+import { Ionicons } from '@expo/vector-icons';
+import { Text, Avatar } from '@/components/primitives';
+import { PillTabs, StatsCard, TokenSwapWidget } from '@/components/composites';
 import { ComingSoonModal } from '@/components/features/ComingSoonModal';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
-import { FONT_FAMILY_DISPLAY_BOLD } from '@/styles/typography';
+import { TYPOGRAPHY } from '@/styles/typography';
+import { FONT_FAMILY_DISPLAY_BOLD, FONT_FAMILY_DISPLAY } from '@/styles/typography';
+import { formatTimeAgo } from '@/utils/formatters';
 
 interface ProfileDashboardProps {
   /** User data from useUserProfile. */
@@ -30,27 +35,23 @@ interface ProfileDashboardProps {
   refreshing: boolean;
   /** Settings press handler. */
   onSettingsPress: () => void;
+  /** Creator's own posts. */
+  creatorPosts?: any[];
+  /** Whether posts are loading. */
+  postsLoading?: boolean;
+  /** Load more posts. */
+  onLoadMorePosts?: () => void;
+  /** Whether there are more posts to load. */
+  hasMorePosts?: boolean;
 }
 
-// Sample portfolio data until real API exists
-const SAMPLE_CHART_DATA = [
-  { x: 0, y: 45 }, { x: 1, y: 42 }, { x: 2, y: 50 },
-  { x: 3, y: 55 }, { x: 4, y: 52 }, { x: 5, y: 60 },
-  { x: 6, y: 75 }, { x: 7, y: 70 }, { x: 8, y: 80 },
-  { x: 9, y: 85 }, { x: 10, y: 82 }, { x: 11, y: 95 },
-];
-
 /**
- * Financial dashboard profile layout (matches Figma).
+ * Profile dashboard with two modes:
+ * - Top section: name, action buttons (WALLET / PORTFOLIO), stats
+ * - Bottom section: VIEW POSTS (default) | SWAP tabs
  *
- * Replaces the social-media-style profile with:
- * - Name + WALLET pill
- * - Stats cards (24H CHANGE / EARNINGS TO DATE)
- * - Portfolio performance chart
- * - Token portfolio table with BUY/SELL
- * - Token swap widget
- *
- * Rendered alongside old profile with a feature toggle in profile.tsx.
+ * VIEW POSTS shows the creator's own posts so they can review/manage them.
+ * SWAP shows the token swap widget.
  *
  * @see docs/design/screens/user-account-1.png
  * @see docs/design/screens/creator-account-1.png
@@ -63,37 +64,75 @@ export function ProfileDashboard({
   onRefresh,
   refreshing,
   onSettingsPress,
+  creatorPosts = [],
+  postsLoading = false,
+  onLoadMorePosts,
+  hasMorePosts = false,
 }: ProfileDashboardProps) {
   const router = useRouter();
-  const [chartTimeRange, setChartTimeRange] = useState('1Y');
+  const { width: screenWidth } = useWindowDimensions();
   const [showComingSoon, setShowComingSoon] = useState(false);
+  const [contentTab, setContentTab] = useState<'posts' | 'swap'>('posts');
 
   const displayName = user?.displayName || user?.username || 'PROFILE';
 
   // Derive stats from wallet balance (placeholder fallbacks)
-  const change24h = walletBalance?.change24h ?? '0.9%';
+  const change24h = walletBalance?.change24h ?? '0';
   const earnings = walletBalance?.totalEarnings ?? '12.2K';
 
-  // Wire BUY/SELL/swap to ComingSoonModal until trading is live
   const handleComingSoon = useCallback(() => {
     setShowComingSoon(true);
   }, []);
 
-  // Build portfolio rows with real handlers
-  const portfolioRows: PortfolioRowProps[] = useMemo(() => [
-    { symbol: 'DEEL', avatarColor: '#8B5CF6', change: '17%', changePositive: true, price: '10,631USD', onBuy: handleComingSoon, onSell: handleComingSoon },
-    { symbol: 'BELLE', avatarColor: '#EC4899', change: '0.5%', changePositive: true, price: '10.67M USD', onBuy: handleComingSoon, onSell: handleComingSoon },
-    { symbol: 'NAAN', avatarColor: '#F97316', change: '3%', changePositive: false, price: '3,050USD', onBuy: handleComingSoon, onSell: handleComingSoon },
-    { symbol: 'AURA', avatarColor: '#06B6D4', change: '2%', changePositive: true, price: '17,019USD', onBuy: handleComingSoon, onSell: handleComingSoon },
-    { symbol: 'SEAM', avatarColor: '#10B981', change: '267%', changePositive: true, price: '93,780USD', onBuy: handleComingSoon, onSell: handleComingSoon },
-  ], [handleComingSoon]);
-
-  // Creator header tabs act as action buttons, not persistent tab state
+  // Creator header tabs act as action buttons
   const handleCreatorAction = useCallback((key: string) => {
     if (key === 'edit') router.push('/edit-profile');
     else if (key === 'post') router.push('/create-post');
     else if (key === 'account') onSettingsPress();
   }, [router, onSettingsPress]);
+
+  // Render a single post row for the creator's post list
+  const renderPostItem = useCallback(({ item: post }: { item: any }) => (
+    <Pressable
+      onPress={() => router.push(`/post/${post.id}`)}
+      style={styles.postRow}
+    >
+      {/* Thumbnail */}
+      {post.mediaUrl ? (
+        <Image
+          source={{ uri: post.mediaUrl }}
+          style={styles.postThumb}
+          contentFit="cover"
+          cachePolicy="disk"
+        />
+      ) : (
+        <View style={[styles.postThumb, styles.postThumbText]}>
+          <Ionicons name="document-text-outline" size={20} color={COLORS.textTertiary} />
+        </View>
+      )}
+
+      {/* Post info */}
+      <View style={styles.postInfo}>
+        <Text variant="bodySmall" style={styles.postCaption} numberOfLines={2}>
+          {post.caption || post.content || 'Untitled post'}
+        </Text>
+        <Text variant="caption" style={styles.postMeta}>
+          {formatTimeAgo(post.createdAt)} · {post.likeCount ?? 0} likes
+        </Text>
+      </View>
+
+      {/* Actions */}
+      <View style={styles.postActions}>
+        <Pressable
+          onPress={() => router.push(`/post/${post.id}`)}
+          hitSlop={8}
+          style={styles.postActionBtn}
+        >
+          <Ionicons name="open-outline" size={16} color={COLORS.textSecondary} />
+        </Pressable>
+      </View>
+    </Pressable>
+  ), [router]);
 
   return (
     <>
@@ -118,7 +157,7 @@ export function ProfileDashboard({
                 { key: 'post', label: 'New Post' },
                 { key: 'account', label: 'Account' },
               ]}
-              activeTab="" // No persistent active state — these are action buttons
+              activeTab=""
               onTabChange={handleCreatorAction}
               style={{ flex: 1 }}
             />
@@ -142,59 +181,103 @@ export function ProfileDashboard({
           {displayName}
         </Text>
 
-        {/* WALLET pill */}
-        <Pressable
-          style={styles.walletPill}
-          onPress={() => router.push('/wallet')}
-        >
-          <Text variant="label" style={styles.walletPillText}>
-            WALLET
-          </Text>
-        </Pressable>
+        {/* Action buttons: WALLET + PORTFOLIO */}
+        <View style={styles.actionButtonsRow}>
+          <Pressable
+            style={styles.actionPill}
+            onPress={() => router.push('/wallet')}
+          >
+            <Ionicons name="wallet-outline" size={14} color={COLORS.textPrimary} />
+            <Text variant="label" style={styles.actionPillText}>WALLET</Text>
+          </Pressable>
+          <Pressable
+            style={styles.actionPill}
+            onPress={() => router.push('/portfolio')}
+          >
+            <Ionicons name="trending-up" size={14} color={COLORS.textPrimary} />
+            <Text variant="label" style={styles.actionPillText}>PORTFOLIO</Text>
+          </Pressable>
+        </View>
 
         {/* Stats Cards */}
         <View style={styles.statsRow}>
           <StatsCard
             label="24H CHANGE"
-            value={change24h}
+            value={String(change24h)}
             variant="card"
             valueColor="positive"
             style={{ flex: 1 }}
           />
           <StatsCard
             label="EARNINGS TO DATE"
-            value={earnings}
+            value={String(earnings)}
             variant="card"
             valueColor="positive"
             style={{ flex: 1 }}
           />
         </View>
 
-        {/* Portfolio Chart */}
-        <PerformanceChart
-          title="PORTFOLIO PERFORMANCE"
-          data={SAMPLE_CHART_DATA}
-          timeRange={chartTimeRange}
-          onTimeRangeChange={setChartTimeRange}
+        {/* Content Tabs: VIEW POSTS / SWAP */}
+        <PillTabs
+          tabs={[
+            { key: 'posts', label: 'View Posts' },
+            { key: 'swap', label: 'Swap' },
+          ]}
+          activeTab={contentTab}
+          onTabChange={(key) => setContentTab(key as 'posts' | 'swap')}
+          style={{ marginBottom: SPACING.lg }}
         />
 
-        {/* Portfolio Table */}
-        <View style={styles.portfolioSection}>
-          <PortfolioTable
-            title="PORTFOLIO"
-            rows={portfolioRows}
-            showSellColumn
-            showBuyColumn
-          />
-        </View>
-
-        {/* Token Swap */}
-        <View style={styles.swapSection}>
-          <TokenSwapWidget
-            onSelectPayToken={handleComingSoon}
-            onSelectReceiveToken={handleComingSoon}
-          />
-        </View>
+        {/* Tab Content */}
+        {contentTab === 'posts' ? (
+          <View style={styles.postsSection}>
+            {postsLoading && creatorPosts.length === 0 ? (
+              <View style={styles.centered}>
+                <ActivityIndicator size="large" color={COLORS.primary} />
+              </View>
+            ) : creatorPosts.length === 0 ? (
+              <View style={styles.centered}>
+                <Ionicons name="images-outline" size={48} color={COLORS.textTertiary} />
+                <Text variant="body" style={styles.emptyText}>No posts yet</Text>
+                {isCreator && (
+                  <Pressable
+                    style={styles.createPostCta}
+                    onPress={() => router.push('/create-post')}
+                  >
+                    <Text variant="label" style={styles.createPostCtaText}>
+                      CREATE YOUR FIRST POST
+                    </Text>
+                  </Pressable>
+                )}
+              </View>
+            ) : (
+              <>
+                {creatorPosts.map((post) => (
+                  <View key={post.id}>
+                    {renderPostItem({ item: post })}
+                  </View>
+                ))}
+                {hasMorePosts && (
+                  <Pressable
+                    style={styles.loadMoreBtn}
+                    onPress={onLoadMorePosts}
+                  >
+                    <Text variant="label" style={styles.loadMoreText}>
+                      LOAD MORE
+                    </Text>
+                  </Pressable>
+                )}
+              </>
+            )}
+          </View>
+        ) : (
+          <View style={styles.swapSection}>
+            <TokenSwapWidget
+              onSelectPayToken={handleComingSoon}
+              onSelectReceiveToken={handleComingSoon}
+            />
+          </View>
+        )}
       </ScrollView>
 
       <ComingSoonModal
@@ -235,17 +318,24 @@ const styles = StyleSheet.create({
     marginBottom: SPACING.lg,
   },
 
-  // Wallet pill
-  walletPill: {
-    alignSelf: 'center',
+  // Action buttons row (WALLET + PORTFOLIO)
+  actionButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: SPACING.md,
+    marginBottom: SPACING.xl,
+  },
+  actionPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
     paddingVertical: 8,
-    paddingHorizontal: SPACING.xl,
+    paddingHorizontal: SPACING.lg,
     borderWidth: 1,
     borderColor: COLORS.textSecondary,
     borderRadius: RADII.full,
-    marginBottom: SPACING.xl,
   },
-  walletPillText: {
+  actionPillText: {
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1.5,
@@ -257,16 +347,90 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     gap: SPACING.md,
-    marginBottom: 28,
+    marginBottom: SPACING.xl,
   },
 
-  // Portfolio
-  portfolioSection: {
-    marginTop: SPACING.xl,
+  // Posts section
+  postsSection: {
+    minHeight: 200,
+  },
+  postRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.md,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
+    gap: SPACING.md,
+  },
+  postThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: RADII.sm,
+    backgroundColor: COLORS.surface,
+    overflow: 'hidden',
+  },
+  postThumbText: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  postInfo: {
+    flex: 1,
+    gap: 4,
+  },
+  postCaption: {
+    color: COLORS.textPrimary,
+    fontFamily: FONT_FAMILY_DISPLAY,
+    fontSize: 13,
+  },
+  postMeta: {
+    color: COLORS.textTertiary,
+    fontSize: 11,
+    fontFamily: FONT_FAMILY_DISPLAY,
+  },
+  postActions: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  postActionBtn: {
+    padding: SPACING.xs,
+  },
+
+  // Empty state
+  centered: {
+    alignItems: 'center',
+    paddingVertical: SPACING.xxxl,
+    gap: SPACING.md,
+  },
+  emptyText: {
+    color: COLORS.textTertiary,
+  },
+  createPostCta: {
+    marginTop: SPACING.sm,
+    paddingVertical: 10,
+    paddingHorizontal: SPACING.xl,
+    backgroundColor: COLORS.primary,
+    borderRadius: RADII.full,
+  },
+  createPostCtaText: {
+    color: COLORS.textInverse,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+  },
+
+  // Load more
+  loadMoreBtn: {
+    alignItems: 'center',
+    paddingVertical: SPACING.lg,
+  },
+  loadMoreText: {
+    color: COLORS.primary,
+    fontSize: 11,
+    letterSpacing: 1.5,
   },
 
   // Swap
   swapSection: {
-    marginTop: 28,
+    marginTop: SPACING.sm,
   },
 });

@@ -86,7 +86,7 @@ export default function ProfileScreen() {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) =>
       lastPage.hasMore ? lastPage.nextCursor : undefined,
-    enabled: !!user?.id && isCreator && !USE_DASHBOARD_PROFILE,
+    enabled: !!user?.id && isCreator,
   });
 
   const creatorPosts = postsQuery.data?.pages.flatMap((p) => p.posts) ?? [];
@@ -419,6 +419,14 @@ export default function ProfileScreen() {
             onRefresh={handleRefresh}
             refreshing={refreshing}
             onSettingsPress={handleSettingsPress}
+            creatorPosts={creatorPosts}
+            postsLoading={postsQuery.isLoading}
+            onLoadMorePosts={() => {
+              if (postsQuery.hasNextPage && !postsQuery.isFetchingNextPage) {
+                postsQuery.fetchNextPage();
+              }
+            }}
+            hasMorePosts={!!postsQuery.hasNextPage}
           />
         )}
 
