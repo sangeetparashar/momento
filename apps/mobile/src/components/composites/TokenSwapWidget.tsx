@@ -70,7 +70,7 @@ function SwapCard({
       </View>
 
       <PillButton
-        label={token?.symbol ?? 'Select Token'}
+        label={token ? 'Change' : 'Select Token'}
         variant="outlined"
         size="xs"
         borderColor={COLORS.textSecondary}

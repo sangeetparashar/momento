@@ -49,6 +49,8 @@ export function PillTabs({
   size = 'md',
   style,
 }: PillTabsProps) {
+  if (tabs.length === 0) return null;
+
   return (
     <View style={[styles.container, style]}>
       {tabs.map((tab) => {
@@ -58,7 +60,7 @@ export function PillTabs({
           <PillButton
             key={tab.key}
             label={tab.label}
-            variant="ghost"
+            variant={isActive ? 'outlined' : 'ghost'}
             size={size}
             flex
             fillColor={isActive ? COLORS.surfaceElevated : 'transparent'}
@@ -68,7 +70,6 @@ export function PillTabs({
             scaleValue={0.96}
             accessibilityRole="tab"
             accessibilitySelected={isActive}
-            style={isActive ? styles.activeTab : undefined}
           />
         );
       })}
@@ -82,9 +83,5 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderRadius: RADII.full,
     padding: 3,
-  },
-  activeTab: {
-    borderWidth: 1,
-    borderColor: COLORS.border,
   },
 });

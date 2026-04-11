@@ -77,14 +77,19 @@ export function PerformanceChart({
 
     // Avoid division by zero
     const xRange = xMax - xMin || 1;
-    const yRange = yMax - yMin || 1;
+    const yRange = yMax - yMin;
+    const isFlat = yRange === 0;
 
     // Add 10% padding top/bottom so the line doesn't clip edges
-    const yPadding = yRange * 0.1;
+    const yPadding = isFlat ? 1 : yRange * 0.1;
+    const effectiveYRange = isFlat ? 1 : yRange;
 
     const points = data.map((d) => {
       const px = ((d.x - xMin) / xRange) * containerWidth;
-      const py = ((yMax + yPadding - d.y) / (yRange + yPadding * 2)) * height;
+      // Flat data → center the line at 50% height
+      const py = isFlat
+        ? height / 2
+        : ((yMax + yPadding - d.y) / (effectiveYRange + yPadding * 2)) * height;
       return `${px},${py}`;
     });
 

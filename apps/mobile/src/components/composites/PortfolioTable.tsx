@@ -15,7 +15,9 @@ interface PortfolioTableProps {
   showHeader?: boolean;
   /** Whether to wrap in a Card (surface bg + border). Default false. */
   cardWrapped?: boolean;
-  /** Whether to show the SELL column. Default false. */
+  /** Whether to show the BUY column header. Default true. */
+  showBuyColumn?: boolean;
+  /** Whether to show the SELL column header. Default false. */
   showSellColumn?: boolean;
   /** Message shown when rows is empty. Default "NO TOKENS". */
   emptyMessage?: string;
@@ -39,6 +41,7 @@ export function PortfolioTable({
   rows,
   showHeader = true,
   cardWrapped = false,
+  showBuyColumn = true,
   showSellColumn = false,
   emptyMessage = 'NO TOKENS',
   onRowPress,
@@ -72,11 +75,13 @@ export function PortfolioTable({
               {showSellColumn ? 'MARKET CAP' : 'PRICE'}
             </Text>
           </View>
-          <View style={styles.actionCol}>
-            <Text variant="caption" style={styles.headerLabel}>
-              BUY
-            </Text>
-          </View>
+          {showBuyColumn && (
+            <View style={styles.actionCol}>
+              <Text variant="caption" style={styles.headerLabel}>
+                BUY
+              </Text>
+            </View>
+          )}
           {showSellColumn && (
             <View style={styles.actionCol}>
               <Text variant="caption" style={styles.headerLabel}>
@@ -93,7 +98,7 @@ export function PortfolioTable({
       {rows.length > 0 ? (
         rows.map((rowProps, index) => (
           <PortfolioRow
-            key={rowProps.symbol + index}
+            key={rowProps.symbol + '-' + (rowProps.price || index)}
             {...rowProps}
             onPress={onRowPress ? () => onRowPress(index) : rowProps.onPress}
           />
@@ -160,15 +165,15 @@ const styles = StyleSheet.create({
 
   // Column widths — MUST match PortfolioRow
   starCol: { width: 20 },
-  tokenCol: { flex: 2, flexDirection: 'row' },
+  tokenCol: { flex: 2, flexDirection: 'row' as const },
   changeCol: { flex: 1, minWidth: 40 },
   priceCol: { flex: 1.5 },
-  actionCol: { width: 36, alignItems: 'center' },
+  actionCol: { width: 36, alignItems: 'center' as const },
   arrowCol: { width: 24 },
 
   // Empty
   emptyContainer: {
     paddingVertical: SPACING.xl,
-    alignItems: 'center',
+    alignItems: 'center' as const,
   },
 });

@@ -10,6 +10,8 @@ export interface ExpandedStat {
   label: string;
   /** Value. e.g. "11%", "6%", "2M", "10M/USD". */
   value: string;
+  /** Whether value is positive (green). Default true. Negative = red, undefined = green. */
+  positive?: boolean;
 }
 
 export interface PortfolioRowProps {
@@ -91,12 +93,8 @@ export function PortfolioRow({
 
   return (
     <View style={[styles.wrapper, style]}>
-      {/* Main row */}
-      <Pressable
-        onPress={onPress}
-        style={styles.row}
-        disabled={!onPress}
-      >
+      {/* Main row — flat structure, no nested Pressables */}
+      <View style={styles.row}>
         {/* Star */}
         <Pressable
           onPress={onToggleFavorite}
@@ -111,35 +109,39 @@ export function PortfolioRow({
           />
         </Pressable>
 
-        {/* Token info */}
-        <View style={styles.tokenCol}>
-          <View
-            style={[
-              styles.avatar,
-              { backgroundColor: avatarColor },
-            ]}
-          />
-          <Text variant="label" style={styles.tokenName}>
-            {symbol}
-          </Text>
-        </View>
+        {/* Token info + change + price — tappable area for row navigation */}
+        <Pressable
+          onPress={onPress}
+          style={styles.rowBody}
+          disabled={!onPress}
+        >
+          <View style={styles.tokenCol}>
+            <View
+              style={[
+                styles.avatar,
+                { backgroundColor: avatarColor },
+              ]}
+            />
+            <Text variant="label" style={styles.tokenName}>
+              {symbol}
+            </Text>
+          </View>
 
-        {/* 24H Change */}
-        <View style={styles.changeCol}>
-          <Text
-            variant="caption"
-            style={[styles.changeText, { color: changeColor }]}
-          >
-            {change}
-          </Text>
-        </View>
+          <View style={styles.changeCol}>
+            <Text
+              variant="caption"
+              style={[styles.changeText, { color: changeColor }]}
+            >
+              {change}
+            </Text>
+          </View>
 
-        {/* Price */}
-        <View style={styles.priceCol}>
-          <Text variant="caption" style={styles.priceText}>
-            {price}
-          </Text>
-        </View>
+          <View style={styles.priceCol}>
+            <Text variant="caption" style={styles.priceText}>
+              {price}
+            </Text>
+          </View>
+        </Pressable>
 
         {/* BUY */}
         {onBuy && (
@@ -173,7 +175,7 @@ export function PortfolioRow({
             />
           </Pressable>
         )}
-      </Pressable>
+      </View>
 
       {/* Expanded detail */}
       {isExpanded && expandedData && expandedData.length > 0 && (
@@ -183,7 +185,13 @@ export function PortfolioRow({
               <Text variant="caption" style={styles.expandedLabel}>
                 {stat.label}
               </Text>
-              <Text variant="caption" style={styles.expandedValue}>
+              <Text
+                variant="caption"
+                style={[
+                  styles.expandedValue,
+                  { color: stat.positive === false ? COLORS.error : COLORS.primary },
+                ]}
+              >
                 {stat.value}
               </Text>
             </View>
@@ -203,6 +211,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
+  },
+  rowBody: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
 
   // Column widths — flex-based for responsiveness
