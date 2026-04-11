@@ -1,156 +1,210 @@
-# Agent Handoff: Momento Design Alignment + Mobile Testing
+# Agent Handoff: Momento Component-First UI Rebuild + Emulator Testing
 
 > Generated: 2026-04-11
-> Session focus: Redesigned landing page and mobile app UI to match Figma mockups, fixed production DB migration, set up Android device testing pipeline
+> Session focus: Built a reusable composite component library from Figma specs, wired it into 4 pages, tested on Android Studio emulator, iterated on live UI feedback
 
 ## 1. Project Overview
 
-Momento is a location-based creator monetization platform ("stock market for culture"). Monorepo with `apps/api` (Next.js 15, Vercel), `apps/mobile` (Expo 54, React Native), `apps/landing` (Next.js 15), and `packages/shared` (TypeScript types). Auth via Privy, blockchain via Solana + Base (ETH). Design system: pure black (#000000), #00FF88 green accent, Space Mono monospaced font, all-caps uppercase typography.
+Momento is a location-based creator monetization platform ("stock market for culture"). Monorepo: `apps/api` (Next.js 15, Vercel), `apps/mobile` (Expo 54, React Native 0.81.5), `apps/landing` (Next.js 15), `packages/shared` (TypeScript types). Auth via Privy, blockchain via Solana + Base. Design system: pure black (#000000), #00FF88 green accent, Space Mono monospaced font, all-caps uppercase.
 
 ## 2. Current State
 
 ### Working
-- **Landing page** — fully redesigned, deployed at `landing-eight-puce-10.vercel.app`. Polaroid entry → hero ("The Stock Market for Culture") → ticker → showcase (4 phone screens with real Figma screenshots) → footer
-- **API** — healthy at `momento-api-ten.vercel.app/api/health`. Root redirects to landing page. All 26 endpoints functional. DB migration for `baseWalletAddress` applied
-- **Mobile code** — all 4 redesign phases committed and pushed to `main` (theme tokens, explore grid, creator profile tabs, home feed vertical scroll)
-- **Dev client APK** — built via EAS (`d29be976-7629-4d28-9c35-aa27f3bac5df`), installed on Sangeet's Pixel 8 (`47231FDJH001N0`)
-- **Multi-chain** — Solana + Base wallet creation, balance fetching, swaps, onramp all working
-- **Design reference system** — `CLAUDE.md` + `docs/design/DESIGN_REFERENCE.md` + 20 Figma screenshots in `docs/design/screens/`
+- **Composite component library** — 8 reusable components in `src/components/composites/` (PillTabs, StatsCard, BuySellPills, PerformanceChart, PortfolioRow, PortfolioTable, TokenSwapWidget) + PillButton primitive
+- **Home feed** — PillTabs header (FOR YOU / TRENDING), vertical scroll with peek, video/image/text posts loading from API
+- **Creator profile** — PillTabs (PROFILE/POSTS/TOKEN), full-bleed hero, social link icons, masonry post grid
+- **Token tab** — BuySellPills, StatsCard row (PRICE/24H CHANGE/MARKET CAP), PerformanceChart with SVG green line + gradient fill
+- **Profile page (dashboard mode)** — Financial dashboard layout: name, WALLET+PORTFOLIO pills, stats cards, VIEW POSTS/SWAP tabs, feed-style post list matching creator POSTS tab
+- **Portfolio screen** — Standalone `/portfolio` route: stats cards, performance chart, token table with BUY/SELL, swap widget
+- **Explore page** — Search bar always visible, masonry grid, CREATORS/POSTS tabs
+- **Tab bar** — 3 tabs (Home/Explore/Profile), wallet hidden via `href: null`
+- **Emulator testing pipeline** — Android Studio Medium_Phone_API_36.1 emulator, Metro on port 8082, ADB reverse on both 8081→8082 and 8082→8082
+- **Feed data** — API returns posts from Toronto seed data at any location via expanded radius tiers (up to 15,000km)
+- **GPS fallback** — LocationProvider times out after 8s and falls back to Toronto coordinates
 
 ### Not Yet Working / In Progress
-- **On-device testing** — phone disconnected from USB/ADB during session. The app was installed but couldn't be fully tested through the dev server. Metro tunnel was set up but device went offline before validation
-- **Videos not loading** — user reported older videos not loading. Unclear if this is a data issue (sample video URLs expired?) or a code issue from the feed redesign (`contentFit="cover"` + `ResizeMode.COVER` changes)
-- **Creator profile navigation** — user reported crash when opening a creator profile. Was fixed by removing PagerView (native module not in build) and using simple `useState` tab switching instead. Needs verification on device
-- **Home feed "FOR YOU" algo** — algo button is now a small icon (left of header) instead of the old prominent circle. User may want it more discoverable. Long-press on "FOR YOU" also opens it
-- **Manifesto section** — restored with static rendering (no animation). Shows "Creators earn pennies. Fans get likes. Not equity. → Momento flips this." Needs visual verification
+- **Market page rebuild (2E)** — Deferred. Current inline tabs/rows still work but not using new composites. Documented in BUILD_SPEC.md as DEFERRED.
+- **Real token data** — All portfolio/chart data is sample/placeholder. Token prices, 24H change, market cap are hardcoded.
+- **Real portfolio data** — Profile stats (24H CHANGE, EARNINGS TO DATE) use placeholder values
+- **Video loading** — Some sample video URLs (Google Storage bucket) show black frames; unclear if URLs expired or codec issue
+- **Feed deduplication** — FOR YOU and TRENDING tabs may show same creators (small seed dataset)
+- **Profile social links** — Not shown on own profile dashboard (only on creator detail page when viewing others)
+- **useSavedPosts runs unconditionally** — TODO comment at profile.tsx line 95; doesn't accept `enabled` param
 
 ## 3. What Was Done This Session
 
-1. **Pulled latest code** — `git stash && git pull` to get multi-chain work merged
-2. **Analyzed Figma designs** — extracted 23 assets from `Momento.zip`, launched 5 parallel agents to analyze every screen
-3. **Saved design system to memory** — `design_system.md` in `.claude/projects/` memory
-4. **Landing page redesign** — `1deb47a`
-   - Tailwind: added Cormorant Garamond serif font
-   - Hero: thin serif "MOMENTO" / "THE STOCK MARKET FOR CULTURE" / waitlist CTA
-   - Navbar: minimal with outlined ghost button
-   - Ticker: monospaced multiplier format (DEEL 17X)
-   - Showcase: 4 phone screens with real Figma screenshots
-   - All typography → monospaced uppercase
-5. **Figma screenshots in phone mockups** — `f514a85` — copied `Homepage.png`, `Explore.png`, `Creator Portfolio.png`, `User Account.png` to `apps/landing/public/screens/`
-6. **Landing fixes** — removed Manifesto (scroll animation unreliable), then restored with static rendering (`184c832`)
-7. **Design reference system** — `26d40cd` — `CLAUDE.md`, `docs/design/DESIGN_REFERENCE.md`, 20 Figma screens in `docs/design/screens/`
-8. **Mobile Phase 0** — `2f97e12` — pure black bg, Space Mono font, uppercase headings, tab bar updated
-9. **Mobile Phase 2 (Explore)** — `0c84b9b` — no overlays, 2px gaps, sharp corners, edge-to-edge, floating search icon
-10. **Mobile Phase 3 (Creator)** — `d0c7260` — PROFILE/POSTS/TOKEN tabs, full-bleed hero, verified dot, feed-style posts, token page
-11. **Mobile Phase 1 (Home Feed)** — `966c789` — vertical scroll + peek, "FOR YOU"/"CREATORS TO WATCH" tabs, overlay actions, FlatList (not FlashList)
-12. **DB migration** — applied `20260404000000_add_base_wallet_support` directly via `prisma db execute` against production Supabase
-13. **API fix** — `e885631` — root redirects to landing, auth reads `PRIVY_APP_ID` as fallback
-14. **Creator profile crash fix** — `aa13627` — removed PagerView import, simple tab switching
-15. **Dev build + ADB install** — built EAS dev APK, symlinked Windows `adb.exe` from WSL, installed via `adb install`
+### Design Phase
+1. **Analyzed all 20 Figma screens** — extracted pixel-perfect specs from `docs/design/screens/`
+2. **Created HTML mockups** — `docs/design/mockups/` (components.html, token-page.html, profile-page.html, market-page.html)
+3. **Wrote BUILD_SPEC.md** — 1,044-line spec with exact props, colors, font sizes, padding for every component
+4. **Wrote IMPLEMENTATION_PLAN.md** — Phased rollout with dependency graph
+
+### Phase 1: Composite Components (8 components)
+5. **PillButton** (`primitives/PillButton.tsx`) — filled/outlined/ghost variants, xs/sm/md sizes
+6. **PillTabs** (`composites/PillTabs.tsx`) — dark capsule container, equal-width tabs
+7. **StatsCard** (`composites/StatsCard.tsx`) — card and inline variants
+8. **BuySellPills** (`composites/BuySellPills.tsx`) — outlined BUY + filled SELL
+9. **PerformanceChart** (`composites/PerformanceChart.tsx`) — SVG line chart via react-native-svg
+10. **PortfolioRow** (`composites/PortfolioRow.tsx`) — flat sibling layout (star/body/buy/sell/arrow)
+11. **PortfolioTable** (`composites/PortfolioTable.tsx`) — header + rows with optional card wrapper
+12. **TokenSwapWidget** (`composites/TokenSwapWidget.tsx`) — gradient cards + swap arrow
+
+### Phase 1 Verification (parallel agents)
+13. **Testing agent** found: nested Pressable touch propagation, header/row column misalignment, empty PillTabs, expanded values always green, flat Y line centering, duplicate symbol
+14. **Verification agent** found: column widths off spec, SELL pill missing border, inline margin wrong, SELECT TOKEN padding wrong
+15. All issues fixed across 2 commits
+
+### Phase 2: Page Integrations
+16. **Creator detail header** — replaced inline tabs with PillTabs
+17. **Home feed header** — replaced inline tabs with PillTabs (FOR YOU / TRENDING)
+18. **Token tab rebuild** — BuySellPills + StatsCard×3 + PerformanceChart replacing placeholders
+19. **Profile dashboard** — new `ProfileDashboard.tsx` feature component, feature-flagged
+20. **Phase 2 verification** — caught wallet route bug, stale tab state, wasted API calls, no-op handlers
+
+### Emulator Testing & Live Fixes
+21. **Android emulator setup** — Medium_Phone_API_36.1, cleared storage (777MB), installed dev client APK
+22. **Metro on port 8082** — with ADB reverse on both 8081→8082 and 8082→8082
+23. **GPS fallback** — LocationProvider times out after 8s, falls back to Toronto
+24. **Feed radius expansion** — API radius tiers extended to 15,000km for global reach
+25. **Wallet tab hidden** — `href: null` in tab layout
+26. **UI feedback fixes** — search bar always visible, "CREATORS TO WATCH" → "TRENDING", social icons enlarged, feed sort wired to popular for Trending tab
+27. **AnimatedPressable restructured** — splits style into layout props (Pressable) and visual props (Animated.View)
+28. **Portfolio screen** — extracted from profile into standalone `/portfolio` route
+29. **VIEW POSTS tab** — feed-style post list on profile matching creator POSTS tab
+30. **Safe back navigation** — `router.canGoBack()` with fallback to `/(tabs)/profile`
 
 ## 4. Key Decisions & Rationale
 
 | Decision | Why | Alternatives Considered |
 |----------|-----|------------------------|
-| FlatList instead of FlashList for home feed | FlashList doesn't support `snapToInterval` needed for peek effect | Kept FlashList initially, had to switch |
-| Simple `useState` tabs instead of PagerView for creator profile | PagerView is a native module — crashes if not compiled into the dev build. Simple conditional rendering works without native deps | PagerView (swipeable but requires rebuild), react-native-tab-view |
-| Cormorant Garamond for landing hero font | Closest Google Font to the thin elegant serif in the Figma splash screen | Playfair Display, Didot (not on Google Fonts) |
-| Space Mono for mobile app font | Matches the monospaced terminal aesthetic in Figma. Available as TTF, loaded via expo-font | JetBrains Mono (larger file), IBM Plex Mono |
-| Removed ticker banners from home feed | Not present in Figma home screen designs. Still exist on Market page | Kept but hidden, moved to header |
-| `contentFit="cover"` for feed images | Figma shows edge-to-edge images filling the card. Was `"contain"` before | Keep contain with dark bars |
-| API root redirects to landing | Two separate Vercel deployments — API shouldn't serve its own landing page | Serve landing from API (causes confusion) |
-| DB migration via `prisma db execute` not `prisma migrate deploy` | Production DB wasn't initialized with Prisma migrate (no migration history table). Direct SQL was the only option | Baseline + migrate (more complex) |
+| PillButton as shared primitive | Single atom reused in PillTabs, BuySellPills, TokenSwapWidget | Extending existing Button (too many overrides needed) |
+| AnimatedPressable: Pressable outside, Animated.View inside, style split | Pressable needs layout props (flex) to participate in parent layouts; Animated.View needs visual props for scale animation | Pressable inside (broke PillTabs layout), Pressable inside with flex:1 (circular height dependency) |
+| Profile dashboard as feature flag | `USE_DASHBOARD_PROFILE = true` at top of profile.tsx. Old social-media profile fully preserved below | Full rewrite (risky, can't A/B test) |
+| Portfolio as separate screen | Profile page was too long with chart+table+swap. WALLET and PORTFOLIO as side-by-side pill buttons | Keep everything on profile (too much scrolling) |
+| VIEW POSTS / SWAP tabs on profile | Creators need to see their own posts; swap is secondary | Masonry grid (doesn't show captions/timestamps), separate posts screen (extra navigation) |
+| Feed-style posts (not list/grid) | Matches creator/[id].tsx POSTS tab exactly — avatar+name+timestamp+caption+image | Compact list with thumbnails (user specifically requested matching the creator view) |
+| "CREATORS TO WATCH" → "TRENDING" | Long text was being cut off in PillTabs on smaller screens | Smaller font (less readable), abbreviation (unclear) |
+| TRENDING tab = popular sort | More useful for discovery than following-only | keeping following sort (not useful if you follow nobody) |
+| GPS 8s timeout with Toronto fallback | Emulator GPS hangs forever on `getCurrentPositionAsync` | No fallback (feed never loads), hardcoded location (wrong on real devices) |
+| Feed radius to 15,000km | All seed data is in Toronto; users far away got 0 posts | Keep 1,000km max (empty feeds for most users during early stage) |
+| react-native-svg for charts | Already in deps, lightweight, no new dependency | victory-native (heavy), react-native-chart-kit (opinionated) |
+| Flex-based column widths in PortfolioRow | Responsive across phone sizes | Fixed pixel widths (breaks on small screens) |
 
 ## 5. Bugs, Failures & Lessons Learned
 
-- **All API 500s were caused by missing DB column**: `The column 'users.baseWalletAddress' does not exist`. The Prisma schema had the column but the migration was never applied to production. Fixed by running SQL directly via `prisma db execute --url`
-- **`react-native-pager-view` crash**: The creator profile used PagerView which is a native module. Dev builds compiled before the dep was added don't have it. Fix: use simple `useState` + conditional rendering instead
-- **Manifesto "Momento flips this" orphaned text**: The preceding "Creators earn pennies..." text used anime.js scroll-triggered animation with `opacity: 0` initial state. If the trigger didn't fire (common on mobile + some scroll positions), only "Momento flips this." showed with no context. Fix: removed animation, render everything statically
-- **ADB from WSL**: The Windows ADB server (`adb -a -P 5037 nodaemon server`) approach doesn't work well — port forwarding between WSL2 and Windows is unreliable. What works: symlink the Windows `adb.exe` directly into WSL PATH (`ln -sf /mnt/c/Users/sange/AppData/Local/Android/Sdk/platform-tools/adb.exe /home/sangeet/Android/platform-tools/adb`)
-- **Port 8081 conflict**: Expo defaults to 8081 which was occupied. Use `--port 8082` explicitly
-- **EAS build needs `eas-cli` globally**: `npx eas` fails with "could not determine executable". Install with `npm install -g eas-cli`
-- **Metro cache**: After adding/removing dependencies, always restart Metro with `--clear` flag
-- **Expo Go doesn't work**: The app uses native modules (Privy, PagerView). Expo Go crashes immediately. Must use a dev client build via EAS
-- **`vercel logs` requires project linking**: Run `vercel link --project momento-api --yes` first, then `vercel logs --level error --since 1h --no-follow`
+- **AnimatedPressable flex:1 inside broke PillTabs**: Adding `flex:1` to the inner Pressable caused a circular height dependency — Pressable tried to fill parent, parent sized from children. Fix: restructure to Pressable-outside (layout), Animated.View-inside (visual), with style splitting via `LAYOUT_PROPS` set.
+- **PillTabs active border was fragile**: Using `style` override to add `borderWidth:1` on a `ghost` variant that explicitly sets `borderWidth:0`. Fix: use `variant="outlined"` for active tabs instead.
+- **PortfolioRow nested Pressables caused double-fire**: Tapping inner BUY/SELL also triggered outer row `onPress`. Fix: restructured to flat sibling layout — star, rowBody (Pressable for navigation), buy, sell, arrow are all siblings, not nested.
+- **Emulator GPS `getCurrentPositionAsync` hangs forever**: API 36 emulators don't respond to `adb emu geo fix`. The `Location.getCurrentPositionAsync()` promise never resolves. Fix: race it against an 8-second timeout, fallback to Toronto coordinates.
+- **Metro keeps dying on WSL**: Metro process gets killed periodically. Fix: use `nohup` and write to `/tmp/metro.log`. Always restart with `nohup npx expo start --port 8082 > /tmp/metro.log 2>&1 &`.
+- **Port 8081 conflict**: Something holds port 8081 persistently. Fix: use 8082 and reverse both ports: `adb reverse tcp:8081 tcp:8082 && adb reverse tcp:8082 tcp:8082`.
+- **Emulator storage too small for APK**: 215MB APK needs 777MB+ free. Fix: uninstall unused apps (`com.wispr.flowapp`, `com.mylesapp.Myles`, `com.kubi.kucoin`, `host.exp.exponent`), use `--partition-size 2047`.
+- **`(tabs)/wallet.tsx` auto-discovered as 4th tab**: Expo Router auto-discovers any `.tsx` in `(tabs)/` directory. Fix: `<Tabs.Screen name="wallet" options={{ href: null }} />`.
+- **`router.back()` breaks when no stack history**: Navigating to wallet/portfolio from profile tab has no back stack entry. Fix: `router.canGoBack() ? router.back() : router.replace('/(tabs)/profile')`.
+- **Feed shows same posts on both tabs**: Small seed dataset (all Toronto) means both sort modes return similar posts. Not a bug — will resolve with more creators.
 
 ## 6. Codebase Map
 
 ```
 momento/
-├── CLAUDE.md                          — Agent instructions: reference design system for all UI work
-├── HANDOFF.md                         — This file
-├── docs/
-│   ├── design/
-│   │   ├── DESIGN_REFERENCE.md        — Screen-by-screen specs, gap analysis current vs Figma
-│   │   └── screens/                   — 20 Figma PNG exports (home-feed.png, explore.png, etc.)
-│   └── DESIGN_SYSTEM.md              — Landing page design tokens
-├── apps/
-│   ├── api/
-│   │   ├── lib/auth.ts               — Privy auth, requireAuth(), reads NEXT_PUBLIC_PRIVY_APP_ID || PRIVY_APP_ID
-│   │   ├── app/page.tsx              — Redirects to landing page
-│   │   └── prisma/schema.prisma      — DB schema (baseWalletAddress, primaryChain added)
-│   ├── landing/
-│   │   ├── components/
-│   │   │   ├── CreatorLanding.tsx     — Entry: loading → polaroid → AppShowcaseFlow
-│   │   │   ├── showcase/AppShowcaseFlow.tsx — Main page: hero + ticker + showcase + footer
-│   │   │   └── showcase/*Screen.tsx  — Phone mockups using Figma screenshots
-│   │   └── public/screens/           — feed.png, explore.png, creator.png, wallet.png
-│   └── mobile/
-│       ├── app/(tabs)/home.tsx        — Home feed (vertical scroll, peek, overlay actions)
-│       ├── app/(tabs)/explore.tsx     — Explore (pure image masonry, floating search)
-│       ├── app/(tabs)/profile.tsx     — User profile (unchanged this session)
-│       ├── app/creator/[id].tsx       — Creator profile (PROFILE/POSTS/TOKEN tabs)
-│       ├── app/_layout.tsx            — Root layout (loads Space Mono font via expo-font)
-│       ├── assets/fonts/              — SpaceMono-Regular.ttf, SpaceMono-Bold.ttf
-│       ├── src/styles/theme.ts        — Design tokens (bg #000000, primary #00FF88)
-│       ├── src/styles/typography.ts   — Typography system (Space Mono, uppercase headings)
-│       └── src/providers/ChainProvider.tsx — Multi-chain context (Solana/Base switching)
-└── packages/shared/src/
-    ├── constants.ts                   — CHAIN_CONFIG (Solana + Base), SOCIAL_PLATFORMS
-    └── types.ts                       — ChainType, PostWithCreator, etc.
+├── HANDOFF.md                          — This file
+├── CLAUDE.md                           — Agent instructions: reference design system
+├── docs/design/
+│   ├── BUILD_SPEC.md                   — Pixel-perfect component specs (1,044 lines)
+│   ├── IMPLEMENTATION_PLAN.md          — Phased rollout plan
+│   ├── DESIGN_REFERENCE.md             — Screen-by-screen Figma specs
+│   ├── screens/                        — 20 Figma PNG exports
+│   └── mockups/                        — 4 interactive HTML mockups
+├── apps/api/
+│   └── app/api/feed/route.ts           — Feed with radius tiers [50..15000km]
+├── apps/mobile/
+│   ├── app/
+│   │   ├── _layout.tsx                 — Root stack (gestureEnabled, gestureDirection)
+│   │   ├── (tabs)/
+│   │   │   ├── _layout.tsx             — Tab bar (3 tabs, wallet hidden)
+│   │   │   ├── home.tsx                — Feed with PillTabs (FOR YOU/TRENDING)
+│   │   │   ├── explore.tsx             — Masonry grid, always-visible search
+│   │   │   ├── profile.tsx             — USE_DASHBOARD_PROFILE flag → ProfileDashboard
+│   │   │   └── wallet.tsx              — Tab wallet (hidden, has back button)
+│   │   ├── creator/[id].tsx            — PillTabs + token tab rebuild
+│   │   ├── portfolio.tsx               — NEW: standalone portfolio screen
+│   │   └── wallet.tsx                  — Standalone wallet (safe back nav)
+│   └── src/
+│       ├── components/
+│       │   ├── primitives/
+│       │   │   ├── PillButton.tsx       — Shared pill atom (filled/outlined/ghost)
+│       │   │   ├── AnimatedPressable.tsx — Pressable-outside, Animated.View-inside, style split
+│       │   │   └── index.ts            — Exports PillButton
+│       │   ├── composites/             — NEW: 7 composite components
+│       │   │   ├── PillTabs.tsx
+│       │   │   ├── StatsCard.tsx
+│       │   │   ├── BuySellPills.tsx
+│       │   │   ├── PerformanceChart.tsx
+│       │   │   ├── PortfolioRow.tsx
+│       │   │   ├── PortfolioTable.tsx
+│       │   │   ├── TokenSwapWidget.tsx
+│       │   │   └── index.ts
+│       │   ├── features/
+│       │   │   ├── ProfileDashboard.tsx — NEW: financial dashboard profile
+│       │   │   └── index.ts            — Exports ProfileDashboard
+│       │   └── index.ts                — Re-exports composites
+│       ├── providers/
+│       │   └── LocationProvider.tsx     — GPS timeout + Toronto fallback
+│       └── styles/
+│           ├── theme.ts                — Design tokens (unchanged)
+│           └── typography.ts           — Typography system (unchanged)
 ```
 
 ## 7. Remaining Work
 
 ### High Priority
-- [ ] **Verify mobile app on device** — reconnect phone via USB, `adb reverse tcp:8082 tcp:8082`, connect to `localhost:8082`. Test: home feed scrolling, explore grid, creator profile tabs, video playback, navigation flow. The APK is already installed (`d29be976`)
-- [ ] **Fix video loading** — user reported older videos not loading. Check if sample video URLs (Google Storage bucket) are still valid. May need to update `dummyData.ts` or check if `ResizeMode.COVER` change broke video rendering
-- [ ] **Test creator profile fully** — verify PROFILE/POSTS/TOKEN tabs work, hero image loads, post grid renders, follow/unfollow works
+- [ ] **Market page rebuild (2E)** — Replace inline tabs with PillTabs, replace inline rows with PortfolioTable. Data adapter needed to map creator API data → PortfolioRowProps. See BUILD_SPEC.md section 2E for exact spec. File: `apps/mobile/app/market.tsx`
+- [ ] **Wire real wallet data to profile** — Stats cards (24H CHANGE, EARNINGS TO DATE) currently use placeholders. API endpoints exist: `/api/wallet/balance`, `/api/wallet/snapshots`. Hook exists: `useWalletBalance()`. Connect the real values.
+- [ ] **Wire real chart data** — PerformanceChart uses hardcoded sample data. API has `/api/wallet/snapshots` for portfolio history. Hook `usePriceHistory()` exists but isn't connected to PerformanceChart.
+- [ ] **Wire real portfolio rows** — PortfolioTable uses sample DEEL/BELLE/NAAN/AURA/SEAM data. Need to fetch actual user token holdings from wallet balance API.
 
 ### Medium Priority
-- [ ] **Notifications bell** — removed from home header during redesign. Currently only accessible from Profile tab. Consider adding back as a small icon or badge
-- [ ] **Market page accessibility** — trending-up icon added to home header but may not be discoverable enough. Consider keeping ticker banners or adding a dedicated market tab
-- [ ] **Feed algorithm discoverability** — algo is behind an options icon (left of header) + long-press. May need a more visible way to switch between smart/recent/popular/nearby/following
-- [ ] **Landing page on custom domain** — currently at `landing-eight-puce-10.vercel.app`. Should be on `momento.network` or `moment.network`
+- [ ] **Delete/edit posts from profile** — VIEW POSTS tab shows posts but no edit/delete buttons. API has `DELETE /api/posts/[id]`. Add swipe-to-delete or a menu icon per post row.
+- [ ] **Profile social links on own profile** — Social icons show on creator detail (`creator/[id].tsx`) but not on ProfileDashboard. User's `socialLinks` data is available via `user.socialLinks`.
+- [ ] **Fix NAAN 3% showing green** — PortfolioRow shows negative values in green because sample data has `changePositive: false` but the StatsCard on the profile uses `valueColor="positive"` hardcoded. Should derive from the actual value.
+- [ ] **Clean up old profile code** — When USE_DASHBOARD_PROFILE is confirmed stable, remove the old social-media profile rendering below the flag in profile.tsx (~400 lines of dead code).
+- [ ] **useSavedPosts guard** — Runs unconditionally even when dashboard is showing. Either add `enabled` param or lazy-mount the old profile component. TODO at profile.tsx line 95.
 
 ### Low Priority / Nice to Have
-- [ ] **PagerView for creator tabs** — re-enable swipeable tabs once PagerView is compiled in the dev build. The native module is in `package.json` already
-- [ ] **Landing page Manifesto animation** — currently static. Could add a subtle fade-in on scroll (but test on mobile viewport first)
-- [ ] **Explore search UX** — search is behind a floating icon. Could add pull-down-to-search gesture
-- [ ] **Token tab real data** — currently shows "—" placeholders and "Coming Soon" chart. Wire up real price data when available
+- [ ] **PagerView for creator tabs** — Re-enable swipeable tab swiping once compiled into dev build
+- [ ] **Notifications bell on home header** — Removed during redesign. Consider adding as badge on profile tab icon instead.
+- [ ] **Landing page on custom domain** — Currently at `landing-eight-puce-10.vercel.app`
+- [ ] **Month labels responsive to time range** — PerformanceChart always shows JAN-DEC regardless of 24H/7D/1M range. Should show hours/days for shorter ranges.
+- [ ] **Video autoplay in feed** — Some videos show black frames. May need to preload or check URLs.
 
 ## 8. Environment & Setup Notes
 
 ### Dev Environment
-- **WSL2** on Windows (Ubuntu), Node 22 via nvm, pnpm 10.30.0
-- **ADB**: Windows `adb.exe` symlinked into WSL at `/home/sangeet/Android/platform-tools/adb`. Must have phone connected via USB to Windows
-- **Metro**: run from `apps/mobile` with `npx expo start --port 8082`. Port 8081 is often occupied
-- **After ADB connect**: always run `adb reverse tcp:8082 tcp:8082` before connecting from dev client
+- **WSL2** on Windows (Ubuntu), Node 22 via nvm (`/home/sangeet/.nvm/versions/node/v22.22.2/bin`)
+- **pnpm** 10.30.0 for monorepo
+- **ADB**: Windows `adb.exe` symlinked at `/home/sangeet/Android/platform-tools/adb`
 
-### Build Commands
-- **Landing dev**: `pnpm --filter landing dev` (port 3001)
-- **Mobile dev**: `npx expo start --port 8082` from `apps/mobile`
+### Android Emulator
+- **AVD**: `Medium_Phone_API_36.1` (API 36, x86_64)
+- **Launch**: `/mnt/c/Users/sange/AppData/Local/Android/Sdk/emulator/emulator.exe -avd Medium_Phone_API_36.1 -no-snapshot-load -partition-size 2047`
+- **Auth token**: `imb5YbX+2R75ChNO` (at `/mnt/c/Users/sange/.emulator_console_auth_token`)
+- **Storage**: Uninstall unused apps if APK install fails (need ~777MB free)
+
+### Metro Bundler
+- **Start**: `nohup npx expo start --port 8082 > /tmp/metro.log 2>&1 &`
+- **ADB reverse**: `adb reverse tcp:8081 tcp:8082 && adb reverse tcp:8082 tcp:8082` (BOTH ports!)
+- **Connect app**: `adb shell am start -a android.intent.action.VIEW -d "exp+momento://expo-development-client/?url=http%3A%2F%2Flocalhost%3A8082" com.momento.app`
+- **Check logs**: `tail -20 /tmp/metro.log`
+- **Metro dies often** on WSL — always use `nohup` and check it's alive before testing
+
+### Build & Deploy
 - **EAS build**: `eas build --profile development --platform android --non-interactive`
-- **Install APK**: `curl -sL <apk-url> -o /tmp/momento.apk && adb install -r /tmp/momento.apk`
-- **Vercel logs**: `vercel link --project momento-api --yes && vercel logs --level error --since 1h --no-follow --expand`
+- **Install APK**: Download from EAS, save to `/mnt/c/Users/sange/Downloads/`, install with `adb install -r 'C:\Users\sange\Downloads\momento-dev.apk'`
+- **API deploys automatically** on push to `main` (Vercel)
+- **Dev client APK ID**: `d29be976-7629-4d28-9c35-aa27f3bac5df`
+- **NOTE**: If you change native modules, you need a new EAS build. JS-only changes hot-reload via Metro.
 
-### Key Env Vars (Vercel - momento-api)
-- `NEXT_PUBLIC_PRIVY_APP_ID` = `cmjbzyj4q00twlb0d1uc5w0sb`
-- `PRIVY_APP_SECRET` — set on Vercel, not in repo
-- `DATABASE_URL` — Supabase pooler (port 6543)
-- `DIRECT_URL` — Supabase direct (port 5432, for migrations)
-
-### Mobile Env (eas.json + .env.development)
+### Key Env Vars
 - `EXPO_PUBLIC_API_URL` = `https://momento-api-ten.vercel.app/api`
 - `EXPO_PUBLIC_PRIVY_APP_ID` = `cmjbzyj4q00twlb0d1uc5w0sb`
 
@@ -159,7 +213,6 @@ momento/
 - **Landing (live)**: https://landing-eight-puce-10.vercel.app
 - **API health**: https://momento-api-ten.vercel.app/api/health
 - **EAS builds**: https://expo.dev/accounts/sangeetparashar24/projects/momento/builds
-- **Latest dev build**: https://expo.dev/accounts/sangeetparashar24/projects/momento/builds/d29be976-7629-4d28-9c35-aa27f3bac5df
-- **Figma assets**: `/tmp/momento-design/` (extracted from `Momento.zip`) and committed to `docs/design/screens/`
-- **Design reference**: `docs/design/DESIGN_REFERENCE.md`
-- **Plan file**: `.claude/plans/adaptive-launching-horizon.md`
+- **Design spec**: `docs/design/BUILD_SPEC.md`
+- **Figma screens**: `docs/design/screens/`
+- **HTML mockups**: `docs/design/mockups/` (open in browser)
