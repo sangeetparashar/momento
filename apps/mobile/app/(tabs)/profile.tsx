@@ -92,6 +92,9 @@ export default function ProfileScreen() {
   const creatorPosts = postsQuery.data?.pages.flatMap((p) => p.posts) ?? [];
 
   // Saved posts for regular users
+  // TODO: verify if old data is still wanted — this fires unconditionally
+  // even when USE_DASHBOARD_PROFILE=true. Consider wrapping old profile
+  // in a lazy component or adding an `enabled` param to useSavedPosts.
   const savedPostsQuery = useSavedPosts();
 
   const handleRefresh = useCallback(async () => {
