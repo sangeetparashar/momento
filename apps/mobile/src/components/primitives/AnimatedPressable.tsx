@@ -1,15 +1,21 @@
 import React, { useCallback, useRef } from 'react';
 import { Pressable, PressableProps, ViewStyle, StyleProp, Animated } from 'react-native';
 
-interface AnimatedPressableProps extends PressableProps {
+interface AnimatedPressableProps extends Omit<PressableProps, 'children' | 'style'> {
   /** Scale factor on press (default 0.97). Use lower values for more pronounced effect. */
   scaleValue?: number;
   style?: StyleProp<ViewStyle>;
+  children?: React.ReactNode;
 }
 
 /**
  * A drop-in replacement for Pressable with a subtle scale-down on press.
- * Uses React Native Animated for smooth spring-based animations.
+ *
+ * Structure: Pressable (outside, handles touch for full area)
+ *            └─ Animated.View (inside, handles visual style + scale animation)
+ *               └─ children
+ *
+ * This ensures the entire styled area is tappable, not just the text content.
  */
 export function AnimatedPressable({
   scaleValue = 0.97,
@@ -47,15 +53,14 @@ export function AnimatedPressable({
   );
 
   return (
-    <Animated.View style={[{ transform: [{ scale }] }, style]}>
-      <Pressable
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}
-        {...rest}
-      >
+    <Pressable
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      {...rest}
+    >
+      <Animated.View style={[{ transform: [{ scale }] }, style]}>
         {children}
-      </Pressable>
-    </Animated.View>
+      </Animated.View>
+    </Pressable>
   );
 }
