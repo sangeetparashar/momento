@@ -86,7 +86,7 @@ export default function ProfileScreen() {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage) =>
       lastPage.hasMore ? lastPage.nextCursor : undefined,
-    enabled: !!user?.id && isCreator,
+    enabled: !!user?.id && isCreator && !USE_DASHBOARD_PROFILE,
   });
 
   const creatorPosts = postsQuery.data?.pages.flatMap((p) => p.posts) ?? [];

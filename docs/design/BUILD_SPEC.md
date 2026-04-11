@@ -960,6 +960,11 @@ SafeAreaView (bg: black)
 
 ### 2E. Market Page Rebuild
 
+> **STATUS: DEFERRED** — The market page already functions and is the lowest priority integration.
+> The existing inline tabs and table rows work correctly. This integration requires a data adapter
+> to map creator API data to PortfolioRowProps, which should be done when real token data is available.
+> All components needed (PillTabs, PortfolioTable, PortfolioRow) are built and tested.
+
 **File:** `apps/mobile/app/market.tsx`
 **Reference screens:** `market.png`, `market-expanded.png`
 
