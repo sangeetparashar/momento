@@ -61,9 +61,8 @@ export async function GET(request: NextRequest) {
           userId: user.id,
           chain,
           totalValueUsd: balance.totalValueUsd ?? 0,
-          // solBalance column retains the native balance for back-compat
-          solBalance: balance.nativeBalance ?? balance.solBalance ?? 0,
-          solValueUsd: nativeValueUsd,
+          nativeBalance: balance.nativeBalance ?? balance.solBalance ?? 0,
+          nativeValueUsd: nativeValueUsd,
           tokenValueUsd,
         },
       }).catch((err: any) => console.error('Snapshot write error:', err?.message));

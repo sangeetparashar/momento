@@ -39,6 +39,9 @@ export const cacheKeys = {
   creatorLeaderboard: () => 'creators:leaderboard',
 
   priceHistory: (coinId: string, range: string) => `price:history:${coinId}:${range}`,
+
+  walletTransactions: (userId: string, chain: string, cursor?: string | null) =>
+    `wallet:txs:${chain}:${userId}:${cursor || 'first'}`,
 };
 
 // ─── TTLs (in seconds) ─────────────────────────────────────────────────────

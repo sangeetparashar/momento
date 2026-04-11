@@ -21,7 +21,7 @@ import {
   SendModal,
   ChainSwitcher,
 } from '@/components/features';
-import { useWalletBalance } from '@/hooks';
+import { useWalletBalance, useWalletTransactions } from '@/hooks';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useAuth } from '@/hooks/useAuth';
 import { useChain } from '@/hooks/useChain';
@@ -33,10 +33,10 @@ import { usePressLogger } from '@/utils/pressLogger';
 import { CHAIN_CONFIG } from '@momento/shared';
 import type { TokenHolding, ChainType } from '@momento/shared';
 
-/** Locally-stored transaction record */
+/** Transaction record (from API or local AsyncStorage fallback) */
 interface TxRecord {
   signature: string;
-  type: 'swap';
+  type: 'swap' | 'send' | 'receive' | 'fund';
   label: string;
   timestamp: number;
 }
@@ -84,23 +84,36 @@ export default function WalletScreen() {
   const [showFundModal, setShowFundModal] = useState(false);
   const [showSendModal, setShowSendModal] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [recentTxs, setRecentTxs] = useState<TxRecord[]>([]);
+  const txQuery = useWalletTransactions();
+  const [offlineTxs, setOfflineTxs] = useState<TxRecord[]>([]);
   const logPress = usePressLogger('Wallet');
 
-  // Load recent transactions from local storage + start fast polling after modals close.
-  // The storage key is namespaced by userId AND chain so each user/chain combo has
-  // its own list. Re-run when chain or user changes so the list updates on switch.
+  // Fallback: load from AsyncStorage if API hasn't returned yet
   useEffect(() => {
-    AsyncStorage.getItem(getTxStorageKey(profile?.id, chain))
-      .then(raw => {
-        setRecentTxs(raw ? JSON.parse(raw) : []);
-      })
-      .catch(() => setRecentTxs([]));
-    // When swap/fund modal closes, poll aggressively for 60s to catch the update
+    if (!txQuery.data) {
+      AsyncStorage.getItem(getTxStorageKey(profile?.id, chain))
+        .then(raw => setOfflineTxs(raw ? JSON.parse(raw) : []))
+        .catch(() => setOfflineTxs([]));
+    }
+  }, [txQuery.data, profile?.id, chain]);
+
+  // Refetch tx history + start fast balance polling after modals close
+  useEffect(() => {
     if (!showSwapModal && !showFundModal && !showSendModal) {
       startFastPolling();
+      txQuery.refetch();
     }
-  }, [showSwapModal, showFundModal, showSendModal, profile?.id, chain]);
+  }, [showSwapModal, showFundModal, showSendModal]);
+
+  // Derive recentTxs from API data with AsyncStorage fallback
+  const recentTxs: TxRecord[] = txQuery.data?.items
+    ? txQuery.data.items.map(item => ({
+        signature: item.signature,
+        type: item.type as TxRecord['type'],
+        label: item.label,
+        timestamp: new Date(item.createdAt).getTime(),
+      }))
+    : offlineTxs;
 
   const handlePullRefresh = useCallback(() => {
     walletQuery.refetch();
@@ -352,7 +365,11 @@ export default function WalletScreen() {
               >
                 <View style={styles.txLeft}>
                   <View style={styles.txIcon}>
-                    <Ionicons name="swap-horizontal" size={16} color={COLORS.primary} />
+                    <Ionicons
+                      name={tx.type === 'send' ? 'arrow-up' : tx.type === 'receive' ? 'arrow-down' : 'swap-horizontal'}
+                      size={16}
+                      color={COLORS.primary}
+                    />
                   </View>
                   <View>
                     <Text style={styles.txLabel}>{tx.label}</Text>
