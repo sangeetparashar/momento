@@ -165,10 +165,10 @@ const styles = StyleSheet.create({
 
   // Column widths — MUST match PortfolioRow
   starCol: { width: 20 },
-  tokenCol: { flex: 2, flexDirection: 'row' as const },
-  changeCol: { flex: 1, minWidth: 40 },
-  priceCol: { flex: 1.5 },
-  actionCol: { width: 36, alignItems: 'center' as const },
+  tokenCol: { flex: 1, flexDirection: 'row' as const },
+  changeCol: { width: 52 },
+  priceCol: { flex: 1 },
+  actionCol: { width: 40, alignItems: 'center' as const },
   arrowCol: { width: 24 },
 
   // Empty

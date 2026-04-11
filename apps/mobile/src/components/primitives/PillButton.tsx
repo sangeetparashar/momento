@@ -70,7 +70,7 @@ export function PillButton({
 
   // Resolve colors per variant
   const resolvedFill = fillColor ?? (variant === 'filled' ? COLORS.textPrimary : 'transparent');
-  const resolvedBorder = borderColor ?? (variant === 'outlined' ? COLORS.textSecondary : 'transparent');
+  const resolvedBorder = borderColor ?? (variant === 'outlined' ? COLORS.textSecondary : variant === 'filled' ? (fillColor ?? COLORS.textPrimary) : 'transparent');
   const resolvedText =
     textColor ??
     (variant === 'filled'
@@ -81,7 +81,7 @@ export function PillButton({
 
   const containerStyle: ViewStyle = {
     backgroundColor: resolvedFill,
-    borderWidth: variant === 'outlined' ? 1 : variant === 'ghost' ? 0 : 0,
+    borderWidth: variant === 'ghost' ? 0 : 1,
     borderColor: resolvedBorder,
     borderRadius: RADII.full,
     paddingVertical: sizeConfig.paddingV,

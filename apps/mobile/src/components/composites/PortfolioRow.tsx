@@ -218,26 +218,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
 
-  // Column widths — flex-based for responsiveness
+  // Column widths — matches BUILD_SPEC.md and PortfolioTable header
   starCol: {
     width: 20,
     alignItems: 'center',
   },
   tokenCol: {
-    flex: 2,
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
   changeCol: {
-    flex: 1,
-    minWidth: 40,
+    width: 52,
   },
   priceCol: {
-    flex: 1.5,
+    flex: 1,
   },
   actionCol: {
-    width: 36,
+    width: 40,
     alignItems: 'center',
   },
   arrowCol: {

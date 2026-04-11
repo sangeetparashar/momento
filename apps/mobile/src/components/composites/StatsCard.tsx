@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
   labelInline: {
     fontSize: 9,
     letterSpacing: 1.5,
-    marginBottom: 6,
+    marginBottom: SPACING.sm,
   },
 
   valueRow: {

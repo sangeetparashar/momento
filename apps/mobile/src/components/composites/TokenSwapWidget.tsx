@@ -72,10 +72,11 @@ function SwapCard({
       <PillButton
         label={token ? 'Change' : 'Select Token'}
         variant="outlined"
-        size="xs"
+        size="sm"
         borderColor={COLORS.textSecondary}
         textColor={COLORS.textPrimary}
         onPress={onSelect}
+        style={{ paddingHorizontal: 14 }}
       />
     </LinearGradient>
   );

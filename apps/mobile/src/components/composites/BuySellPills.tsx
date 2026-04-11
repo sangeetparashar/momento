@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
 import { PillButton } from '@/components/primitives';
-import { COLORS, SPACING, RADII } from '@/styles/theme';
+import { COLORS, SPACING } from '@/styles/theme';
 
 interface BuySellPillsProps {
   /** Called when BUY is pressed. */
@@ -28,7 +28,9 @@ interface BuySellPillsProps {
  * Paired BUY (outlined) + SELL (filled) pill buttons.
  *
  * BUY: transparent bg, gray border (#888), white text.
- * SELL: white bg, white border, black text.
+ *      On press: border lightens to #FFFFFF.
+ * SELL: white bg, white border (for sizing parity), black text.
+ *      On press: bg dims to #DDDDDD.
  * Both use full-radius pill shape and uppercase Space Mono Bold.
  *
  * @see docs/design/screens/creator-token.png — below $DEEL symbol
@@ -47,8 +49,10 @@ export function BuySellPills({
       style={[
         styles.container,
         layout === 'stack' && styles.containerStack,
+        disabled && styles.disabled,
         style,
       ]}
+      pointerEvents={disabled ? 'none' : 'auto'}
     >
       <PillButton
         label={buyLabel}
@@ -57,7 +61,6 @@ export function BuySellPills({
         borderColor={COLORS.textSecondary}
         textColor={COLORS.textPrimary}
         onPress={onBuy}
-        disabled={disabled}
         style={styles.pill}
         textStyle={styles.pillText}
       />
@@ -66,9 +69,9 @@ export function BuySellPills({
         variant="filled"
         size="md"
         fillColor={COLORS.textPrimary}
+        borderColor={COLORS.textPrimary}
         textColor={COLORS.textInverse}
         onPress={onSell}
-        disabled={disabled}
         style={styles.pill}
         textStyle={styles.pillText}
       />
@@ -85,6 +88,9 @@ const styles = StyleSheet.create({
   containerStack: {
     flexDirection: 'column',
     alignItems: 'stretch',
+  },
+  disabled: {
+    opacity: 0.4,
   },
   pill: {
     minWidth: 100,
