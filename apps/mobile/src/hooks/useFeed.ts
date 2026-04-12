@@ -33,10 +33,10 @@ export function useFeed(options: UseFeedOptions = {}, currentIndex = 0) {
 
   // ─── Phase 1: fast global feed (no geo dependency) ───
   const fastQuery = useInfiniteQuery<FeedResponse>({
-    queryKey: ['feed', 'fast'],
+    queryKey: ['feed', 'fast', sort],
     queryFn: async ({ pageParam }) => {
       const page = (pageParam as number) ?? 0;
-      return apiService.get<FeedResponse>('/feed', { fast: true, page });
+      return apiService.get<FeedResponse>('/feed', { fast: true, sort, page });
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) =>

@@ -162,15 +162,20 @@ export async function GET(request: NextRequest) {
     const sort: SortMode = SORT_MODES.has(sortParam) ? sortParam : 'smart';
     const fast = searchParams.get('fast') === 'true';
 
-    // ─── Phase 1: fast=true — global recent posts, no geo, no auth overhead ───
+    // ─── Phase 1: fast=true — global posts, no geo, no auth overhead ───
     if (fast) {
-      const cacheKey = `feed:fast:${page}`;
+      // Popular sort orders by engagement; everything else by recency
+      const orderClause = sort === 'popular'
+        ? 'ORDER BY (p."likeCount" + p."commentCount") DESC, p."createdAt" DESC'
+        : 'ORDER BY p."createdAt" DESC';
+
+      const cacheKey = `feed:fast:${sort}:${page}`;
       const rawPosts: any[] = await getOrSetCache(cacheKey, 30, async () => {
         const posts = await prisma.$queryRawUnsafe<any[]>(
           `SELECT ${POST_SELECT_COLS}
            FROM "posts" p
            JOIN "users" u ON p."creatorId" = u."id"
-           ORDER BY p."createdAt" DESC
+           ${orderClause}
            LIMIT $1 OFFSET $2`,
           PAGE_SIZE + 1,
           page * PAGE_SIZE,
@@ -184,7 +189,7 @@ export async function GET(request: NextRequest) {
       // Skip auth + like status in fast mode for maximum speed
       return NextResponse.json({
         success: true,
-        data: { posts: pagePosts, page, hasMore, sort: 'recent', phase: 'fast' },
+        data: { posts: pagePosts, page, hasMore, sort, phase: 'fast' },
       });
     }
 
