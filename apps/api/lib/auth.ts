@@ -115,8 +115,8 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
         isAdmin: true,
       },
     });
-  } else if (user.walletAddress.startsWith('pending-')) {
-    // User exists but Solana wallet needs syncing — also attempt Base wallet sync
+  } else if (user.walletAddress.startsWith('pending-') || !user.baseWalletAddress) {
+    // User exists but Solana wallet needs syncing or Base wallet is missing
     try {
       const privyUser = await getPrivy().getUser(privyUserId);
 
