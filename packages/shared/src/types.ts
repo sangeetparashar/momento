@@ -250,6 +250,8 @@ export interface FeedResponse {
   page?: number;
   hasMore: boolean;
   sort?: string;
+  /** 'fast' = global recent (phase 1), 'geo' = distance-sorted (phase 2) */
+  phase?: 'fast' | 'geo';
 }
 
 export interface NearbyCreatorsResponse {

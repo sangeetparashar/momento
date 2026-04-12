@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   LayoutChangeEvent,
   RefreshControl,
+  Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
@@ -208,6 +209,20 @@ export default function HomeScreen() {
   const feedQuery = useFeed({ sort: effectiveSort, enabled: sortLoaded }, currentIndex);
   const flatListRef = useRef<FlatList<PostWithCreator>>(null);
 
+  // Fade animation when feed transitions from fast → geo phase
+  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const prevPhaseRef = useRef(feedQuery.phase);
+  useEffect(() => {
+    if (prevPhaseRef.current === 'fast' && feedQuery.phase === 'geo') {
+      // Fade out, swap data, fade in
+      Animated.sequence([
+        Animated.timing(fadeAnim, { toValue: 0, duration: 150, useNativeDriver: true }),
+        Animated.timing(fadeAnim, { toValue: 1, duration: 250, useNativeDriver: true }),
+      ]).start();
+    }
+    prevPhaseRef.current = feedQuery.phase;
+  }, [feedQuery.phase]);
+
   const posts = useMemo(() => {
     if (!feedQuery.data?.pages) return [];
     return feedQuery.data.pages.flatMap((page) => page.posts);
@@ -220,7 +235,7 @@ export default function HomeScreen() {
   }, [feedQuery]);
 
   const handleRefresh = useCallback(() => {
-    feedQuery.refetch();
+    feedQuery.refreshFeed();
   }, [feedQuery]);
 
   const handleSortChange = useCallback((sort: FeedSortMode) => {
@@ -334,33 +349,35 @@ export default function HomeScreen() {
             </Pressable>
           </View>
         ) : cardHeight > 0 ? (
-          <FlatList
-            ref={flatListRef}
-            data={posts}
-            extraData={currentIndex}
-            renderItem={renderItem}
-            keyExtractor={keyExtractor}
-            snapToInterval={cardHeight}
-            snapToAlignment="start"
-            decelerationRate="fast"
-            showsVerticalScrollIndicator={false}
-            onEndReached={handleEndReached}
-            onEndReachedThreshold={0.5}
-            onViewableItemsChanged={onViewableItemsChanged}
-            viewabilityConfig={viewabilityConfig}
-            refreshControl={
-              <RefreshControl
-                refreshing={feedQuery.isRefetching}
-                onRefresh={handleRefresh}
-                tintColor={COLORS.textTertiary}
-              />
-            }
-            getItemLayout={(_, index) => ({
-              length: cardHeight,
-              offset: cardHeight * index,
-              index,
-            })}
-          />
+          <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+            <FlatList
+              ref={flatListRef}
+              data={posts}
+              extraData={currentIndex}
+              renderItem={renderItem}
+              keyExtractor={keyExtractor}
+              snapToInterval={cardHeight}
+              snapToAlignment="start"
+              decelerationRate="fast"
+              showsVerticalScrollIndicator={false}
+              onEndReached={handleEndReached}
+              onEndReachedThreshold={0.5}
+              onViewableItemsChanged={onViewableItemsChanged}
+              viewabilityConfig={viewabilityConfig}
+              refreshControl={
+                <RefreshControl
+                  refreshing={feedQuery.isRefetching}
+                  onRefresh={handleRefresh}
+                  tintColor={COLORS.textTertiary}
+                />
+              }
+              getItemLayout={(_, index) => ({
+                length: cardHeight,
+                offset: cardHeight * index,
+                index,
+              })}
+            />
+          </Animated.View>
         ) : null}
       </View>
 
