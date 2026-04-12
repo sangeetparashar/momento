@@ -42,7 +42,8 @@ export function useFeed(options: UseFeedOptions = {}, currentIndex = 0) {
     getNextPageParam: (lastPage, allPages) =>
       lastPage.hasMore ? allPages.length : undefined,
     enabled,
-    staleTime: 30_000,
+    // Keep cached for 10 minutes — only pull-to-refresh or algo change forces refetch sooner
+    staleTime: 10 * 60 * 1000,
   });
 
   // ─── Phase 2: geo-sorted feed (fires when location is available) ───
@@ -67,7 +68,8 @@ export function useFeed(options: UseFeedOptions = {}, currentIndex = 0) {
     getNextPageParam: (lastPage, allPages) =>
       lastPage.hasMore ? allPages.length : undefined,
     enabled: enabled && !!location,
-    staleTime: 30_000,
+    // Keep cached for 10 minutes — only pull-to-refresh or algo change forces refetch sooner
+    staleTime: 10 * 60 * 1000,
   });
 
   // Transition to geo phase once geo data arrives
