@@ -4,13 +4,9 @@ import { getAuthUser } from '@/lib/auth';
 import { getOrSetCache, cacheKeys, cacheTTL } from '@/lib/redis';
 import { readLimiter, applyRateLimit } from '@/lib/ratelimit';
 
-const DEFAULT_RADIUS_KM = 50;
 const PAGE_SIZE = 15;
 /** How many raw posts to fetch for the ranking pool */
 const RANKING_POOL_SIZE = 200;
-/** Auto-expanding radius tiers (km) when expandRadius=true */
-const RADIUS_TIERS_KM = [50, 100, 250, 500, 1000, 2500, 5000, 10000, 15000];
-const DEFAULT_MIN_POSTS = 3;
 
 /**
  * Feed sort modes:
@@ -80,21 +76,121 @@ function rankPosts(
     .sort((a, b) => b._score - a._score);
 }
 
+/**
+ * Shared post formatter — normalises raw SQL rows into API shape.
+ */
+function formatPost(p: any) {
+  return {
+    id: p.id,
+    creatorId: p.creatorId,
+    postType: p.postType,
+    content: p.content,
+    caption: p.caption,
+    mediaUrl: p.mediaUrl,
+    mediaUrls: Array.isArray(p.mediaUrls) ? p.mediaUrls : null,
+    latitude: p.latitude,
+    longitude: p.longitude,
+    likeCount: p.likeCount,
+    commentCount: p.commentCount,
+    createdAt: typeof p.createdAt === 'string' ? p.createdAt : new Date(p.createdAt).toISOString(),
+    updatedAt: typeof p.updatedAt === 'string' ? p.updatedAt : new Date(p.updatedAt).toISOString(),
+    distanceMeters: p.distanceMeters != null ? Math.round(Number(p.distanceMeters)) : null,
+    creator: {
+      id: p.creator_id,
+      username: p.creator_username,
+      displayName: p.creator_displayName,
+      avatarUrl: p.creator_avatarUrl,
+      bannerUrl: p.creator_bannerUrl,
+      tokenSymbol: p.creator_tokenSymbol,
+      socialLinks: p.creator_socialLinks,
+      followerCount: p.creator_followerCount,
+      postCount: p.creator_postCount,
+    },
+  };
+}
+
+/**
+ * Attach isLiked flags to a page of posts for the authenticated user.
+ */
+async function attachLikeStatus(posts: any[], userId: string | undefined) {
+  let finalPosts = posts.map((p: any) => ({ ...p, isLiked: false, _score: undefined }));
+  if (userId && finalPosts.length > 0) {
+    const postIds = finalPosts.map((p: any) => p.id);
+    const likedPosts = await prisma.like.findMany({
+      where: { userId, postId: { in: postIds } },
+      select: { postId: true },
+    });
+    const likedSet = new Set(likedPosts.map((l) => l.postId));
+    finalPosts = finalPosts.map((p: any) => ({ ...p, isLiked: likedSet.has(p.id) }));
+  }
+  return finalPosts;
+}
+
+/** SQL fragment for post + creator columns */
+const POST_SELECT_COLS = `
+  p."id",
+  p."creatorId",
+  p."postType",
+  p."content",
+  p."caption",
+  p."mediaUrl",
+  p."mediaUrls",
+  p."latitude",
+  p."longitude",
+  p."likeCount",
+  p."commentCount",
+  p."createdAt",
+  p."updatedAt",
+  u."id" as "creator_id",
+  u."username" as "creator_username",
+  u."displayName" as "creator_displayName",
+  u."avatarUrl" as "creator_avatarUrl",
+  u."bannerUrl" as "creator_bannerUrl",
+  u."tokenSymbol" as "creator_tokenSymbol",
+  u."socialLinks" as "creator_socialLinks",
+  u."followerCount" as "creator_followerCount",
+  u."postCount" as "creator_postCount"
+`;
+
 export async function GET(request: NextRequest) {
   try {
     const rateLimitResponse = await applyRateLimit(request, readLimiter);
     if (rateLimitResponse) return rateLimitResponse;
     const { searchParams } = new URL(request.url);
-    const lat = parseFloat(searchParams.get('lat') || '0');
-    const lng = parseFloat(searchParams.get('lng') || '0');
-    const requestedRadiusKm = searchParams.has('radius')
-      ? parseInt(searchParams.get('radius')!, 10)
-      : null;
-    const expandRadius = searchParams.get('expandRadius') === 'true';
-    const minPosts = parseInt(searchParams.get('minPosts') || String(DEFAULT_MIN_POSTS), 10);
     const page = Math.max(0, parseInt(searchParams.get('page') || '0', 10));
     const sortParam = (searchParams.get('sort') || 'smart') as SortMode;
     const sort: SortMode = SORT_MODES.has(sortParam) ? sortParam : 'smart';
+    const fast = searchParams.get('fast') === 'true';
+
+    // ─── Phase 1: fast=true — global recent posts, no geo, no auth overhead ───
+    if (fast) {
+      const cacheKey = `feed:fast:${page}`;
+      const rawPosts: any[] = await getOrSetCache(cacheKey, 30, async () => {
+        const posts = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT ${POST_SELECT_COLS}
+           FROM "posts" p
+           JOIN "users" u ON p."creatorId" = u."id"
+           ORDER BY p."createdAt" DESC
+           LIMIT $1 OFFSET $2`,
+          PAGE_SIZE + 1,
+          page * PAGE_SIZE,
+        );
+        return posts.map(formatPost);
+      });
+
+      const hasMore = rawPosts.length > PAGE_SIZE;
+      const pagePosts = hasMore ? rawPosts.slice(0, PAGE_SIZE) : rawPosts;
+
+      // Skip auth + like status in fast mode for maximum speed
+      return NextResponse.json({
+        success: true,
+        data: { posts: pagePosts, page, hasMore, sort: 'recent', phase: 'fast' },
+      });
+    }
+
+    // ─── Phase 2: geo-sorted feed (single query, no radius expansion) ───
+    const lat = parseFloat(searchParams.get('lat') || '0');
+    const lng = parseFloat(searchParams.get('lng') || '0');
 
     if (!searchParams.has('lat') || !searchParams.has('lng') || isNaN(lat) || isNaN(lng)) {
       return NextResponse.json(
@@ -103,31 +199,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Determine the radius(es) to query.
-    // If expandRadius=true, the server tries increasing radius tiers
-    // until minPosts are found — replacing the client-side waterfall.
-    let radiusKm = requestedRadiusKm ?? DEFAULT_RADIUS_KM;
-    if (expandRadius && page === 0 && !requestedRadiusKm) {
-      for (const tier of RADIUS_TIERS_KM) {
-        const count = await prisma.$queryRawUnsafe<[{ count: bigint }]>(
-          `SELECT COUNT(*) as count FROM "posts" p
-           WHERE p."location" IS NOT NULL
-             AND ST_DWithin(p."location", ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography, $3)`,
-          lng, lat, tier * 1000,
-        );
-        const postCount = Number(count[0]?.count ?? 0);
-        radiusKm = tier;
-        if (postCount >= minPosts) break;
-      }
-    }
-
-    const radiusMeters = radiusKm * 1000;
-
-    // Get the authenticated user for like status + following boost
+    // Auth + following (run in parallel)
     const authUser = await getAuthUser(request);
     const userId = authUser?.id;
 
-    // Get IDs the user follows (for following signal)
     let followedIds: Set<string> = new Set();
     if (userId) {
       const follows = await prisma.follow.findMany({
@@ -137,117 +212,40 @@ export async function GET(request: NextRequest) {
       followedIds = new Set(follows.map(f => f.followingId));
     }
 
-    // Cache the RAW post pool (sort-agnostic, shared across all users & sort modes)
-    const poolCacheKey = cacheKeys.feed(lat, lng, radiusKm, 'pool');
+    // Single query: fetch posts ordered by distance (uses GiST index),
+    // no radius expansion — just grab the nearest RANKING_POOL_SIZE posts.
+    const poolCacheKey = cacheKeys.feed(lat, lng, 0, 'geo');
     const rawPosts: any[] = await getOrSetCache(poolCacheKey, cacheTTL.feed, async () => {
       const posts = await prisma.$queryRawUnsafe<any[]>(
-        `
-        SELECT
-          p."id",
-          p."creatorId",
-          p."postType",
-          p."content",
-          p."caption",
-          p."mediaUrl",
-          p."mediaUrls",
-          p."latitude",
-          p."longitude",
-          p."likeCount",
-          p."commentCount",
-          p."createdAt",
-          p."updatedAt",
-          u."id" as "creator_id",
-          u."username" as "creator_username",
-          u."displayName" as "creator_displayName",
-          u."avatarUrl" as "creator_avatarUrl",
-          u."bannerUrl" as "creator_bannerUrl",
-          u."tokenSymbol" as "creator_tokenSymbol",
-          u."socialLinks" as "creator_socialLinks",
-          u."followerCount" as "creator_followerCount",
-          u."postCount" as "creator_postCount",
-          ST_Distance(p."location", ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography) as "distanceMeters"
-        FROM "posts" p
-        JOIN "users" u ON p."creatorId" = u."id"
-        WHERE p."location" IS NOT NULL
-          AND ST_DWithin(
-            p."location",
-            ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography,
-            $3
-          )
-        ORDER BY p."createdAt" DESC
-        LIMIT $4
-        `,
-        lng, lat, radiusMeters, RANKING_POOL_SIZE,
+        `SELECT ${POST_SELECT_COLS},
+            ST_Distance(
+              p."location",
+              ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+            ) as "distanceMeters"
+         FROM "posts" p
+         JOIN "users" u ON p."creatorId" = u."id"
+         WHERE p."location" IS NOT NULL
+         ORDER BY p."location" <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
+         LIMIT $3`,
+        lng, lat, RANKING_POOL_SIZE,
       );
-
-      // Format for caching (serialize dates)
-      return posts.map((p: any) => ({
-        id: p.id,
-        creatorId: p.creatorId,
-        postType: p.postType,
-        content: p.content,
-        caption: p.caption,
-        mediaUrl: p.mediaUrl,
-        mediaUrls: Array.isArray(p.mediaUrls) ? p.mediaUrls : null,
-        latitude: p.latitude,
-        longitude: p.longitude,
-        likeCount: p.likeCount,
-        commentCount: p.commentCount,
-        createdAt: typeof p.createdAt === 'string' ? p.createdAt : new Date(p.createdAt).toISOString(),
-        updatedAt: typeof p.updatedAt === 'string' ? p.updatedAt : new Date(p.updatedAt).toISOString(),
-        distanceMeters: Math.round(Number(p.distanceMeters)),
-        creator: {
-          id: p.creator_id,
-          username: p.creator_username,
-          displayName: p.creator_displayName,
-          avatarUrl: p.creator_avatarUrl,
-          bannerUrl: p.creator_bannerUrl,
-          tokenSymbol: p.creator_tokenSymbol,
-          socialLinks: p.creator_socialLinks,
-          followerCount: p.creator_followerCount,
-          postCount: p.creator_postCount,
-        },
-      }));
+      return posts.map(formatPost);
     });
 
-    // Rank the full pool per-request (uses current user's following data + chosen sort)
+    // Rank with weighted scoring
     const ranked = rankPosts(rawPosts, sort, followedIds);
 
-    // Paginate: offset-based since score ordering doesn't support cursor
+    // Paginate
     const start = page * PAGE_SIZE;
     const sliced = ranked.slice(start, start + PAGE_SIZE + 1);
     const hasMore = sliced.length > PAGE_SIZE;
     const pagePosts = hasMore ? sliced.slice(0, PAGE_SIZE) : sliced;
 
-    // Compute isLiked per-user
-    let finalPosts = pagePosts.map((p: any) => ({
-      ...p,
-      isLiked: false,
-      _score: undefined,
-    }));
-
-    if (userId && finalPosts.length > 0) {
-      const postIds = finalPosts.map((p: any) => p.id);
-      const likedPosts = await prisma.like.findMany({
-        where: { userId, postId: { in: postIds } },
-        select: { postId: true },
-      });
-      const likedSet = new Set(likedPosts.map((l) => l.postId));
-      finalPosts = finalPosts.map((p: any) => ({
-        ...p,
-        isLiked: likedSet.has(p.id),
-      }));
-    }
+    const finalPosts = await attachLikeStatus(pagePosts, userId);
 
     return NextResponse.json({
       success: true,
-      data: {
-        posts: finalPosts,
-        page,
-        hasMore,
-        sort,
-        radiusKm,
-      },
+      data: { posts: finalPosts, page, hasMore, sort, phase: 'geo' },
     });
   } catch (error) {
     console.error('Feed error:', error);
