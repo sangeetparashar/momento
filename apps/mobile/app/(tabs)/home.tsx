@@ -283,7 +283,9 @@ export default function HomeScreen() {
     []
   );
 
-  if (feedQuery.isLoading) {
+  const showSkeleton = feedQuery.isLoading || (feedQuery.isFetching && posts.length === 0);
+
+  if (showSkeleton) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.header}>
@@ -293,8 +295,8 @@ export default function HomeScreen() {
               { key: 'FOR_YOU', label: 'For You' },
               { key: 'CREATORS_TO_WATCH', label: 'Trending' },
             ]}
-            activeTab="FOR_YOU"
-            onTabChange={() => {}}
+            activeTab={feedTab}
+            onTabChange={(key) => handleTabPress(key as FeedTab)}
             style={{ flex: 1, marginHorizontal: SPACING.xs }}
           />
           <View style={styles.headerIcon} />
