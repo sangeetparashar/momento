@@ -13,6 +13,20 @@ export enum KycStatus {
 
 export type ChainType = 'solana' | 'base';
 
+export enum TokenStatus {
+  PENDING = 'PENDING',
+  DEPLOYING = 'DEPLOYING',
+  ACTIVE = 'ACTIVE',
+  FAILED = 'FAILED',
+  GRADUATED = 'GRADUATED',
+}
+
+export enum PoolType {
+  BONDING_CURVE = 'BONDING_CURVE',
+  RAYDIUM = 'RAYDIUM',
+  AERODROME = 'AERODROME',
+}
+
 export enum PostType {
   TEXT = 'TEXT',
   IMAGE = 'IMAGE',
@@ -55,6 +69,33 @@ export interface User {
   followerCount: number;
   followingCount: number;
   postCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreatorToken {
+  id: string;
+  userId: string;
+  chain: ChainType;
+  name: string;
+  symbol: string;
+  description?: string;
+  imageUrl?: string;
+  mintAddress?: string;
+  decimals: number;
+  totalSupply: string;
+  circulatingSupply: string;
+  poolAddress?: string;
+  poolType?: PoolType;
+  bondingCurveParams?: {
+    slope: number;
+    basePrice: number;
+    reserveRatio: number;
+  };
+  status: TokenStatus;
+  deployTxSignature?: string;
+  deployedAt?: string;
+  graduatedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

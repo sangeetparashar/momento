@@ -15,19 +15,26 @@ import { Text } from '@/components/primitives';
 import {
   SwapModal,
   ComingSoonModal,
+  ChainSwitcher,
 } from '@/components/features';
 import { useWalletBalance } from '@/hooks';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useAuth } from '@/hooks/useAuth';
+import { useChain } from '@/hooks/useChain';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatCurrency, formatPercentage, truncateAddress } from '@/utils/formatters';
+import { CHAIN_CONFIG } from '@momento/shared';
 import { ENV } from '@/config/env';
 import type { TokenHolding } from '@momento/shared';
 
-function getSolscanUrl(address: string): string {
-  const cluster = ENV.SOLANA_NETWORK === 'devnet' ? '?cluster=devnet' : '';
-  return `https://solscan.io/account/${address}${cluster}`;
+function getExplorerAccountUrl(address: string, chain: 'solana' | 'base'): string {
+  const base = CHAIN_CONFIG[chain].explorerUrl;
+  if (chain === 'solana') {
+    const cluster = ENV.SOLANA_NETWORK === 'devnet' ? '?cluster=devnet' : '';
+    return `${base}/account/${address}${cluster}`;
+  }
+  return `${base}/address/${address}`;
 }
 
 export default function WalletScreen() {
@@ -35,17 +42,21 @@ export default function WalletScreen() {
   const walletQuery = useWalletBalance();
   const balance = walletQuery.data;
   const { user: profile } = useUserProfile();
-  const { walletAddress: clientWalletAddress, fundWallet, canFund } = useAuth();
+  const { walletAddress: solWalletAddress, ethWalletAddress } = useAuth();
+  const { chain } = useChain();
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Prefer the client-side wallet address (from Privy SDK), fall back to server profile
-  const walletAddress =
-    clientWalletAddress ||
-    (profile?.walletAddress && !profile.walletAddress.startsWith('pending-')
-      ? profile.walletAddress
-      : null);
+  const chainConfig = CHAIN_CONFIG[chain];
+
+  // Pick the correct wallet address for the active chain
+  const walletAddress = chain === 'base'
+    ? (ethWalletAddress || profile?.baseWalletAddress || null)
+    : (solWalletAddress ||
+        (profile?.walletAddress && !profile.walletAddress.startsWith('pending-')
+          ? profile.walletAddress
+          : null));
 
   const handleBuyPress = useCallback((_token: TokenHolding) => {
     setShowComingSoon(true);
@@ -56,18 +67,9 @@ export default function WalletScreen() {
   }, []);
 
   const handleBuyCrypto = useCallback(async () => {
-    if (canFund) {
-      try {
-        await fundWallet('native-currency');
-      } catch (err: any) {
-        if (!err?.message?.includes('cancelled')) {
-          console.error('[Wallet] Fund error:', err?.message);
-        }
-      }
-    } else {
-      setShowComingSoon(true);
-    }
-  }, [canFund, fundWallet]);
+    // Onramp is available via the FundWalletModal on the profile screen
+    setShowComingSoon(true);
+  }, []);
 
   const handleCopyAddress = useCallback(async () => {
     if (!walletAddress) return;
@@ -80,10 +82,10 @@ export default function WalletScreen() {
     setTimeout(() => setCopied(false), 2000);
   }, [walletAddress]);
 
-  const handleOpenSolscan = useCallback(() => {
+  const handleOpenExplorer = useCallback(() => {
     if (!walletAddress) return;
-    Linking.openURL(getSolscanUrl(walletAddress));
-  }, [walletAddress]);
+    Linking.openURL(getExplorerAccountUrl(walletAddress, chain));
+  }, [walletAddress, chain]);
 
   const change24h = balance?.change24h ?? 0;
   const isPositive = change24h >= 0;
@@ -96,7 +98,7 @@ export default function WalletScreen() {
           <Ionicons name="chevron-back" size={24} color={COLORS.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>Wallet</Text>
-        <Pressable onPress={handleOpenSolscan} hitSlop={8} disabled={!walletAddress}>
+        <Pressable onPress={handleOpenExplorer} hitSlop={8} disabled={!walletAddress}>
           <Ionicons
             name="open-outline"
             size={20}
@@ -109,15 +111,20 @@ export default function WalletScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
+        {/* Chain Switcher */}
+        <View style={styles.chainSwitcherRow}>
+          <ChainSwitcher />
+        </View>
+
         {/* Wallet Address Card */}
         {walletAddress ? (
           <View style={styles.addressCard}>
             <View style={styles.addressRow}>
-              <View style={styles.addressDot} />
-              <Text style={styles.addressLabel}>Solana Wallet</Text>
+              <View style={[styles.addressDot, { backgroundColor: chainConfig.iconColor }]} />
+              <Text style={styles.addressLabel}>{chainConfig.name} Wallet</Text>
               <View style={styles.networkBadge}>
                 <Text style={styles.networkText}>
-                  {ENV.SOLANA_NETWORK === 'devnet' ? 'DEVNET' : 'MAINNET'}
+                  {chain === 'solana' && ENV.SOLANA_NETWORK === 'devnet' ? 'DEVNET' : 'MAINNET'}
                 </Text>
               </View>
             </View>
@@ -132,8 +139,8 @@ export default function WalletScreen() {
                   color={copied ? COLORS.success : COLORS.textTertiary}
                 />
               </Pressable>
-              <Pressable onPress={handleOpenSolscan} style={styles.solscanButton}>
-                <Text style={styles.solscanText}>View on Solscan</Text>
+              <Pressable onPress={handleOpenExplorer} style={styles.explorerButton}>
+                <Text style={styles.explorerText}>View on {chainConfig.explorerName}</Text>
                 <Ionicons name="arrow-forward" size={14} color={COLORS.primary} />
               </Pressable>
             </View>
@@ -173,23 +180,26 @@ export default function WalletScreen() {
         {/* Asset Cards */}
         {balance && (
           <View style={styles.assetsSection}>
-            {/* SOL Card */}
+            {/* Native Token Card (SOL or ETH) */}
             <View style={styles.assetCard}>
               <View style={styles.assetLeft}>
-                <View style={[styles.assetIcon, { backgroundColor: '#9945FF' }]}>
-                  <Text style={styles.assetIconText}>&#9678;</Text>
+                <View style={[styles.assetIcon, { backgroundColor: chainConfig.iconColor }]}>
+                  <Text style={styles.assetIconText}>{chainConfig.nativeIcon}</Text>
                 </View>
                 <View>
-                  <Text style={styles.assetSymbol}>SOL</Text>
-                  <Text style={styles.assetName}>Solana</Text>
+                  <Text style={styles.assetSymbol}>{chainConfig.symbol}</Text>
+                  <Text style={styles.assetName}>{chainConfig.name}</Text>
                 </View>
               </View>
               <View style={styles.assetRight}>
                 <Text style={styles.assetAmount}>
-                  {balance.solBalance.toFixed(4)}
+                  {(balance.nativeBalance ?? balance.solBalance ?? 0).toFixed(4)}
                 </Text>
                 <Text style={styles.assetValue}>
-                  {formatCurrency(balance.solBalance * (balance.solPriceUsd ?? 0))}
+                  {formatCurrency(
+                    (balance.nativeBalance ?? balance.solBalance ?? 0) *
+                    (balance.nativePriceUsd ?? balance.solPriceUsd ?? 0)
+                  )}
                 </Text>
               </View>
             </View>
@@ -327,7 +337,6 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: COLORS.success,
   },
   addressLabel: {
     ...TYPOGRAPHY.body,
@@ -368,18 +377,23 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: 13,
   },
-  solscanButton: {
+  explorerButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingHorizontal: SPACING.sm,
     paddingVertical: SPACING.xs,
   },
-  solscanText: {
+  explorerText: {
     ...TYPOGRAPHY.caption,
     color: COLORS.primary,
     fontWeight: '600',
     fontSize: 13,
+  },
+  chainSwitcherRow: {
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    alignItems: 'flex-start',
   },
   // Balance
   balanceContainer: {

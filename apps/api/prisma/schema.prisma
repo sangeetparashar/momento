@@ -60,6 +60,7 @@ model User {
   following  Follow[]    @relation("follower")
   kycRecords KycRecord[]
   savedPosts SavedPost[]
+  creatorTokens CreatorToken[]
 
   @@index([role])
   @@index([locationLat, locationLng])
@@ -178,6 +179,50 @@ model Notification {
   @@index([userId, createdAt])
   @@index([userId, read])
   @@map("notifications")
+}
+
+enum TokenStatus {
+  PENDING
+  DEPLOYING
+  ACTIVE
+  FAILED
+  GRADUATED
+}
+
+enum PoolType {
+  BONDING_CURVE
+  RAYDIUM
+  AERODROME
+}
+
+model CreatorToken {
+  id                 String      @id @default(uuid())
+  userId             String
+  chain              String      // "solana" | "base"
+  name               String      // Display name, e.g. "Deel Token"
+  symbol             String      // Ticker, e.g. "DEEL"
+  description        String?
+  imageUrl           String?     // Token logo
+  mintAddress         String?     @unique // SPL mint (Solana) or ERC-20 contract (Base)
+  decimals           Int         @default(9) // 9 for Solana SPL, 18 for ERC-20
+  totalSupply        String      @default("1000000000") // String for precision
+  circulatingSupply  String      @default("0")
+  poolAddress        String?     // AMM pool or bonding curve contract
+  poolType           PoolType?
+  bondingCurveParams Json?       // { slope, basePrice, reserveRatio, ... }
+  status             TokenStatus @default(PENDING)
+  deployTxSignature  String?     // On-chain tx hash for deploy
+  deployedAt         DateTime?
+  graduatedAt        DateTime?   // When token moved from bonding curve to DEX
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  creator User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, chain])
+  @@index([chain, status])
+  @@index([symbol])
+  @@map("creator_tokens")
 }
 
 model PortfolioSnapshot {

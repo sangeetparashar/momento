@@ -56,8 +56,14 @@ export function ProfileDashboard({
   const [contentTab, setContentTab] = useState<'posts' | 'swap'>('posts');
 
   const displayName = user?.displayName || user?.username || 'PROFILE';
-  const change24h = (walletBalance as any)?.change24h ?? '0';
-  const earnings = (walletBalance as any)?.totalEarnings ?? '12.2K';
+  const change24h = walletBalance?.change24h as number | undefined;
+  const change24hStr = change24h != null
+    ? `${change24h >= 0 ? '+' : ''}${change24h.toFixed(1)}%`
+    : '—';
+  const earnings = walletBalance?.earningsToDate as number | undefined;
+  const earningsStr = earnings != null
+    ? `$${earnings >= 1000 ? (earnings / 1000).toFixed(1) + 'K' : earnings.toFixed(2)}`
+    : '—';
 
   const handleComingSoon = useCallback(() => {
     setShowComingSoon(true);
@@ -146,14 +152,14 @@ export function ProfileDashboard({
         <View style={styles.statsRow}>
           <StatsCard
             label="24H CHANGE"
-            value={String(change24h)}
+            value={isLoading ? '...' : change24hStr}
             variant="card"
-            valueColor="positive"
+            valueColor={change24h != null && change24h < 0 ? 'negative' : 'positive'}
             style={{ flex: 1 }}
           />
           <StatsCard
             label="EARNINGS TO DATE"
-            value={String(earnings)}
+            value={isLoading ? '...' : earningsStr}
             variant="card"
             valueColor="positive"
             style={{ flex: 1 }}
