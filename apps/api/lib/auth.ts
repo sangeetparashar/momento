@@ -74,7 +74,7 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
   if (!user) {
     // Fetch Privy user to get wallet addresses and email
     const privyUser = await getPrivy().getUser(privyUserId);
-    const email = privyUser.email?.address || privyUser.google?.email;
+    const email = privyUser.email?.address || privyUser.google?.email || (privyUser as any).apple?.email;
 
     // Extract Solana and Ethereum wallet addresses from linked accounts
     const solanaWallet = privyUser.linkedAccounts?.find(

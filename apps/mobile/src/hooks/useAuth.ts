@@ -7,6 +7,8 @@ import type { ChainType } from '@momento/shared';
 // Re-export for convenience
 export { usePrivyGuard };
 
+export type OAuthProvider = 'google' | 'apple' | 'twitter' | 'instagram' | 'tiktok';
+
 /**
  * Safe auth hook that works in both dev builds (with Privy) and Expo Go (without).
  * In Expo Go, returns mock values so the app runs in guest/preview mode.
@@ -18,10 +20,9 @@ export { usePrivyGuard };
 let _privyHooks: {
   usePrivy: any;
   useLoginWithOAuth: any;
+  useLoginWithEmail: any;
   useEmbeddedSolanaWallet: any;
   useEmbeddedEthereumWallet: any;
-  useLoginWithSiws: any;
-  useLoginWithSiwe: any;
 } | false | null = null;
 
 function getPrivyHooks() {
@@ -31,10 +32,9 @@ function getPrivyHooks() {
       _privyHooks = {
         usePrivy: privy.usePrivy,
         useLoginWithOAuth: privy.useLoginWithOAuth,
+        useLoginWithEmail: privy.useLoginWithEmail,
         useEmbeddedSolanaWallet: privy.useEmbeddedSolanaWallet,
         useEmbeddedEthereumWallet: privy.useEmbeddedEthereumWallet,
-        useLoginWithSiws: privy.useLoginWithSiws,
-        useLoginWithSiwe: privy.useLoginWithSiwe,
       };
     } catch {
       _privyHooks = false;
@@ -43,44 +43,24 @@ function getPrivyHooks() {
   return _privyHooks;
 }
 
-let _phantomHook: any = null;
-function getPhantomHook() {
-  if (_phantomHook === null) {
-    try {
-      const connectors = require('@privy-io/expo/connectors');
-      _phantomHook = connectors.usePhantomDeeplinkWalletConnector;
-    } catch {
-      _phantomHook = false;
-    }
-  }
-  return _phantomHook;
-}
-
 const GUEST_AUTH = {
   isReady: true,
   user: null,
-  login: async (_provider?: 'google' | 'instagram') => {
+  login: async (_provider?: OAuthProvider) => {
     console.warn('[useAuth] Privy not available in Expo Go — use a development build.');
   },
-  loginWithWallet: async () => {
-    console.warn('[useAuth] Privy not available in Expo Go — use a development build.');
-  },
-  generateSiwsMessage: async () => ({ message: '' }),
-  siwsLogin: async () => {},
   logout: async () => {},
   getAccessToken: async () => null,
   walletAddress: null as string | null,
   walletStatus: 'disconnected' as string,
   getWalletProvider: async () => null as any,
-  // Multi-chain (Base/ETH) fields
   ethWalletAddress: null as string | null,
   ethWalletStatus: 'disconnected' as string,
   getEthWalletProvider: async () => null as any,
-  loginWithEthWallet: async () => {
-    console.warn('[useAuth] Privy not available in Expo Go — use a development build.');
-  },
-  generateSiweMessage: async () => '',
-  siweLogin: async () => {},
+  // Email OTP
+  sendEmailCode: async (_email: string) => {},
+  loginWithEmailCode: async (_code: string) => {},
+  emailLoginState: 'initial' as string,
 };
 
 /**
@@ -105,16 +85,7 @@ export function useAuth() {
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const { login: oauthLogin } = hooks.useLoginWithOAuth();
   // eslint-disable-next-line react-hooks/rules-of-hooks
-  const siws = hooks.useLoginWithSiws();
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const siwe = hooks.useLoginWithSiwe({
-    onSuccess: () => {
-      console.log('[useAuth] SIWE login success');
-    },
-    onError: (err: any) => {
-      console.warn('[useAuth] SIWE login error:', err?.message || err);
-    },
-  });
+  const emailAuth = hooks.useLoginWithEmail();
   // eslint-disable-next-line react-hooks/rules-of-hooks
   const { setAvailableChains } = useChain();
 
@@ -159,13 +130,11 @@ export function useAuth() {
     }
   }, [privy.user, solanaWallet.status]);
 
-  // ETH wallet doesn't have a `status` field — derive from `wallets.length`.
-  // Auto-create when user is logged in but no ETH wallet exists yet.
+  // Auto-create ETH wallet after Solana wallet.
   // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
     const hasEthWallet = (ethWallet?.wallets?.length ?? 0) > 0;
     if (privy.user && !hasEthWallet && !ethCreatingRef.current) {
-      // 2000ms delay (after Solana's 1500ms) to avoid hammering Privy on cold start.
       const timer = setTimeout(() => {
         if (ethCreatingRef.current) return;
         console.log('[useAuth] User logged in but no ETH wallet — creating...');
@@ -227,8 +196,6 @@ export function useAuth() {
 
   /**
    * Returns the Privy Solana provider for signing transactions.
-   * The provider supports signAndSendTransaction with both legacy
-   * Transaction and VersionedTransaction objects.
    */
   const getWalletProvider = async () => {
     if (
@@ -260,86 +227,12 @@ export function useAuth() {
     }
   };
 
-  /**
-   * Login with an external Solana wallet via SIWS (Sign In With Solana).
-   */
-  const loginWithWallet = async (
-    externalAddress: string,
-    signMessage: (message: string) => Promise<{ signature: string }>,
-    walletMeta?: { walletClientType?: string; connectorType?: string },
-  ) => {
-    console.log('[useAuth] Starting SIWS login for wallet:', externalAddress);
-
-    const { message } = await siws.generateMessage({
-      wallet: { address: externalAddress },
-      from: {
-        domain: 'momento.app',
-        uri: 'https://momento.app',
-      },
-    });
-
-    const { signature } = await signMessage(message);
-
-    await siws.login({
-      signature,
-      message,
-      wallet: {
-        walletClientType: walletMeta?.walletClientType ?? 'phantom',
-        connectorType: walletMeta?.connectorType ?? 'deeplink',
-      },
-    });
-
-    console.log('[useAuth] SIWS login complete');
-  };
-
-  /**
-   * Login with an external Ethereum/Base wallet via SIWE (Sign In With Ethereum / EIP-4361).
-   *
-   * Note: Privy's `useLoginWithSiwe` returns `generateSiweMessage` (resolves to a `string`,
-   * NOT `{message}`) and `loginWithSiwe` (which caches the message internally and only
-   * needs the signature).
-   */
-  const loginWithEthWallet = async (
-    externalAddress: string,
-    signMessage: (message: string) => Promise<{ signature: string }>,
-    _walletMeta?: { walletClientType?: string; connectorType?: string },
-  ) => {
-    if (!siwe) {
-      throw new Error('SIWE login not available');
-    }
-    console.log('[useAuth] Starting SIWE login for wallet:', externalAddress);
-
-    const message: string = await siwe.generateSiweMessage({
-      wallet: { address: externalAddress },
-      from: {
-        domain: 'momento.app',
-        uri: 'https://momento.app',
-      },
-    });
-
-    const { signature } = await signMessage(message);
-
-    await siwe.loginWithSiwe({
-      signature,
-      // The hook caches the generated message internally; messageOverride only
-      // needed if the message we sent differs from cache. We pass it for safety.
-      messageOverride: message,
-    });
-
-    console.log('[useAuth] SIWE login complete');
-  };
-
   return {
     isReady: privy.isReady,
     user: privy.user,
-    login: async (provider: 'google' | 'instagram' = 'google') => {
+    login: async (provider: OAuthProvider = 'google') => {
       await oauthLogin({ provider });
     },
-    loginWithWallet,
-    /** Generate a SIWS message for an external wallet address. */
-    generateSiwsMessage: siws.generateMessage,
-    /** Complete SIWS login with a pre-signed message. */
-    siwsLogin: siws.login,
     logout: async () => {
       queryClient.cancelQueries();
       queryClient.clear();
@@ -353,10 +246,13 @@ export function useAuth() {
     ethWalletAddress,
     ethWalletStatus,
     getEthWalletProvider,
-    loginWithEthWallet,
-    /** Generate a SIWE (EIP-4361) message for an external Ethereum wallet. */
-    generateSiweMessage: siwe?.generateSiweMessage,
-    /** Complete SIWE login with a pre-signed message. */
-    siweLogin: siwe?.loginWithSiwe,
+    // Email OTP login
+    sendEmailCode: async (email: string) => {
+      await emailAuth.sendCode({ email });
+    },
+    loginWithEmailCode: async (code: string) => {
+      await emailAuth.loginWithCode({ code });
+    },
+    emailLoginState: emailAuth.state as string,
   };
 }
