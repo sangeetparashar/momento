@@ -27,3 +27,9 @@ export const ENV = {
   /** Whether the app is running in development mode */
   IS_DEV: __DEV__,
 } as const;
+
+if (__DEV__) {
+  console.log('[ENV] API_URL =', ENV.API_URL);
+  console.log('[ENV] PRIVY_APP_ID =', ENV.PRIVY_APP_ID || '(empty)');
+  console.log('[ENV] SOLANA_NETWORK =', ENV.SOLANA_NETWORK);
+}

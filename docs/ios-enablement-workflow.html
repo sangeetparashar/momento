@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Momento iOS Enablement Workflow</title>
+<style>
+  :root {
+    --bg: #0D0D0D;
+    --surface: #1A1A1A;
+    --surface2: #242424;
+    --border: #333;
+    --text: #E5E5E5;
+    --text-dim: #888;
+    --accent: #00FF88;
+    --accent-dim: #00CC6A;
+    --warning: #FFB800;
+    --error: #FF4444;
+    --blue: #4A9EFF;
+    --purple: #A855F7;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  header h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 0.5rem;
+  }
+
+  header p { color: var(--text-dim); font-size: 1.1rem; }
+
+  /* Status banner */
+  .status-banner {
+    background: linear-gradient(135deg, rgba(74,158,255,0.1), rgba(0,255,136,0.1));
+    border: 1px solid rgba(74,158,255,0.3);
+    border-radius: 16px;
+    padding: 1.5rem 2rem;
+    margin-bottom: 2rem;
+  }
+
+  .status-banner h2 {
+    font-size: 1.2rem;
+    margin-bottom: 0.75rem;
+    color: var(--blue);
+  }
+
+  .status-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .status-col h3 {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 0.5rem;
+  }
+
+  .status-col.done h3 { color: var(--accent); }
+  .status-col.remaining h3 { color: var(--warning); }
+
+  .status-col ul {
+    list-style: none;
+    font-size: 0.9rem;
+  }
+
+  .status-col ul li {
+    padding: 3px 0;
+    padding-left: 1.2rem;
+    position: relative;
+  }
+
+  .status-col.done ul li::before {
+    content: '\2713';
+    position: absolute;
+    left: 0;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .status-col.remaining ul li::before {
+    content: '\25CB';
+    position: absolute;
+    left: 0;
+    color: var(--warning);
+  }
+
+  /* Progress bar */
+  .progress-bar-container {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 1.5rem 2rem;
+    margin-bottom: 2rem;
+    border: 1px solid var(--border);
+    position: sticky;
+    top: 1rem;
+    z-index: 100;
+    backdrop-filter: blur(10px);
+  }
+
+  .progress-bar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+  }
+
+  .progress-bar-header span { font-weight: 600; }
+  .progress-bar-header .count { color: var(--accent); font-size: 1.1rem; }
+
+  .progress-track {
+    background: var(--surface2);
+    border-radius: 8px;
+    height: 12px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--blue));
+    border-radius: 8px;
+    transition: width 0.5s ease;
+    width: 0%;
+  }
+
+  /* Phases */
+  .phase {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+    transition: border-color 0.3s;
+  }
+
+  .phase.completed { border-color: var(--accent-dim); }
+  .phase.active { border-color: var(--blue); }
+
+  .phase-header {
+    padding: 1.25rem 1.5rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    user-select: none;
+  }
+
+  .phase-header:hover { background: var(--surface2); }
+
+  .phase-number {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1rem;
+    flex-shrink: 0;
+    background: var(--surface2);
+    border: 2px solid var(--border);
+    color: var(--text-dim);
+  }
+
+  .phase.completed .phase-number {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+  }
+
+  .phase.active .phase-number {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: white;
+  }
+
+  .phase-info { flex: 1; }
+  .phase-title { font-weight: 600; font-size: 1.15rem; }
+  .phase-meta { color: var(--text-dim); font-size: 0.85rem; margin-top: 2px; }
+
+  .phase-status {
+    font-size: 0.8rem;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .status-pending { background: var(--surface2); color: var(--text-dim); }
+  .status-active { background: rgba(74,158,255,0.15); color: var(--blue); }
+  .status-done { background: rgba(0,255,136,0.15); color: var(--accent); }
+
+  .phase-chevron {
+    font-size: 1.2rem;
+    color: var(--text-dim);
+    transition: transform 0.3s;
+  }
+
+  .phase.open .phase-chevron { transform: rotate(90deg); }
+
+  .phase-body {
+    display: none;
+    padding: 0 1.5rem 1.5rem;
+  }
+
+  .phase.open .phase-body { display: block; }
+
+  /* Tasks */
+  .task {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--surface2);
+  }
+
+  .task:last-child { border-bottom: none; }
+
+  .task-check {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    border: 2px solid var(--border);
+    cursor: pointer;
+    flex-shrink: 0;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    background: transparent;
+  }
+
+  .task-check:hover { border-color: var(--accent); }
+
+  .task-check.checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .task-check.checked::after {
+    content: '\2713';
+    color: var(--bg);
+    font-weight: 700;
+    font-size: 14px;
+  }
+
+  .task-content { flex: 1; }
+  .task-label { font-size: 0.95rem; }
+
+  .task.done .task-label {
+    text-decoration: line-through;
+    color: var(--text-dim);
+  }
+
+  .task-detail {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .task-tag {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+
+  .tag-portal { background: rgba(168,85,247,0.15); color: var(--purple); }
+  .tag-code { background: rgba(0,255,136,0.15); color: var(--accent); }
+  .tag-terminal { background: rgba(74,158,255,0.15); color: var(--blue); }
+  .tag-test { background: rgba(255,184,0,0.15); color: var(--warning); }
+  .tag-blocker { background: rgba(255,68,68,0.2); color: var(--error); }
+  .tag-done { background: rgba(0,255,136,0.1); color: var(--accent-dim); }
+  .tag-you { background: rgba(255,184,0,0.2); color: var(--warning); border: 1px solid rgba(255,184,0,0.3); }
+  .tag-claude { background: rgba(74,158,255,0.15); color: var(--blue); }
+
+  .code-block {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 0.82rem;
+    margin-top: 0.5rem;
+    overflow-x: auto;
+    color: var(--accent);
+  }
+
+  .note-box {
+    background: rgba(74,158,255,0.08);
+    border: 1px solid rgba(74,158,255,0.2);
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0 0.5rem;
+    font-size: 0.88rem;
+  }
+
+  .note-box.warning {
+    background: rgba(255,184,0,0.08);
+    border-color: rgba(255,184,0,0.2);
+  }
+
+  .note-box.success {
+    background: rgba(0,255,136,0.06);
+    border-color: rgba(0,255,136,0.2);
+  }
+
+  .note-box.action {
+    background: rgba(255,68,68,0.06);
+    border-color: rgba(255,68,68,0.25);
+  }
+
+  .note-box strong { color: var(--blue); }
+  .note-box.warning strong { color: var(--warning); }
+  .note-box.success strong { color: var(--accent); }
+  .note-box.action strong { color: var(--error); }
+
+  /* Credential card */
+  .cred-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+    margin: 1rem 0;
+  }
+
+  .cred-card h4 {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.75rem;
+  }
+
+  .cred-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--surface2);
+    font-size: 0.9rem;
+  }
+
+  .cred-row:last-child { border-bottom: none; }
+  .cred-row .label { color: var(--text-dim); }
+
+  .cred-row .value { font-family: 'SF Mono', monospace; }
+  .cred-row .value.done { color: var(--accent); }
+  .cred-row .value.missing { color: var(--error); }
+
+  /* Reference table */
+  .ref-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+    font-size: 0.85rem;
+  }
+
+  .ref-table th {
+    text-align: left;
+    padding: 0.5rem;
+    border-bottom: 2px solid var(--border);
+    color: var(--text-dim);
+    font-weight: 600;
+  }
+
+  .ref-table td {
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--surface2);
+  }
+
+  .ref-table code {
+    background: var(--bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: var(--accent);
+  }
+
+  footer {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    border-top: 1px solid var(--border);
+    margin-top: 2rem;
+  }
+
+  @media (max-width: 768px) {
+    body { padding: 1rem; }
+    header h1 { font-size: 1.8rem; }
+    .phase-header { padding: 1rem; }
+    .phase-body { padding: 0 1rem 1rem; }
+    .status-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Momento iOS Enablement</h1>
+  <p>Android App -> iOS TestFlight Deployment Workflow</p>
+  <p style="margin-top: 0.5rem; color: var(--accent); font-size: 0.9rem;">iOS Bundle ID: com.momento.network | Expo SDK 54 | React Native 0.81.5</p>
+</header>
+
+<!-- Current status summary -->
+<div class="status-banner">
+  <h2>Current Status &mdash; Updated Apr 14, 2026</h2>
+  <div class="status-grid">
+    <div class="status-col done">
+      <h3>Already Done</h3>
+      <ul>
+        <li>Apple Developer Account active (brian@mylz.run)</li>
+        <li>Team ID: 9BJL3C9DHA</li>
+        <li>App registered in App Store Connect (ID: 6762237065)</li>
+        <li>Bundle ID registered: com.momento.network</li>
+        <li>APNs key created (Key ID: 7PA9M865VN)</li>
+        <li>iOS permissions added to app.json</li>
+        <li>Encryption declaration set (skip compliance popup)</li>
+        <li>All EAS config filled (no more placeholders)</li>
+        <li>development-device EAS profile created</li>
+        <li>All code is cross-platform compatible</li>
+      </ul>
+    </div>
+    <div class="status-col remaining">
+      <h3>You Still Need To Do</h3>
+      <ul>
+        <li>Upload APNs key to EAS (terminal command)</li>
+        <li>Commit code changes (tell Claude)</li>
+        <li>Run first iOS simulator build</li>
+        <li>Run first iOS device build + test</li>
+        <li>Deploy to TestFlight + add testers</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- Credential card -->
+<div class="cred-card">
+  <h4>Your Apple Credentials (eas.json)</h4>
+  <div class="cred-row">
+    <span class="label">Apple ID</span>
+    <span class="value done">brian@mylz.run</span>
+  </div>
+  <div class="cred-row">
+    <span class="label">Team ID</span>
+    <span class="value done">9BJL3C9DHA</span>
+  </div>
+  <div class="cred-row">
+    <span class="label">App Store Connect App ID</span>
+    <span class="value done">6762237065</span>
+  </div>
+  <div class="cred-row">
+    <span class="label">iOS Bundle ID</span>
+    <span class="value done">com.momento.network</span>
+  </div>
+  <div class="cred-row">
+    <span class="label">Android Package</span>
+    <span class="value done">com.momento.app (unchanged, matches Firebase)</span>
+  </div>
+  <div class="cred-row">
+    <span class="label">APNs Key ID</span>
+    <span class="value done">7PA9M865VN</span>
+  </div>
+</div>
+
+<!-- Progress bar -->
+<div class="progress-bar-container">
+  <div class="progress-bar-header">
+    <span>Overall Progress</span>
+    <span class="count" id="progress-text">0 / 0 tasks</span>
+  </div>
+  <div class="progress-track">
+    <div class="progress-fill" id="progress-fill"></div>
+  </div>
+</div>
+
+<div id="phases">
+
+  <!-- Phase 1: DONE -->
+  <div class="phase completed" data-phase="1">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-number">1</div>
+      <div class="phase-info">
+        <div class="phase-title">Apple Developer Account</div>
+        <div class="phase-meta">Already active &mdash; brian@mylz.run | Team: 9BJL3C9DHA</div>
+      </div>
+      <span class="phase-status status-done">Done</span>
+      <span class="phase-chevron">&#9654;</span>
+    </div>
+    <div class="phase-body">
+      <div class="note-box success">
+        <strong>Already complete.</strong> Your account is active with Account Holder + Admin roles. No action needed.
+      </div>
+      <div class="task done" data-task="1.1">
+        <div class="task-check checked" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Apple Developer enrollment active</div>
+          <div class="task-detail">Account: brian@mylz.run | Team ID: 9BJL3C9DHA | Roles: Account Holder, Admin</div>
+        </div>
+      </div>
+      <div class="task done" data-task="1.2">
+        <div class="task-check checked" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Team ID recorded and written to eas.json</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 2: CODE CHANGES (DONE) -->
+  <div class="phase completed" data-phase="2">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-number">2</div>
+      <div class="phase-info">
+        <div class="phase-title">Code Changes (Claude)</div>
+        <div class="phase-meta">All config changes applied by Claude</div>
+      </div>
+      <span class="phase-status status-done">Done</span>
+      <span class="phase-chevron">&#9654;</span>
+    </div>
+    <div class="phase-body">
+      <div class="note-box success">
+        <strong>All code changes applied.</strong> Only remaining config item is the numeric ascAppId (Phase 3).
+      </div>
+      <div class="task done" data-task="2.1">
+        <div class="task-check checked" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">app.json: Added NSPhotoLibraryUsageDescription <span class="task-tag tag-done">Done</span></div>
+          <div class="task-detail">"Momento needs access to your photos to create posts."</div>
+        </div>
+      </div>
+      <div class="task done" data-task="2.2">
+        <div class="task-check checked" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">app.json: Added NSCameraUsageDescription <span class="task-tag tag-done">Done</span></div>
+          <div class="task-detail">"Momento needs camera access to take photos for posts."</div>
+        </div>
+      </div>
+      <div class="task done" data-task="2.3">
+        <div class="task-check checked" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">app.json: Set ITSAppUsesNonExemptEncryption = false <span class="task-tag tag-done">Done</span></div>
+          <div class="task-detail">Skips the export compliance popup on every TestFlight upload</div>
+        </div>
+      </div>
+      <div class="task done" data-task="2.4">
+        <div class="task-check checked" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">eas.json: Added development-device profile <span class="task-tag tag-done">Done</span></div>
+          <div class="task-detail">For physical iPhone builds (no simulator flag)</div>
+        </div>
+      </div>
+      <div class="task done" data-task="2.5">
+        <div class="task-check checked" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">eas.json: Apple ID + Team ID filled in <span class="task-tag tag-done">Done</span></div>
+          <div class="task-detail">appleId: brian@mylz.run | appleTeamId: 9BJL3C9DHA</div>
+        </div>
+      </div>
+      <div class="task done" data-task="2.6">
+        <div class="task-check checked" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">useAuth.ts: console.error already fixed to console.warn <span class="task-tag tag-done">Done</span></div>
+          <div class="task-detail">Fixed in a prior session &mdash; no red screen on dev builds</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 3: App Store Connect — DONE -->
+  <div class="phase completed" data-phase="3">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-number">3</div>
+      <div class="phase-info">
+        <div class="phase-title">Register App in App Store Connect</div>
+        <div class="phase-meta">Completed &mdash; "Momento Network" | App ID: 6762237065</div>
+      </div>
+      <span class="phase-status status-done">Done</span>
+      <span class="phase-chevron">&#9654;</span>
+    </div>
+    <div class="phase-body">
+      <div class="note-box success">
+        <strong>Completed.</strong> App registered as "Momento Network" with bundle ID com.momento.network. All values written to eas.json.
+      </div>
+      <div class="task done" data-task="3.1">
+        <div class="task-check checked" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Bundle ID registered: com.momento.network <span class="task-tag tag-done">Done</span></div>
+        </div>
+      </div>
+      <div class="task done" data-task="3.2">
+        <div class="task-check checked" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">App created in App Store Connect: "Momento Network" <span class="task-tag tag-done">Done</span></div>
+          <div class="task-detail">SKU: momento-ios-001 | Apple ID: 6762237065</div>
+        </div>
+      </div>
+      <div class="task done" data-task="3.3">
+        <div class="task-check checked" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">ascAppId written to eas.json: 6762237065 <span class="task-tag tag-done">Done</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 4: APNs Key — Key downloaded, needs EAS upload -->
+  <div class="phase active open" data-phase="4">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-number">4</div>
+      <div class="phase-info">
+        <div class="phase-title">Upload APNs Key to EAS</div>
+        <div class="phase-meta">Key downloaded (7PA9M865VN) &mdash; just needs EAS upload</div>
+      </div>
+      <span class="phase-status status-active">Next Step</span>
+      <span class="phase-chevron">&#9654;</span>
+    </div>
+    <div class="phase-body">
+      <div class="note-box success">
+        <strong>APNs key already created and downloaded.</strong> Key file copied to <code style="color: var(--accent);">apps/mobile/AuthKey_7PA9M865VN.p8</code> (gitignored). Just needs to be uploaded to EAS.
+      </div>
+      <div class="task done" data-task="4.1">
+        <div class="task-check checked" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">APNs key created: "Momento Push Key" <span class="task-tag tag-done">Done</span></div>
+          <div class="task-detail">Key ID: 7PA9M865VN | File: AuthKey_7PA9M865VN.p8 | Service: Apple Push Notifications</div>
+        </div>
+      </div>
+      <div class="task" data-task="4.2">
+        <div class="task-check" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Upload APNs key to EAS <span class="task-tag tag-terminal">Terminal</span></div>
+          <div class="task-detail">
+            Run this on your Mac:
+            <div class="code-block">cd apps/mobile && eas credentials --platform ios</div>
+            <ul style="margin-top: 4px; padding-left: 1.2rem; color: var(--text-dim); font-size: 0.82rem;">
+              <li>Select "Push Notifications: Manage your Apple Push Notifications Key"</li>
+              <li>Select "Upload a Push Notifications Key"</li>
+              <li>Path: <code style="color: var(--accent);">./AuthKey_7PA9M865VN.p8</code></li>
+              <li>Key ID: <code style="color: var(--accent);">7PA9M865VN</code></li>
+              <li>Team ID: <code style="color: var(--accent);">9BJL3C9DHA</code></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 5: Commit -->
+  <div class="phase" data-phase="5">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-number">5</div>
+      <div class="phase-info">
+        <div class="phase-title">Commit All Changes</div>
+        <div class="phase-meta">~1 minute | Claude does this</div>
+      </div>
+      <span class="phase-status status-pending">Pending</span>
+      <span class="phase-chevron">&#9654;</span>
+    </div>
+    <div class="phase-body">
+      <div class="note-box">
+        <strong>Tell Claude to commit</strong> once you've provided the ascAppId. Claude will commit all changes in one go.
+      </div>
+      <div class="task" data-task="5.1">
+        <div class="task-check" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Commit prior uncommitted changes (env.ts, AuthBridge.tsx, api.ts) <span class="task-tag tag-claude">Claude</span></div>
+        </div>
+      </div>
+      <div class="task" data-task="5.2">
+        <div class="task-check" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Commit iOS enablement changes (app.json, eas.json, docs) <span class="task-tag tag-claude">Claude</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 6: Simulator Build -->
+  <div class="phase" data-phase="6">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-number">6</div>
+      <div class="phase-info">
+        <div class="phase-title">First iOS Build &mdash; Simulator</div>
+        <div class="phase-meta">~15-30 min cloud build | Terminal on Mac</div>
+      </div>
+      <span class="phase-status status-pending">Pending</span>
+      <span class="phase-chevron">&#9654;</span>
+    </div>
+    <div class="phase-body">
+      <div class="task" data-task="6.1">
+        <div class="task-check" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Run EAS iOS simulator build <span class="task-tag tag-terminal">Terminal</span></div>
+          <div class="task-detail">
+            <div class="code-block">cd apps/mobile && eas build --profile development --platform ios</div>
+            First time: prompts for Apple ID login + 2FA. Let EAS manage certificates.
+          </div>
+        </div>
+      </div>
+      <div class="task" data-task="6.2">
+        <div class="task-check" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Install + test on iOS Simulator <span class="task-tag tag-test">Test</span></div>
+          <div class="task-detail">
+            Download .app from Expo dashboard, drag into Simulator (Xcode required). Verify:
+            <ul style="margin-top: 4px; padding-left: 1.2rem; color: var(--text-dim); font-size: 0.82rem;">
+              <li>App launches, splash screen displays</li>
+              <li>Login screen renders, Google OAuth works</li>
+              <li>Location permission prompt appears</li>
+              <li>Feed loads, bottom tabs navigate</li>
+              <li>Wallet screen accessible</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 7: Device Build -->
+  <div class="phase" data-phase="7">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-number">7</div>
+      <div class="phase-info">
+        <div class="phase-title">iOS Build &mdash; Physical iPhone</div>
+        <div class="phase-meta">~20-35 min | Requires iPhone for UDID registration</div>
+      </div>
+      <span class="phase-status status-pending">Pending</span>
+      <span class="phase-chevron">&#9654;</span>
+    </div>
+    <div class="phase-body">
+      <div class="task" data-task="7.1">
+        <div class="task-check" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Run EAS device build <span class="task-tag tag-terminal">Terminal</span></div>
+          <div class="task-detail">
+            <div class="code-block">eas build --profile development-device --platform ios</div>
+            EAS shows QR code &rarr; scan on iPhone to register UDID
+          </div>
+        </div>
+      </div>
+      <div class="task" data-task="7.2">
+        <div class="task-check" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Full device smoke test <span class="task-tag tag-test">Test</span></div>
+          <div class="task-detail">
+            <ul style="padding-left: 1.2rem; color: var(--text-dim); font-size: 0.82rem;">
+              <li>Google OAuth login</li>
+              <li>Location accuracy (GPS)</li>
+              <li>Push notification prompt</li>
+              <li>Photo picker + camera access</li>
+              <li>Deep link: momento:// scheme</li>
+              <li>Privy wallet creation + sign tx</li>
+              <li>Smooth scrolling, no crashes</li>
+              <li>Haptic feedback</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 8: TestFlight -->
+  <div class="phase" data-phase="8">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-number">8</div>
+      <div class="phase-info">
+        <div class="phase-title">TestFlight Deployment</div>
+        <div class="phase-meta">~45 min - 2 hours | Build + submit + add testers</div>
+      </div>
+      <span class="phase-status status-pending">Pending</span>
+      <span class="phase-chevron">&#9654;</span>
+    </div>
+    <div class="phase-body">
+      <div class="task" data-task="8.1">
+        <div class="task-check" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Build production iOS <span class="task-tag tag-terminal">Terminal</span></div>
+          <div class="task-detail">
+            <div class="code-block">eas build --profile production --platform ios</div>
+          </div>
+        </div>
+      </div>
+      <div class="task" data-task="8.2">
+        <div class="task-check" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Create App-Specific Password <span class="task-tag tag-you">You</span></div>
+          <div class="task-detail">
+            <ol style="padding-left: 1.2rem; color: var(--text-dim); font-size: 0.82rem;">
+              <li>Go to <a href="https://appleid.apple.com/account/manage" style="color: var(--blue);">appleid.apple.com/account/manage</a></li>
+              <li>Sign-In and Security &rarr; App-Specific Passwords &rarr; "+"</li>
+              <li>Label: <code style="color: var(--accent);">EAS Submit</code></li>
+              <li>Copy the password (format: xxxx-xxxx-xxxx-xxxx)</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+      <div class="task" data-task="8.3">
+        <div class="task-check" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Submit to App Store Connect <span class="task-tag tag-terminal">Terminal</span></div>
+          <div class="task-detail">
+            <div class="code-block">eas submit --platform ios --latest</div>
+            Enter App-Specific Password when prompted. Upload takes ~5-10 min.
+          </div>
+        </div>
+      </div>
+      <div class="task" data-task="8.4">
+        <div class="task-check" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Wait for build processing in TestFlight <span class="task-tag tag-portal">Portal</span></div>
+          <div class="task-detail">App Store Connect &rarr; Momento &rarr; TestFlight tab &rarr; wait for yellow &rarr; green (~5-30 min)</div>
+        </div>
+      </div>
+      <div class="task" data-task="8.5">
+        <div class="task-check" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Create Internal Testing group + add testers <span class="task-tag tag-you">You</span></div>
+          <div class="task-detail">
+            TestFlight &rarr; "+" &rarr; "New Internal Group" &rarr; Name: "Team" &rarr; add testers by Apple ID email.
+            Internal: up to 100 testers. External: up to 10,000 (requires Beta App Review ~24-48 hrs).
+          </div>
+        </div>
+      </div>
+      <div class="task" data-task="8.6">
+        <div class="task-check" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Verify tester can install + use the app <span class="task-tag tag-test">Test</span></div>
+          <div class="task-detail">Testers: download TestFlight app &rarr; accept invitation email &rarr; install Momento &rarr; verify full flow works</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 9: Future -->
+  <div class="phase" data-phase="9">
+    <div class="phase-header" onclick="togglePhase(this)">
+      <div class="phase-number">9</div>
+      <div class="phase-info">
+        <div class="phase-title">Future: App Store Submission</div>
+        <div class="phase-meta">Not needed for TestFlight &mdash; for when you want to go public</div>
+      </div>
+      <span class="phase-status status-pending">Later</span>
+      <span class="phase-chevron">&#9654;</span>
+    </div>
+    <div class="phase-body">
+      <div class="note-box">
+        <strong>Not blocking TestFlight.</strong> Only needed when you want to submit to the public App Store.
+      </div>
+      <div class="task" data-task="9.1">
+        <div class="task-check" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Capture iOS screenshots (6.9" + 6.7")</div>
+          <div class="task-detail">1320x2868 (iPhone 16 Pro Max) + 1290x2796 (iPhone 16 Plus)</div>
+        </div>
+      </div>
+      <div class="task" data-task="9.2">
+        <div class="task-check" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Create Privacy Policy URL (required by Apple)</div>
+        </div>
+      </div>
+      <div class="task" data-task="9.3">
+        <div class="task-check" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Write app description + keywords (100 char max)</div>
+        </div>
+      </div>
+      <div class="task" data-task="9.4">
+        <div class="task-check" onclick="toggleTask(this)"></div>
+        <div class="task-content">
+          <div class="task-label">Complete age rating questionnaire + App Review notes</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- App Store name note -->
+<div style="background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; margin-top: 1rem;">
+  <h3 style="margin-bottom: 0.75rem;">About the App Name</h3>
+  <p style="font-size: 0.9rem; color: var(--text-dim);">
+    You can have <strong style="color: var(--text);">different names</strong> in different places:
+  </p>
+  <table class="ref-table" style="margin-top: 0.75rem;">
+    <tr><th>Where</th><th>Current Value</th><th>How to Change</th></tr>
+    <tr>
+      <td>Home screen (under icon)</td>
+      <td><code>Momento</code></td>
+      <td>Edit <code>app.json</code> &rarr; <code>"name"</code></td>
+    </tr>
+    <tr>
+      <td>App Store listing</td>
+      <td><code>Momento Network</code></td>
+      <td>App Store Connect &rarr; App Information &rarr; Name (changeable with each version update)</td>
+    </tr>
+  </table>
+  <p style="font-size: 0.85rem; color: var(--text-dim); margin-top: 0.75rem;">
+    Example: Icon says "Momento" but App Store says "Momento - Discover Local Creators". Not a blocker &mdash; change anytime.
+  </p>
+</div>
+
+<!-- Reference -->
+<div style="background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; margin-top: 1rem;">
+  <h3 style="margin-bottom: 1rem;">Files Changed by Claude</h3>
+  <table class="ref-table">
+    <tr><th>File</th><th>What Changed</th><th>Status</th></tr>
+    <tr>
+      <td><code>apps/mobile/app.json</code></td>
+      <td>Added 3 iOS infoPlist keys (photo, camera, encryption)</td>
+      <td style="color: var(--accent);">Done</td>
+    </tr>
+    <tr>
+      <td><code>apps/mobile/eas.json</code></td>
+      <td>Added dev-device profile, filled all Apple credentials (ascAppId: 6762237065)</td>
+      <td style="color: var(--accent);">Done</td>
+    </tr>
+    <tr>
+      <td><code>apps/mobile/app.json</code></td>
+      <td>iOS bundleIdentifier changed to com.momento.network (Android stays com.momento.app)</td>
+      <td style="color: var(--accent);">Done</td>
+    </tr>
+    <tr>
+      <td><code>.gitignore</code></td>
+      <td>Added AuthKey_*.p8 to prevent committing APNs keys</td>
+      <td style="color: var(--accent);">Done</td>
+    </tr>
+    <tr>
+      <td><code>docs/IOS_ENABLEMENT_CHECKLIST.md</code></td>
+      <td>Full 42-task checklist (new file)</td>
+      <td style="color: var(--accent);">Done</td>
+    </tr>
+    <tr>
+      <td><code>docs/ios-enablement-workflow.html</code></td>
+      <td>This interactive tracker (new file)</td>
+      <td style="color: var(--accent);">Done</td>
+    </tr>
+  </table>
+</div>
+
+<footer>
+  Momento iOS Enablement Workflow | Updated Apr 14, 2026 | Progress saved in localStorage
+</footer>
+
+<script>
+  const STORAGE_KEY = 'momento-ios-tasks-v2';
+
+  function loadState() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    } catch { return {}; }
+  }
+
+  function saveState(state) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function toggleTask(el) {
+    const task = el.closest('.task');
+    const taskId = task.dataset.task;
+    const state = loadState();
+
+    if (el.classList.contains('checked')) {
+      el.classList.remove('checked');
+      task.classList.remove('done');
+      delete state[taskId];
+    } else {
+      el.classList.add('checked');
+      task.classList.add('done');
+      state[taskId] = true;
+    }
+
+    saveState(state);
+    updateProgress();
+    updatePhaseStatuses();
+  }
+
+  function togglePhase(header) {
+    header.closest('.phase').classList.toggle('open');
+  }
+
+  function updateProgress() {
+    const total = document.querySelectorAll('.task').length;
+    const done = document.querySelectorAll('.task.done').length;
+    const pct = total ? (done / total * 100) : 0;
+
+    document.getElementById('progress-fill').style.width = pct + '%';
+    document.getElementById('progress-text').textContent = done + ' / ' + total + ' tasks';
+  }
+
+  function updatePhaseStatuses() {
+    document.querySelectorAll('.phase').forEach(phase => {
+      const tasks = phase.querySelectorAll('.task');
+      const done = phase.querySelectorAll('.task.done');
+      const status = phase.querySelector('.phase-status');
+
+      if (tasks.length === 0) return;
+
+      // Don't override manually set statuses on completed phases
+      if (['1','2','3'].includes(phase.dataset.phase)) return;
+
+      phase.classList.remove('completed', 'active');
+
+      if (done.length === tasks.length) {
+        status.textContent = 'Done';
+        status.className = 'phase-status status-done';
+        phase.classList.add('completed');
+      } else if (done.length > 0) {
+        status.textContent = 'In Progress';
+        status.className = 'phase-status status-active';
+        phase.classList.add('active');
+      } else {
+        // Keep original status text for pending phases
+        const phaseNum = phase.dataset.phase;
+        if (phaseNum === '4') {
+          status.textContent = 'Next Step';
+        } else if (phaseNum === '9') {
+          status.textContent = 'Later';
+        } else {
+          status.textContent = 'Pending';
+        }
+      }
+    });
+  }
+
+  // Restore state on load — pre-check phases 1 & 2
+  (function init() {
+    const state = loadState();
+
+    // Auto-mark phases 1, 2, 3, and APNs download as done
+    ['1.1','1.2','2.1','2.2','2.3','2.4','2.5','2.6','3.1','3.2','3.3','4.1'].forEach(id => {
+      state[id] = true;
+    });
+    saveState(state);
+
+    Object.keys(state).forEach(taskId => {
+      const task = document.querySelector(`[data-task="${taskId}"]`);
+      if (task) {
+        task.classList.add('done');
+        task.querySelector('.task-check').classList.add('checked');
+      }
+    });
+    updateProgress();
+    updatePhaseStatuses();
+  })();
+</script>
+
+</body>
+</html>

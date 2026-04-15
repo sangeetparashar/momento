@@ -51,11 +51,18 @@ class ApiService {
   // ---------------------------------------------------------------------------
 
   private async getAuthHeaders(): Promise<Record<string, string>> {
-    if (!this.tokenGetter) return {};
+    if (!this.tokenGetter) {
+      if (__DEV__) console.log('[API] no tokenGetter registered');
+      return {};
+    }
 
     const token = await this.tokenGetter();
-    if (!token) return {};
+    if (!token) {
+      if (__DEV__) console.log('[API] tokenGetter returned null');
+      return {};
+    }
 
+    if (__DEV__) console.log('[API] token attached:', token.slice(0, 20) + '...');
     return { Authorization: `Bearer ${token}` };
   }
 
@@ -100,9 +107,12 @@ class ApiService {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
 
+    if (__DEV__) console.log(`[API] → ${method} ${url}`);
+
     try {
       const response = await fetch(url, { ...fetchOptions, signal: controller.signal });
       clearTimeout(timeoutId);
+      if (__DEV__) console.log(`[API] ← ${method} ${path} ${response.status}`);
 
       // No-content responses
       if (response.status === 204) {
@@ -134,6 +144,7 @@ class ApiService {
       return parsed as T;
     } catch (error) {
       clearTimeout(timeoutId);
+      if (__DEV__) console.log(`[API] ✗ ${method} ${path}`, (error as Error)?.message || error);
       if (error instanceof Error && error.name === 'AbortError') {
         throw new ApiError(408, 'Request timed out. Please check your connection and try again.');
       }

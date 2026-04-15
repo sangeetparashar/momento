@@ -49,9 +49,12 @@
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.momento.app",
+      "bundleIdentifier": "com.momento.network",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Momento needs your location to show nearby creators and posts."
+        "NSLocationWhenInUseUsageDescription": "Momento needs your location to show nearby creators and posts.",
+        "NSPhotoLibraryUsageDescription": "Momento needs access to your photos to create posts.",
+        "NSCameraUsageDescription": "Momento needs camera access to take photos for posts.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {

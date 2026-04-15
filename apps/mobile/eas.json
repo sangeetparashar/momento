@@ -40,6 +40,17 @@
         "EXPO_PUBLIC_SOLANA_NETWORK": "mainnet-beta"
       }
     },
+    "development-device": {
+      "extends": "base",
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://momento-api-ten.vercel.app/api",
+        "EXPO_PUBLIC_PRIVY_APP_ID": "cmjbzyj4q00twlb0d1uc5w0sb",
+        "EXPO_PUBLIC_SOLANA_RPC_URL": "https://mainnet.helius-rpc.com/?api-key=b04d4e94-cc50-4905-a43d-909652645bd2",
+        "EXPO_PUBLIC_SOLANA_NETWORK": "mainnet-beta"
+      }
+    },
     "production": {
       "extends": "base",
       "autoIncrement": true,
@@ -54,9 +65,9 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "developer@momento.app",
-        "ascAppId": "PLACEHOLDER",
-        "appleTeamId": "PLACEHOLDER"
+        "appleId": "brian@mylz.run",
+        "ascAppId": "6762237065",
+        "appleTeamId": "9BJL3C9DHA"
       },
       "android": {
         "serviceAccountKeyPath": "./play-store-service-account.json",

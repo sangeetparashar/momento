@@ -15,5 +15,6 @@ coverage/
 excalidraw.log
 .vercel
 *-firebase-adminsdk-*.json
+AuthKey_*.p8
 package-lock.json
 yarn.lock
