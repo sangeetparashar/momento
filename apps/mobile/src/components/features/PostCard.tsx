@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Pressable, Animated, Share, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
-import { Video, ResizeMode } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar, AnimatedPressable } from '@/components/primitives';
@@ -25,6 +25,19 @@ export function PostCard({ post }: PostCardProps) {
   const translateY = useRef(new Animated.Value(20)).current;
   const [isMuted, setIsMuted] = useState(true);
   const isVideo = post.postType === PostType.VIDEO;
+
+  const videoPlayer = useVideoPlayer(
+    isVideo && post.mediaUrl ? post.mediaUrl : null,
+    (player) => {
+      player.loop = true;
+      player.muted = true;
+      player.play();
+    },
+  );
+
+  useEffect(() => {
+    if (videoPlayer) videoPlayer.muted = isMuted;
+  }, [isMuted, videoPlayer]);
 
   useEffect(() => {
     Animated.parallel([
@@ -80,15 +93,11 @@ export function PostCard({ post }: PostCardProps) {
       {/* Post Media */}
       {post.mediaUrl && isVideo ? (
         <Pressable onPress={handleImagePress} style={styles.videoContainer}>
-          <Video
-            source={{ uri: post.mediaUrl }}
+          <VideoView
+            player={videoPlayer}
             style={styles.image}
-            resizeMode={ResizeMode.COVER}
-            isLooping
-            shouldPlay
-            isMuted={isMuted}
-            usePoster
-            posterStyle={styles.image}
+            contentFit="cover"
+            nativeControls={false}
           />
           <Pressable
             style={styles.soundButton}

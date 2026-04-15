@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
-import { Video, ResizeMode } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar } from '@/components/primitives';
@@ -36,7 +36,6 @@ export default function PostScreen() {
   const [commentText, setCommentText] = useState('');
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
-  const videoRef = useRef<Video>(null);
   const inputRef = useRef<TextInput>(null);
   const insets = useSafeAreaInsets();
   const { comments, isLoading: commentsLoading, createComment, isCreating } = useComments(id);
@@ -100,6 +99,22 @@ export default function PostScreen() {
 
   const isOwner = user?.id === post?.creatorId;
   const isVideo = post?.postType === PostType.VIDEO;
+
+  // expo-video player — replaces the expo-av Video ref + lifecycle.
+  const videoPlayer = useVideoPlayer(
+    isVideo && post?.mediaUrl ? post.mediaUrl : null,
+    (player) => {
+      player.loop = true;
+      player.muted = true;
+    },
+  );
+
+  React.useEffect(() => {
+    if (!videoPlayer) return;
+    videoPlayer.muted = isMuted;
+    if (isPlaying) videoPlayer.play();
+    else videoPlayer.pause();
+  }, [videoPlayer, isPlaying, isMuted]);
 
   if (isPostLoading) {
     return (
@@ -208,14 +223,11 @@ export default function PostScreen() {
           {/* Post Media */}
           {post.mediaUrl && isVideo ? (
             <View style={styles.videoContainer}>
-              <Video
-                ref={videoRef}
-                source={{ uri: post.mediaUrl }}
+              <VideoView
+                player={videoPlayer}
                 style={styles.postImage}
-                resizeMode={ResizeMode.CONTAIN}
-                isLooping
-                shouldPlay={isPlaying}
-                isMuted={isMuted}
+                contentFit="contain"
+                nativeControls={false}
               />
               {/* Play/Pause overlay */}
               <Pressable

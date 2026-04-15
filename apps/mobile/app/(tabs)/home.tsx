@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
-import { Video, ResizeMode } from 'expo-av';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -56,7 +56,6 @@ const FeedPage = React.memo(function FeedPage({
   isVisible: boolean;
 }) {
   const router = useRouter();
-  const videoRef = useRef<Video>(null);
   const [isMuted, setIsMuted] = useState(true);
   const [isPlaying, setIsPlaying] = useState(true);
   const isVideo = isVideoPost(post);
@@ -65,19 +64,26 @@ const FeedPage = React.memo(function FeedPage({
     mutationFn: () => apiService.post(`/creators/${post.creatorId}/follow`),
   });
 
-  // Video lifecycle
+  // expo-video player — created once per post; replaces manual lifecycle
+  // we had with expo-av (stopAsync/unloadAsync/loadAsync).
+  const videoPlayer = useVideoPlayer(
+    isVideo && post.mediaUrl ? post.mediaUrl : null,
+    (player) => {
+      player.loop = true;
+      player.muted = true;
+    },
+  );
+
+  // Drive play/pause/mute from state. Pauses when the card leaves the viewport.
   useEffect(() => {
-    if (!isVideo || !videoRef.current) return;
-    if (!isVisible) {
-      videoRef.current.stopAsync().catch(() => {});
-      videoRef.current.unloadAsync().catch(() => {});
+    if (!videoPlayer) return;
+    videoPlayer.muted = isMuted;
+    if (isVisible && isPlaying) {
+      videoPlayer.play();
     } else {
-      videoRef.current.loadAsync(
-        { uri: post.mediaUrl! },
-        { shouldPlay: true, isMuted, isLooping: true }
-      ).catch(() => {});
+      videoPlayer.pause();
     }
-  }, [isVisible, isVideo, post.mediaUrl, isMuted]);
+  }, [videoPlayer, isVisible, isPlaying, isMuted]);
 
   const handleCreatorPress = useCallback(() => {
     router.push(`/creator/${post.creatorId}`);
@@ -98,14 +104,11 @@ const FeedPage = React.memo(function FeedPage({
     >
       {/* Full-bleed media */}
       {post.mediaUrl && isVideo ? (
-        <Video
-          ref={videoRef}
-          source={{ uri: post.mediaUrl }}
+        <VideoView
+          player={videoPlayer}
           style={StyleSheet.absoluteFill}
-          shouldPlay={isVisible && isPlaying}
-          isMuted={isMuted}
-          isLooping
-          resizeMode={ResizeMode.COVER}
+          contentFit="cover"
+          nativeControls={false}
         />
       ) : post.mediaUrl ? (
         <Image
