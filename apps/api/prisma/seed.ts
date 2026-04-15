@@ -52,18 +52,17 @@ function postImageUrl(seed: string): string {
   return `https://picsum.photos/seed/${seed}/600/800`;
 }
 
-// Using free sample video URLs from public domain sources
+// Public sample video URLs (verified live, 2026-04-15).
+// The previous `storage.googleapis.com/gtv-videos-bucket/...` URLs were
+// deprecated by Google and now return 403 — DO NOT restore them.
 const SAMPLE_VIDEO_URLS = [
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4',
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackOnStreetAndDirt.mp4',
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/VolkswagenGTIReview.mp4',
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4',
-  'https://storage.googleapis.com/gtv-videos-bucket/sample/WhatCarCanYouGetForAGrand.mp4',
+  'https://download.samplelib.com/mp4/sample-5s.mp4',
+  'https://download.samplelib.com/mp4/sample-10s.mp4',
+  'https://download.samplelib.com/mp4/sample-15s.mp4',
+  'https://download.samplelib.com/mp4/sample-20s.mp4',
+  'https://download.samplelib.com/mp4/sample-30s.mp4',
+  'https://www.w3schools.com/html/mov_bbb.mp4',
+  'https://videos.pexels.com/video-files/5752729/5752729-sd_640_360_30fps.mp4',
 ];
 
 // ─── 15 Toronto Creators ────────────────────────────────────────────────────
