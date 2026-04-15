@@ -128,7 +128,10 @@ class ApiService {
       }
 
       if (!response.ok) {
-        console.error(`[API] ${method} ${path} → ${response.status}`, parsed);
+        // console.warn (not console.error) — in React Native dev, console.error
+        // triggers the full-screen red-box overlay. The caller still gets an
+        // ApiError and decides whether to show user-facing UI.
+        console.warn(`[API] ${method} ${path} → ${response.status}`, parsed);
         throw new ApiError(response.status, parsed);
       }
 

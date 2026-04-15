@@ -9,6 +9,7 @@ import React, {
 import { AppState, type AppStateStatus } from 'react-native';
 import * as Location from 'expo-location';
 import { apiService } from '@/services/api';
+import { useAuth } from '@/hooks/useAuth';
 
 /** How often to refresh the user's location (15 minutes). */
 const LOCATION_REFRESH_INTERVAL_MS = 15 * 60 * 1000;
@@ -56,6 +57,7 @@ export function LocationProvider({ children }: LocationProviderProps) {
   const [error, setError] = useState<string | null>(null);
   const [hasPermission, setHasPermission] = useState(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { user: authUser } = useAuth();
 
   const fetchLocation = useCallback(async () => {
     try {
@@ -129,6 +131,9 @@ export function LocationProvider({ children }: LocationProviderProps) {
 
   useEffect(() => {
     if (!location) return;
+    // Skip server sync until the user is authenticated — /users/me/location
+    // requires a Bearer token and will 401 otherwise.
+    if (!authUser?.id) return;
 
     // Only sync if location changed significantly (>500m) or first sync
     const prev = lastSyncedLocation.current;
@@ -149,7 +154,7 @@ export function LocationProvider({ children }: LocationProviderProps) {
     }).catch(() => {
       // Silently fail — location sync is non-critical
     });
-  }, [location]);
+  }, [location, authUser?.id]);
 
   // Request permission and start polling on mount; pause when backgrounded
   useEffect(() => {

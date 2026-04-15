@@ -89,6 +89,14 @@ export default function RootLayout() {
     }
   }, [fontsLoaded]);
 
+  // Backup: onLayout often fires once before fontsLoaded flips true and won't
+  // re-fire. Ensure the splash hides as soon as fonts finish loading.
+  useEffect(() => {
+    if (fontsLoaded) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded]);
+
   useWalletDeeplinkInterceptor();
 
   return (

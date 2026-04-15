@@ -112,11 +112,16 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
       console.log('[Notifications] Got push token:', token);
       setPushToken(token);
 
-      try {
-        await apiService.post('/users/me/push-token', { pushToken: token });
-        console.log('[Notifications] Push token registered with API');
-      } catch (regErr) {
-        console.warn('[Notifications] Push token registration failed:', regErr);
+      // Only register with the API once the user is authenticated — otherwise
+      // the request fires before the auth token is ready and always 401s.
+      // The listener in the auth effect below will register it post-login.
+      if (authUser?.id) {
+        try {
+          await apiService.post('/users/me/push-token', { pushToken: token });
+          console.log('[Notifications] Push token registered with API');
+        } catch (regErr) {
+          console.warn('[Notifications] Push token registration failed:', regErr);
+        }
       }
 
       if (Platform.OS === 'android') {
@@ -130,7 +135,19 @@ export function NotificationProvider({ children }: NotificationProviderProps) {
     } catch (err) {
       console.warn('Push notification setup failed:', err);
     }
-  }, []);
+  }, [authUser?.id]);
+
+  // Re-register the push token with the API when the user logs in (the token
+  // may have been obtained earlier while unauthenticated).
+  useEffect(() => {
+    if (!authUser?.id || !pushToken) return;
+    apiService
+      .post('/users/me/push-token', { pushToken })
+      .then(() => console.log('[Notifications] Push token registered with API'))
+      .catch((err) =>
+        console.warn('[Notifications] Push token registration failed:', err),
+      );
+  }, [authUser?.id, pushToken]);
 
   // ---------------------------------------------------------------------------
   // Notification tap handling
