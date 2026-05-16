@@ -1,0 +1,1535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Momento — Distribution Playbook</title>
+<meta name="description" content="Step-by-step distribution playbook for Momento iOS (TestFlight) and Android (Play Store), with screen-by-screen instructions for every desktop dashboard.">
+<style>
+  :root {
+    --bg: #0D0D0D;
+    --surface: #1A1A1A;
+    --surface2: #242424;
+    --surface3: #2A2A2A;
+    --border: #333;
+    --border-soft: #222;
+    --text: #E5E5E5;
+    --text-dim: #888;
+    --text-faint: #555;
+    --accent: #00FF88;
+    --accent-dim: #00CC6A;
+    --warning: #FFB800;
+    --error: #FF4444;
+    --blue: #4A9EFF;
+    --purple: #A855F7;
+    --pink: #EC4899;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+
+  code, pre, .mono {
+    font-family: 'SF Mono', Monaco, Menlo, Consolas, monospace;
+    font-size: 0.875rem;
+  }
+
+  /* Header */
+  header {
+    text-align: center;
+    margin-bottom: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    font-size: 2.5rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.02em;
+  }
+  header .subtitle { color: var(--text-dim); font-size: 1.1rem; }
+  header .meta {
+    margin-top: 1rem;
+    font-size: 0.85rem;
+    color: var(--text-faint);
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+
+  /* TOC */
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .toc h2 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-dim);
+    margin-bottom: 0.75rem;
+  }
+  .toc ol {
+    list-style: none;
+    counter-reset: toc;
+    columns: 2;
+    column-gap: 2rem;
+  }
+  .toc ol li {
+    counter-increment: toc;
+    padding: 0.35rem 0;
+    break-inside: avoid;
+  }
+  .toc ol li::before {
+    content: counter(toc, decimal-leading-zero) ".";
+    color: var(--accent);
+    margin-right: 0.6rem;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.8rem;
+  }
+  .toc a { color: var(--text); text-decoration: none; }
+  .toc a:hover { color: var(--accent); }
+
+  /* Status banner */
+  .status-banner {
+    background: linear-gradient(135deg, rgba(74,158,255,0.08), rgba(0,255,136,0.08));
+    border: 1px solid rgba(74,158,255,0.25);
+    border-radius: 16px;
+    padding: 1.5rem 2rem;
+    margin-bottom: 2.5rem;
+  }
+  .status-banner h2 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    color: var(--blue);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .status-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1.5rem;
+  }
+  .status-col h3 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-bottom: 0.6rem;
+  }
+  .status-col.done h3 { color: var(--accent); }
+  .status-col.warn h3 { color: var(--warning); }
+  .status-col.todo h3 { color: var(--text-dim); }
+  .status-col ul { list-style: none; font-size: 0.875rem; }
+  .status-col ul li {
+    padding: 3px 0 3px 1.4rem;
+    position: relative;
+    color: var(--text);
+  }
+  .status-col.done ul li::before { content: '✓'; position: absolute; left: 0; color: var(--accent); font-weight: 700; }
+  .status-col.warn ul li::before { content: '◐'; position: absolute; left: 0; color: var(--warning); }
+  .status-col.todo ul li::before { content: '○'; position: absolute; left: 0; color: var(--text-faint); }
+
+  /* Sections */
+  section {
+    margin-bottom: 3rem;
+    scroll-margin-top: 1rem;
+  }
+  section > h2.section-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid var(--border);
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+  }
+  section > h2.section-title .num {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 1rem;
+    color: var(--accent);
+    background: rgba(0,255,136,0.1);
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+    border: 1px solid rgba(0,255,136,0.3);
+  }
+  section > .intro {
+    color: var(--text-dim);
+    margin-bottom: 1.5rem;
+    font-size: 0.95rem;
+  }
+
+  /* Phase / Step blocks */
+  .phase {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem 1.75rem;
+    margin-bottom: 1.25rem;
+    scroll-margin-top: 1rem;
+  }
+  .phase-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+    flex-wrap: wrap;
+  }
+  .phase-tag {
+    background: var(--surface3);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 0.15rem 0.6rem;
+    border-radius: 6px;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.5px;
+  }
+  .phase-tag.ios { color: var(--blue); border-color: rgba(74,158,255,0.4); background: rgba(74,158,255,0.08); }
+  .phase-tag.android { color: var(--accent); border-color: rgba(0,255,136,0.4); background: rgba(0,255,136,0.08); }
+  .phase-tag.infra { color: var(--purple); border-color: rgba(168,85,247,0.4); background: rgba(168,85,247,0.08); }
+  .phase-status {
+    margin-left: auto;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+  }
+  .phase-status.done { color: var(--accent); background: rgba(0,255,136,0.1); border: 1px solid rgba(0,255,136,0.3); }
+  .phase-status.inprogress { color: var(--warning); background: rgba(255,184,0,0.1); border: 1px solid rgba(255,184,0,0.3); }
+  .phase-status.todo { color: var(--text-faint); background: var(--surface2); border: 1px solid var(--border); }
+  .phase-status.blocked { color: var(--error); background: rgba(255,68,68,0.1); border: 1px solid rgba(255,68,68,0.3); }
+
+  .phase h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .phase .est {
+    font-size: 0.75rem;
+    color: var(--text-faint);
+    margin-left: 0.5rem;
+  }
+  .phase .summary {
+    color: var(--text-dim);
+    margin: 0.75rem 0 1.25rem;
+    font-size: 0.95rem;
+  }
+
+  /* Step list */
+  ol.steps {
+    list-style: none;
+    counter-reset: step;
+  }
+  ol.steps > li {
+    counter-increment: step;
+    margin-bottom: 1.25rem;
+    padding-left: 2.75rem;
+    position: relative;
+  }
+  ol.steps > li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 1.85rem;
+    height: 1.85rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--accent);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  ol.steps > li .step-title {
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+    color: var(--text);
+  }
+  ol.steps > li .step-body {
+    color: var(--text-dim);
+    font-size: 0.9rem;
+  }
+  ol.steps > li .step-body p { margin-bottom: 0.4rem; }
+
+  /* Screen path callout */
+  .screen-path {
+    background: var(--surface2);
+    border-left: 3px solid var(--blue);
+    border-radius: 0 8px 8px 0;
+    padding: 0.6rem 1rem;
+    margin: 0.5rem 0;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.8rem;
+    color: var(--text);
+  }
+  .screen-path .where { color: var(--blue); font-weight: 600; }
+  .screen-path .arrow { color: var(--text-faint); margin: 0 0.4rem; }
+  .screen-path .click { color: var(--accent); }
+  .screen-path .url {
+    display: block;
+    color: var(--text-faint);
+    font-size: 0.75rem;
+    margin-top: 0.2rem;
+  }
+
+  /* Code blocks */
+  pre {
+    background: #050505;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.9rem 1rem;
+    margin: 0.6rem 0;
+    overflow-x: auto;
+    line-height: 1.5;
+  }
+  pre code { color: var(--accent); font-size: 0.825rem; }
+  p code, li code {
+    background: var(--surface2);
+    color: var(--accent);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    border: 1px solid var(--border-soft);
+  }
+
+  /* Callouts */
+  .callout {
+    border-radius: 8px;
+    padding: 0.85rem 1.1rem;
+    margin: 0.75rem 0;
+    font-size: 0.875rem;
+    border-left: 3px solid;
+  }
+  .callout.info { background: rgba(74,158,255,0.08); border-color: var(--blue); }
+  .callout.warning { background: rgba(255,184,0,0.08); border-color: var(--warning); }
+  .callout.danger { background: rgba(255,68,68,0.08); border-color: var(--error); }
+  .callout.tip { background: rgba(0,255,136,0.06); border-color: var(--accent); }
+  .callout strong { color: var(--text); }
+
+  /* Tables */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0;
+    font-size: 0.875rem;
+    background: var(--surface);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  th, td {
+    padding: 0.6rem 0.9rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: var(--surface2);
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  tr:last-child td { border-bottom: none; }
+  td code { background: var(--surface2); border: 1px solid var(--border-soft); padding: 0.1rem 0.35rem; border-radius: 3px; color: var(--accent); }
+
+  /* Footer */
+  footer {
+    margin-top: 4rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 0.85rem;
+  }
+  footer a { color: var(--text-dim); }
+
+  /* Misc */
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  hr { border: none; border-top: 1px dashed var(--border); margin: 1.5rem 0; }
+
+  @media (max-width: 720px) {
+    body { padding: 1rem; }
+    header h1 { font-size: 1.75rem; }
+    .toc ol { columns: 1; }
+    ol.steps > li { padding-left: 2.4rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Momento — Distribution Playbook</h1>
+  <p class="subtitle">Step-by-step path from "build works" to "real testers using it"</p>
+  <p class="meta">Last updated 2026-05-16 · For brian@mylz.run + sangeetparashar24</p>
+</header>
+
+<nav class="toc">
+  <h2>Contents</h2>
+  <ol>
+    <li><a href="#status">Current Status</a></li>
+    <li><a href="#infra">Infrastructure Health</a></li>
+    <li><a href="#db">Database Review</a></li>
+    <li><a href="#supabase-keep-warm">Keeping Supabase Awake</a></li>
+    <li><a href="#ios">iOS — TestFlight Distribution</a></li>
+    <li><a href="#ios-phase-4">iOS Phase 4 — APNs Key Upload</a></li>
+    <li><a href="#ios-phase-7">iOS Phase 7 — Physical Device Build</a></li>
+    <li><a href="#ios-phase-8">iOS Phase 8 — TestFlight Launch</a></li>
+    <li><a href="#android">Android — Play Store Distribution</a></li>
+    <li><a href="#android-ga-1">Android GA-1 — Play Console Account</a></li>
+    <li><a href="#android-ga-2">Android GA-2 — Create App Listing</a></li>
+    <li><a href="#android-ga-3">Android GA-3 — FCM Setup</a></li>
+    <li><a href="#android-ga-4">Android GA-4 — Service Account</a></li>
+    <li><a href="#android-ga-5">Android GA-5 — Save Service Key</a></li>
+    <li><a href="#android-ga-6">Android GA-6 — Production Build</a></li>
+    <li><a href="#android-ga-7">Android GA-7 — First Upload</a></li>
+    <li><a href="#android-ga-8">Android GA-8 — Add Testers</a></li>
+    <li><a href="#android-ga-9">Android GA-9 — EAS Submit</a></li>
+    <li><a href="#android-ga-10">Android GA-10 — Promote Tracks</a></li>
+    <li><a href="#domain">Pointing momento.network at Vercel</a></li>
+    <li><a href="#reference">Reference IDs</a></li>
+  </ol>
+</nav>
+
+<section id="status">
+  <div class="status-banner">
+    <h2>📍 Where we are right now</h2>
+    <div class="status-grid">
+      <div class="status-col done">
+        <h3>Done</h3>
+        <ul>
+          <li>iOS sim build (end-to-end)</li>
+          <li>Android EAS dev build</li>
+          <li>Privy iOS bundle allowlist</li>
+          <li>expo-av → expo-video migration</li>
+          <li>Splash/auth/sandbox hardening</li>
+          <li>150 broken feed videos repaired</li>
+          <li>Supabase DB resumed (you just did this)</li>
+        </ul>
+      </div>
+      <div class="status-col warn">
+        <h3>In Progress / Next Up</h3>
+        <ul>
+          <li>iOS Phase 4: APNs key upload</li>
+          <li>Decision: Supabase Pro vs keep-warm</li>
+        </ul>
+      </div>
+      <div class="status-col todo">
+        <h3>Pending</h3>
+        <ul>
+          <li>iOS Phase 7: physical iPhone build</li>
+          <li>iOS Phase 8: TestFlight launch</li>
+          <li>Android GA-1 → GA-10</li>
+          <li>FCM <code>google-services.json</code></li>
+          <li>Point momento.network at Vercel</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="infra">
+  <h2 class="section-title"><span class="num">01</span> Infrastructure Health</h2>
+  <p class="intro">Three layers must be healthy before any tester touches the app: API, database, cache. Quick reference for verifying each.</p>
+
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag infra">API</span>
+      <h3>Vercel — momento-api</h3>
+      <span class="phase-status done">Healthy</span>
+    </div>
+    <div class="summary">Next.js 14 API deployed at <a href="https://momento-api-ten.vercel.app">momento-api-ten.vercel.app</a>. All mobile API calls hit here.</div>
+    <p><strong>Verify command:</strong></p>
+    <pre><code>curl -s https://momento-api-ten.vercel.app/api/health</code></pre>
+    <p>Expected response:</p>
+    <pre><code>{"success":true,"data":{"status":"healthy","db":true,"timestamp":"..."}}</code></pre>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag infra">DB</span>
+      <h3>Supabase — Postgres + PostGIS</h3>
+      <span class="phase-status done">Healthy (resumed)</span>
+    </div>
+    <div class="summary">Project ref <code>phlkstaghvbwacmzuihr</code> on US-West-2. Free tier; auto-pauses after 7 days of inactivity.</div>
+
+    <div class="callout danger">
+      <strong>⚠️ Free-tier auto-pause:</strong> Supabase pauses inactive free-tier projects after ~7 days. While paused, <code>/api/health</code> returns 503 with <code>"db":false</code> and the pooler says <code>tenant/user postgres.&lt;ref&gt; not found</code>. This is not a code bug. See <a href="#supabase-keep-warm">Keeping Supabase Awake</a> below for solutions.
+    </div>
+
+    <p><strong>Resume URL (bookmark this):</strong></p>
+    <pre><code>https://app.supabase.com/project/phlkstaghvbwacmzuihr</code></pre>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag infra">Cache</span>
+      <h3>Upstash Redis</h3>
+      <span class="phase-status done">Healthy</span>
+    </div>
+    <div class="summary">Endpoint <code>smooth-crane-71792.upstash.io</code>. Used for both caching and <code>@upstash/ratelimit</code>. Free tier; no auto-pause.</div>
+    <p><strong>Verify command (from <code>apps/api/</code>):</strong></p>
+    <pre><code>source .env.local &amp;&amp; curl -s -X POST "$UPSTASH_REDIS_REST_URL/ping" \
+  -H "Authorization: Bearer $UPSTASH_REDIS_REST_TOKEN"</code></pre>
+    <p>Expected: <code>{"result":"PONG"}</code></p>
+  </div>
+</section>
+
+<section id="db">
+  <h2 class="section-title"><span class="num">02</span> Database Review (as of 2026-05-16)</h2>
+  <p class="intro">12 tables, ~1,900 rows total across content. Schema is healthy; on-chain tables are empty (expected — no real Solana traffic yet).</p>
+
+  <table>
+    <thead>
+      <tr><th>Table</th><th>Rows</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>users</code></td><td>32</td><td>Privy-linked accounts</td></tr>
+      <tr><td><code>posts</code></td><td>460</td><td>155 TEXT · 153 IMAGE · 152 VIDEO (evenly seeded)</td></tr>
+      <tr><td><code>comments</code></td><td>302</td><td>—</td></tr>
+      <tr><td><code>follows</code></td><td>180</td><td>—</td></tr>
+      <tr><td><code>likes</code></td><td>537</td><td>—</td></tr>
+      <tr><td><code>kyc_records</code></td><td>15</td><td>~half the users have applied</td></tr>
+      <tr><td><code>portfolio_snapshots</code></td><td>302</td><td>Historical wallet balance snapshots</td></tr>
+      <tr><td><code>notifications</code></td><td>28</td><td>Push-token + in-app feed</td></tr>
+      <tr><td><code>saved_posts</code></td><td>19</td><td>Bookmark feature</td></tr>
+      <tr><td><code>creator_tokens</code></td><td>0</td><td>No on-chain tokens minted yet</td></tr>
+      <tr><td><code>wallet_transactions</code></td><td>0</td><td>No Solana txs recorded yet</td></tr>
+      <tr><td><code>_prisma_migrations</code></td><td>—</td><td>Prisma's internal migration log</td></tr>
+    </tbody>
+  </table>
+
+  <p><strong>PostgreSQL extensions installed:</strong></p>
+  <table>
+    <thead><tr><th>Extension</th><th>Version</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><code>postgis</code></td><td>3.3.7</td><td>Geo queries (feed radius search via raw SQL)</td></tr>
+      <tr><td><code>pgcrypto</code></td><td>1.3</td><td>UUID generation, hashing</td></tr>
+      <tr><td><code>uuid-ossp</code></td><td>1.1</td><td>UUID generation</td></tr>
+      <tr><td><code>pg_graphql</code></td><td>1.5.11</td><td>Supabase's GraphQL API (unused here, but bundled)</td></tr>
+      <tr><td><code>pg_stat_statements</code></td><td>1.11</td><td>Query performance metrics</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout tip">
+    <strong>Production-readiness implication:</strong> Schema is solid. Before opening to external testers, plan to (a) upgrade Supabase Pro for daily backups + PITR, or (b) accept free-tier risk and add keep-warm pings. See next section.
+  </div>
+</section>
+
+<section id="supabase-keep-warm">
+  <h2 class="section-title"><span class="num">03</span> Keeping Supabase Awake</h2>
+  <p class="intro">Pick one of three strategies. The decision is mostly about cost vs. reliability for external testers.</p>
+
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag infra">Option A · Recommended once you have testers</span>
+      <h3>Upgrade to Supabase Pro ($25/mo)</h3>
+    </div>
+    <p class="summary">Removes auto-pause entirely, adds 7-day point-in-time recovery, daily backups, larger DB, and 8 GB egress.</p>
+    <p><strong>Screen-by-screen:</strong></p>
+    <ol class="steps">
+      <li>
+        <div class="step-title">Open the project's billing page</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Supabase Dashboard</span><span class="arrow">→</span>
+            <span class="click">Left sidebar: <strong>Settings</strong></span><span class="arrow">→</span>
+            <span class="click">Billing</span>
+            <span class="url">https://app.supabase.com/project/phlkstaghvbwacmzuihr/settings/billing</span>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Click "Change subscription plan"</div>
+        <div class="step-body">It's the prominent button at the top of the page. Pick <strong>Pro</strong> ($25/mo base).</div>
+      </li>
+      <li>
+        <div class="step-title">Enter card details and confirm</div>
+        <div class="step-body">Pro tier activates immediately. Auto-pause stops applying.</div>
+      </li>
+    </ol>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag infra">Option B · Free + cron</span>
+      <h3>Vercel Cron — keep-warm ping</h3>
+    </div>
+    <p class="summary">Add a scheduled GET to <code>/api/health</code> every 6 days. Free if it fits in your Vercel cron budget.</p>
+    <p><strong>Step-by-step (code change):</strong></p>
+    <ol class="steps">
+      <li>
+        <div class="step-title">Add a cron config to <code>apps/api/vercel.json</code></div>
+        <div class="step-body">
+          <pre><code>{
+  "crons": [
+    { "path": "/api/health", "schedule": "0 9 */6 * *" }
+  ]
+}</code></pre>
+          Runs at 09:00 UTC every 6 days. Cost: $0 on Hobby tier.
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Commit and push</div>
+        <div class="step-body">Vercel picks up cron config automatically on next deploy.</div>
+      </li>
+      <li>
+        <div class="step-title">Verify it ran</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Vercel Dashboard</span><span class="arrow">→</span>
+            <span class="click">momento-api project</span><span class="arrow">→</span>
+            <span class="click">Settings tab</span><span class="arrow">→</span>
+            <span class="click">Cron Jobs</span>
+            <span class="url">https://vercel.com/&lt;org&gt;/momento-api/settings/crons</span>
+          </div>
+          You'll see the last invocation time and status here.
+        </div>
+      </li>
+    </ol>
+    <div class="callout warning">
+      <strong>Fragility:</strong> A single cron miss won't pause Supabase (7 days threshold &gt; 6-day cron), but a string of failures can. Monitor.
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag infra">Option C · Do nothing</span>
+      <h3>Accept the risk (solo dev only)</h3>
+    </div>
+    <p class="summary">Fine while it's just you. Not fine the day someone else opens the app and hits 503. Don't pick this option for TestFlight or Play Internal Testing rollouts.</p>
+  </div>
+</section>
+
+<section id="ios">
+  <h2 class="section-title"><span class="num">04</span> iOS — TestFlight Distribution</h2>
+  <p class="intro">Three remaining phases from <code>docs/ios-enablement-workflow.html</code>. Each can be tackled independently except for the device-availability blocker.</p>
+</section>
+
+<section id="ios-phase-4">
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag ios">iOS · Phase 4</span>
+      <h3>APNs Key Upload to EAS<span class="est">~1 min, blocking iOS push on real devices</span></h3>
+      <span class="phase-status inprogress">In Progress</span>
+    </div>
+    <p class="summary">Uploads <code>AuthKey_7PA9M865VN.p8</code> to EAS so production builds can sign push payloads. Account-level, one-time.</p>
+
+    <p><strong>Prerequisites (verified ✓):</strong></p>
+    <ul style="list-style: none; padding-left: 0;">
+      <li>✓ Key file exists at <code>apps/mobile/AuthKey_7PA9M865VN.p8</code></li>
+      <li>✓ Logged into EAS as <code>sangeetparashar24</code></li>
+      <li>✓ Apple Team ID <code>9BJL3C9DHA</code> already in <code>eas.json</code></li>
+    </ul>
+
+    <p><strong>Run the interactive command:</strong></p>
+    <pre><code>cd apps/mobile &amp;&amp; npx eas-cli credentials --platform ios</code></pre>
+
+    <p><strong>Menu path (CLI v18+):</strong></p>
+    <ol class="steps">
+      <li>
+        <div class="step-title">Pick build profile</div>
+        <div class="step-body">Choose <strong><code>development-device</code></strong>. (Keys are account-level — profile choice doesn't matter, but CLI requires one.)</div>
+      </li>
+      <li>
+        <div class="step-title">Top-level menu</div>
+        <div class="step-body">Select <strong>"Push Notifications: Manage your Apple Push Notifications Key"</strong>.</div>
+      </li>
+      <li>
+        <div class="step-title">Sub-menu</div>
+        <div class="step-body">Select <strong>"Set up a Push Notifications Key for your project"</strong>.</div>
+      </li>
+      <li>
+        <div class="step-title">Upload method</div>
+        <div class="step-body">Select <strong>"Upload your own key"</strong> (NOT "use existing from Apple Portal").</div>
+      </li>
+      <li>
+        <div class="step-title">Fill in the values</div>
+        <div class="step-body">
+          <ul style="list-style: disc; padding-left: 1.2rem;">
+            <li>Path: <code>./AuthKey_7PA9M865VN.p8</code></li>
+            <li>Key ID: <code>7PA9M865VN</code></li>
+            <li>Team ID: <code>9BJL3C9DHA</code> (auto-filled)</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Quit menu</div>
+        <div class="step-body">Press Q or escape back to the top-level prompt; select <strong>Quit</strong>.</div>
+      </li>
+    </ol>
+
+    <div class="callout info">
+      <strong>If it asks for Apple ID:</strong> use <code>brian@mylz.run</code>. EAS caches the session afterward.
+    </div>
+  </div>
+</section>
+
+<section id="ios-phase-7">
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag ios">iOS · Phase 7</span>
+      <h3>Physical iPhone Dev Build<span class="est">~20-35 min build + 5 min install</span></h3>
+      <span class="phase-status blocked">Blocked: needs iPhone in hand</span>
+    </div>
+    <p class="summary">Generates a signed development build for a specific iPhone UDID. Once installed, you get hot-reload via Metro just like on the simulator.</p>
+
+    <ol class="steps">
+      <li>
+        <div class="step-title">Plug in the iPhone, unlock it, and trust the Mac</div>
+        <div class="step-body">First connection prompts a "Trust This Computer?" dialog on the iPhone — tap Trust.</div>
+      </li>
+      <li>
+        <div class="step-title">Enable Developer Mode on the iPhone</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">iPhone</span><span class="arrow">→</span>
+            <span class="click">Settings</span><span class="arrow">→</span>
+            <span class="click">Privacy &amp; Security</span><span class="arrow">→</span>
+            <span class="click">Developer Mode</span><span class="arrow">→</span>
+            <span class="click">Toggle ON</span>
+          </div>
+          Phone reboots once after enabling. Required for any dev build to launch on iOS 16+.
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Start the EAS build</div>
+        <div class="step-body">
+          <pre><code>cd apps/mobile &amp;&amp; eas build --profile development-device --platform ios</code></pre>
+          EAS shows a QR code in the terminal and a build URL.
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Register the device UDID</div>
+        <div class="step-body">Scan the QR code from the iPhone Camera app — opens Safari → "Register this device with EAS" prompt → tap Register → returns the UDID to EAS, which adds it to the Apple Developer Portal automatically.</div>
+      </li>
+      <li>
+        <div class="step-title">Wait for the build (20-35 min)</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">EAS Dashboard (web)</span><span class="arrow">→</span>
+            <span class="click">Momento project</span><span class="arrow">→</span>
+            <span class="click">Builds tab</span>
+            <span class="url">https://expo.dev/accounts/sangeetparashar24/projects/momento/builds</span>
+          </div>
+          Status progresses: <code>queued</code> → <code>in-progress</code> → <code>finished</code>. Click the build to see live logs.
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Install the build on the iPhone</div>
+        <div class="step-body">Once finished, the build page shows a QR code labelled "Install". Scan it from the iPhone Camera app → opens a signed install link → tap Install in Settings → app appears on home screen.</div>
+      </li>
+      <li>
+        <div class="step-title">Run Metro and open the app</div>
+        <div class="step-body">
+          <pre><code>cd apps/mobile &amp;&amp; npx expo start --dev-client</code></pre>
+          Tap the Momento icon on iPhone → connects to Metro via LAN.
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Run device smoke test</div>
+        <div class="step-body">Verify: cold-start, Privy Google login, feed loads (location prompt), post detail, video playback, push permission prompt, like/follow, KYC flow, profile screen. Document failures.</div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section id="ios-phase-8">
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag ios">iOS · Phase 8</span>
+      <h3>TestFlight Launch<span class="est">First build ~35 min + ASC setup ~30 min + Beta Review ~24h (external only)</span></h3>
+      <span class="phase-status todo">Pending Phase 7</span>
+    </div>
+    <p class="summary">Builds a production-signed IPA, submits to App Store Connect, configures TestFlight, invites testers. Internal testers (up to 100) get instant access; external testers (up to 10,000) require a one-time Beta App Review.</p>
+
+    <h4 style="margin: 1.25rem 0 0.5rem; color: var(--text);">Step 8a — Production build (terminal)</h4>
+    <ol class="steps">
+      <li>
+        <div class="step-title">Run the EAS production build</div>
+        <div class="step-body">
+          <pre><code>cd apps/mobile &amp;&amp; eas build --profile production --platform ios</code></pre>
+          Auto-increments build number, signs with App Store distribution certificate, produces <code>.ipa</code>. Build takes ~25-35 min.
+        </div>
+      </li>
+    </ol>
+
+    <h4 style="margin: 1.25rem 0 0.5rem; color: var(--text);">Step 8b — Submit to App Store Connect (terminal)</h4>
+    <ol class="steps">
+      <li>
+        <div class="step-title">Submit the latest build</div>
+        <div class="step-body">
+          <pre><code>cd apps/mobile &amp;&amp; eas submit --platform ios --latest</code></pre>
+          Uses <code>submit.production.ios</code> in <code>eas.json</code> (Apple ID <code>brian@mylz.run</code>, ASC App ID <code>6762237065</code>, Team <code>9BJL3C9DHA</code>). EAS handles upload, Apple processes for 5-15 min before the build is visible in TestFlight.
+        </div>
+      </li>
+    </ol>
+
+    <h4 style="margin: 1.25rem 0 0.5rem; color: var(--text);">Step 8c — Fill out TestFlight metadata (App Store Connect web)</h4>
+    <ol class="steps">
+      <li>
+        <div class="step-title">Open Momento in ASC</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">App Store Connect home</span><span class="arrow">→</span>
+            <span class="click">Apps tile</span><span class="arrow">→</span>
+            <span class="click">Momento Network</span>
+            <span class="url">https://appstoreconnect.apple.com/apps/6762237065</span>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Switch to TestFlight tab</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">App detail page</span><span class="arrow">→</span>
+            <span class="click">Top tab bar: <strong>TestFlight</strong></span>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Fill in "Test Information"</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">TestFlight tab</span><span class="arrow">→</span>
+            <span class="click">Left sidebar: <strong>Test Information</strong></span>
+          </div>
+          Required fields:
+          <ul style="list-style: disc; padding-left: 1.2rem; margin: 0.4rem 0;">
+            <li><strong>Beta App Description:</strong> "Location-based creator platform with embedded Solana wallets. Discover and follow creators near you." (or your version)</li>
+            <li><strong>Email:</strong> <code>brian@mylz.run</code></li>
+            <li><strong>Phone:</strong> contact number (visible to Apple reviewers only)</li>
+            <li><strong>Privacy Policy URL:</strong> https://momento.network/privacy (must exist)</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Answer Export Compliance for the build</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">TestFlight tab</span><span class="arrow">→</span>
+            <span class="click">Left sidebar: <strong>iOS Builds</strong></span><span class="arrow">→</span>
+            <span class="click">Click the build (yellow "Missing Compliance" badge)</span>
+          </div>
+          You'll be asked: "Does your app use encryption?" — for standard HTTPS usage answer <strong>"None of the algorithms mentioned above"</strong> (covers normal TLS/HTTPS without custom crypto). Confirms within 30 sec, build status flips to "Ready to Submit".
+        </div>
+      </li>
+    </ol>
+
+    <h4 style="margin: 1.25rem 0 0.5rem; color: var(--text);">Step 8d — Add internal testers (instant access)</h4>
+    <ol class="steps">
+      <li>
+        <div class="step-title">Open Internal Testing</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">TestFlight tab</span><span class="arrow">→</span>
+            <span class="click">Left sidebar: <strong>Internal Testing</strong></span><span class="arrow">→</span>
+            <span class="click">Plus icon (+) next to "Internal Testing"</span>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Create Internal Group</div>
+        <div class="step-body">Name it (e.g. "Momento Core Team"). Toggle "Enable automatic distribution" if you want new builds to auto-appear for testers.</div>
+      </li>
+      <li>
+        <div class="step-title">Add testers by email</div>
+        <div class="step-body">Testers must be added as <strong>Users</strong> in App Store Connect first (Users and Access tab). Then assign them roles like "Developer" or "Marketing" → they appear as available testers here. Limit: 100 internal testers, all on your ASC team.</div>
+      </li>
+      <li>
+        <div class="step-title">Attach the build to the group</div>
+        <div class="step-body">Click the group → "Builds" tab → "+" → select the latest build → adds it. Testers immediately get an email invite + push notification in the TestFlight app on their iPhone.</div>
+      </li>
+    </ol>
+
+    <h4 style="margin: 1.25rem 0 0.5rem; color: var(--text);">Step 8e — External testers (Beta App Review required)</h4>
+    <ol class="steps">
+      <li>
+        <div class="step-title">Open External Testing</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">TestFlight tab</span><span class="arrow">→</span>
+            <span class="click">Left sidebar: <strong>External Testing</strong></span><span class="arrow">→</span>
+            <span class="click">Plus icon (+)</span>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Create External Group</div>
+        <div class="step-body">Name it (e.g. "Momento Public Beta"). Choose whether to enable public link sharing.</div>
+      </li>
+      <li>
+        <div class="step-title">Submit build for Beta App Review</div>
+        <div class="step-body">Add the build to the group → status will be "Waiting for Review". Apple typically responds within 24 hours on the first submission. Subsequent builds for the same group only need re-review if there's a material change.</div>
+      </li>
+      <li>
+        <div class="step-title">After approval, invite testers</div>
+        <div class="step-body">Add by email up to 10,000 testers. Or copy the "Public Link" and share — anyone with the link can join (no email needed). Useful for a "join our beta" landing page.</div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section id="android">
+  <h2 class="section-title"><span class="num">05</span> Android — Play Store Distribution</h2>
+  <p class="intro">Ten phases (GA-1 through GA-10), starting with a $25 one-time Play Console signup. Most of GA-1 through GA-5 is desk/web work — doable today, no device required. Phases A6+ require working FCM and a built AAB.</p>
+</section>
+
+<section id="android-ga-1">
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag android">Android · GA-1</span>
+      <h3>Create Google Play Console Account<span class="est">~30 min including ID verification</span></h3>
+      <span class="phase-status todo">Pending</span>
+    </div>
+    <p class="summary">One-time $25 USD developer registration. Pick the email that will be the "developer of record" — recommend <code>brian@mylz.run</code> for symmetry with the Apple account.</p>
+
+    <ol class="steps">
+      <li>
+        <div class="step-title">Open Play Console signup</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Browser</span><span class="arrow">→</span>
+            <span class="click">play.google.com/console/signup</span>
+            <span class="url">https://play.google.com/console/signup</span>
+          </div>
+          Sign in with the Google account you want to own the listing.
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Choose account type</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Signup wizard</span><span class="arrow">→</span>
+            <span class="click">"What kind of Play Console account?"</span><span class="arrow">→</span>
+            <span class="click">Pick <strong>Organization</strong></span>
+          </div>
+          Organization (vs Personal) is the right call for Momento — required for D-U-N-S number lookups, formal app store listings, and team-based access control later.
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Pay the $25 registration fee</div>
+        <div class="step-body">One-time, non-refundable. Card payment.</div>
+      </li>
+      <li>
+        <div class="step-title">Verify identity</div>
+        <div class="step-body">Upload a government-issued ID. Google may also require D-U-N-S number for orgs (free, lookup via Dun &amp; Bradstreet). Verification can take 1-3 business days but you can proceed with app creation while waiting.</div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section id="android-ga-2">
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag android">Android · GA-2</span>
+      <h3>Create the Momento App Listing<span class="est">~10 min</span></h3>
+      <span class="phase-status todo">Pending GA-1</span>
+    </div>
+    <ol class="steps">
+      <li>
+        <div class="step-title">Open Play Console home</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Browser</span><span class="arrow">→</span>
+            <span class="click">play.google.com/console</span>
+            <span class="url">https://play.google.com/console</span>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Click "Create app"</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Play Console dashboard</span><span class="arrow">→</span>
+            <span class="click">Top-right button: <strong>Create app</strong></span>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Fill out the create-app form</div>
+        <div class="step-body">
+          <ul style="list-style: disc; padding-left: 1.2rem;">
+            <li><strong>App name:</strong> Momento (or "Momento Network")</li>
+            <li><strong>Default language:</strong> English (United States)</li>
+            <li><strong>App or game:</strong> App</li>
+            <li><strong>Free or paid:</strong> Free</li>
+            <li>Accept declarations: app policies + US export laws checkboxes</li>
+          </ul>
+          Click <strong>Create app</strong>. You land on the new app's dashboard.
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Note the application ID slot</div>
+        <div class="step-body">The package name is locked at first upload, not here. Your AAB from EAS will declare <code>com.momento.network</code> — Play accepts whatever the AAB says on first upload.</div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section id="android-ga-3">
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag android">Android · GA-3</span>
+      <h3>Firebase Cloud Messaging Setup<span class="est">~15 min</span></h3>
+      <span class="phase-status todo">Pending</span>
+    </div>
+    <p class="summary">Required for Android push notifications. Without <code>google-services.json</code> in EAS, push permissions silently no-op on Android.</p>
+
+    <ol class="steps">
+      <li>
+        <div class="step-title">Open Firebase Console</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Browser</span><span class="arrow">→</span>
+            <span class="click">console.firebase.google.com</span>
+            <span class="url">https://console.firebase.google.com</span>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Add a Firebase project (or reuse the one linked to Play later)</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Firebase home</span><span class="arrow">→</span>
+            <span class="click"><strong>Add project</strong></span>
+          </div>
+          Name it "Momento". Skip Google Analytics (optional). Wait for provisioning (~30s).
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Add an Android app to the project</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Project overview</span><span class="arrow">→</span>
+            <span class="click">Click the Android icon (under "Get started by adding Firebase to your app")</span>
+          </div>
+          On the registration screen:
+          <ul style="list-style: disc; padding-left: 1.2rem; margin: 0.4rem 0;">
+            <li><strong>Android package name:</strong> <code>com.momento.network</code></li>
+            <li><strong>App nickname:</strong> Momento Android</li>
+            <li><strong>Debug signing certificate SHA-1:</strong> leave blank for now (can add later for SHA-pinned features)</li>
+          </ul>
+          Click <strong>Register app</strong>.
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Download <code>google-services.json</code></div>
+        <div class="step-body">Firebase shows a download button. Save the file.</div>
+      </li>
+      <li>
+        <div class="step-title">Place it in the mobile app and reference it</div>
+        <div class="step-body">
+          <ol style="list-style: decimal; padding-left: 1.4rem;">
+            <li>Copy to <code>apps/mobile/google-services.json</code> (gitignored).</li>
+            <li>Edit <code>apps/mobile/app.json</code>: under <code>"android"</code>, set <code>"googleServicesFile": "./google-services.json"</code>.</li>
+          </ol>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Skip "Add Firebase SDK" and "Verify"</div>
+        <div class="step-body">These are for native Android dev. Expo handles the wiring via the file you just dropped in. Click "Continue to console" / "Next" to dismiss the wizard.</div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section id="android-ga-4">
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag android">Android · GA-4</span>
+      <h3>Create Play Console Service Account<span class="est">~20 min, two dashboards</span></h3>
+      <span class="phase-status todo">Pending GA-1</span>
+    </div>
+    <p class="summary">Required for <code>eas submit -p android</code>. Lives in Google Cloud (creation) but needs Play Console (permission grant) to actually push releases.</p>
+
+    <h4 style="margin: 1rem 0 0.5rem; color: var(--text);">Part 1: Create the service account in GCP</h4>
+    <ol class="steps">
+      <li>
+        <div class="step-title">Open Google Cloud Console</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Browser</span><span class="arrow">→</span>
+            <span class="click">console.cloud.google.com</span>
+            <span class="url">https://console.cloud.google.com</span>
+          </div>
+          Sign in as the same Google account that owns Play Console / Firebase.
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Select the Firebase-backed project</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">GCP top bar</span><span class="arrow">→</span>
+            <span class="click">Project picker dropdown</span><span class="arrow">→</span>
+            <span class="click">Select "Momento" (auto-created when you added Firebase project)</span>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Open Service Accounts</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">GCP Console</span><span class="arrow">→</span>
+            <span class="click">Hamburger menu (top-left)</span><span class="arrow">→</span>
+            <span class="click">IAM &amp; Admin</span><span class="arrow">→</span>
+            <span class="click">Service Accounts</span>
+            <span class="url">https://console.cloud.google.com/iam-admin/serviceaccounts</span>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Create a new service account</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Service Accounts page</span><span class="arrow">→</span>
+            <span class="click">Top bar: <strong>+ CREATE SERVICE ACCOUNT</strong></span>
+          </div>
+          Fill in:
+          <ul style="list-style: disc; padding-left: 1.2rem;">
+            <li><strong>Name:</strong> <code>momento-eas-submit</code></li>
+            <li><strong>Description:</strong> "EAS submit to Play Store"</li>
+          </ul>
+          Click <strong>Create and Continue</strong>.
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Grant minimal IAM role</div>
+        <div class="step-body">On step 2 of the wizard: under "Grant this service account access", add role <strong>Service Account User</strong>. Click <strong>Continue</strong>, then <strong>Done</strong>.</div>
+      </li>
+      <li>
+        <div class="step-title">Generate a JSON key</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Service Accounts list</span><span class="arrow">→</span>
+            <span class="click">Click the new account's email</span><span class="arrow">→</span>
+            <span class="click">Keys tab</span><span class="arrow">→</span>
+            <span class="click">ADD KEY → Create new key</span><span class="arrow">→</span>
+            <span class="click">Key type: <strong>JSON</strong></span><span class="arrow">→</span>
+            <span class="click">CREATE</span>
+          </div>
+          Browser downloads a <code>.json</code> file. Save it; you'll move it in GA-5.
+        </div>
+      </li>
+    </ol>
+
+    <h4 style="margin: 1.5rem 0 0.5rem; color: var(--text);">Part 2: Grant Play Console access</h4>
+    <ol class="steps">
+      <li>
+        <div class="step-title">Open Play Console API access page</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Play Console</span><span class="arrow">→</span>
+            <span class="click">Left sidebar: <strong>Setup</strong></span><span class="arrow">→</span>
+            <span class="click">API access</span>
+            <span class="url">https://play.google.com/console/api-access</span>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Link the Google Cloud project</div>
+        <div class="step-body">If first time: click <strong>Link existing Google Cloud project</strong> → pick "Momento" → confirm. The service accounts from GCP now appear in the table below.</div>
+      </li>
+      <li>
+        <div class="step-title">Grant the service account Play Console permissions</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">API access page</span><span class="arrow">→</span>
+            <span class="click">Find <code>momento-eas-submit@...iam.gserviceaccount.com</code></span><span class="arrow">→</span>
+            <span class="click">Click <strong>Grant access</strong></span>
+          </div>
+          On the permission screen:
+          <ul style="list-style: disc; padding-left: 1.2rem;">
+            <li><strong>App permissions:</strong> add Momento</li>
+            <li><strong>Account permissions:</strong> check <strong>Release apps to testing tracks</strong> and <strong>Release apps to production</strong></li>
+          </ul>
+          Click <strong>Invite user</strong> (despite the name, it grants the service account immediately).
+        </div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section id="android-ga-5">
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag android">Android · GA-5</span>
+      <h3>Save Service Account Key Locally<span class="est">30 sec</span></h3>
+      <span class="phase-status todo">Pending GA-4</span>
+    </div>
+    <ol class="steps">
+      <li>
+        <div class="step-title">Move the JSON key into the mobile app</div>
+        <div class="step-body">
+          <pre><code>mv ~/Downloads/momento-XXXXXX.json apps/mobile/play-store-service-account.json</code></pre>
+          The path <code>./play-store-service-account.json</code> is already referenced in <code>eas.json</code> line 73, and the file is gitignored — safe to commit nothing.
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Verify EAS sees it</div>
+        <div class="step-body">
+          <pre><code>cd apps/mobile &amp;&amp; cat eas.json | grep serviceAccountKeyPath</code></pre>
+          Should print the path you just placed.
+        </div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section id="android-ga-6">
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag android">Android · GA-6</span>
+      <h3>Production AAB Build<span class="est">~20-25 min on EAS</span></h3>
+      <span class="phase-status todo">Pending GA-3 + GA-5</span>
+    </div>
+    <ol class="steps">
+      <li>
+        <div class="step-title">Trigger the build</div>
+        <div class="step-body">
+          <pre><code>cd apps/mobile &amp;&amp; eas build --profile production --platform android</code></pre>
+          Produces a signed <code>.aab</code> (Android App Bundle) — required format for Play Store. EAS manages the upload keystore.
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Watch the build progress</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">EAS Dashboard</span><span class="arrow">→</span>
+            <span class="click">Momento project</span><span class="arrow">→</span>
+            <span class="click">Builds tab</span>
+            <span class="url">https://expo.dev/accounts/sangeetparashar24/projects/momento/builds</span>
+          </div>
+          Once finished, the build page shows an "Download" button for the <code>.aab</code> — needed for the first manual upload (GA-7).
+        </div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section id="android-ga-7">
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag android">Android · GA-7</span>
+      <h3>First Manual Upload (Internal Track)<span class="est">~15 min</span></h3>
+      <span class="phase-status todo">Pending GA-6</span>
+    </div>
+    <p class="summary">Google requires a manual first upload before <code>eas submit</code> can push to a track. Subsequent submits are CLI-only.</p>
+
+    <ol class="steps">
+      <li>
+        <div class="step-title">Open Internal Testing</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Play Console</span><span class="arrow">→</span>
+            <span class="click">Momento app</span><span class="arrow">→</span>
+            <span class="click">Left sidebar: <strong>Testing</strong></span><span class="arrow">→</span>
+            <span class="click">Internal testing</span>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Create a new release</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Internal testing page</span><span class="arrow">→</span>
+            <span class="click">Top-right: <strong>Create new release</strong></span>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Upload the AAB</div>
+        <div class="step-body">
+          Drag the <code>.aab</code> from EAS (or click "Upload" and pick the file). Play verifies signing and parses the manifest. Bundle name should resolve to <code>com.momento.network</code>.
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Complete app signing setup</div>
+        <div class="step-body">First-time uploads trigger the Play App Signing flow. Accept Google's default: <strong>Let Google manage and protect your app signing key</strong>. Play takes over key custody.</div>
+      </li>
+      <li>
+        <div class="step-title">Fill release name and notes</div>
+        <div class="step-body">
+          <ul style="list-style: disc; padding-left: 1.2rem;">
+            <li><strong>Release name:</strong> "1 (1.0.0)" or whatever EAS named it</li>
+            <li><strong>Release notes</strong> (en-US): "Initial internal testing build"</li>
+          </ul>
+          Click <strong>Next</strong>, then <strong>Save</strong>.
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Review and roll out</div>
+        <div class="step-body">Click <strong>Review release</strong> → resolve any warnings (will likely flag missing privacy policy, content rating, data safety — see GA-7b below) → <strong>Start rollout to Internal testing</strong>.</div>
+      </li>
+    </ol>
+
+    <div class="callout warning">
+      <strong>Mandatory Play Store listing fields (block release if missing):</strong>
+      <ul style="list-style: disc; padding-left: 1.2rem; margin-top: 0.4rem;">
+        <li><strong>App content:</strong> Privacy Policy URL (<code>https://momento.network/privacy</code>), Ads declaration, Content rating questionnaire (~10 min via IARC), Target audience, Data safety form</li>
+        <li><strong>Store listing:</strong> Short description (80 char), Full description (4,000 char), App icon 512×512, Feature graphic 1024×500, at least 2 phone screenshots</li>
+      </ul>
+      Fill these from the left sidebar under <strong>Grow → Store presence</strong> and <strong>Policy → App content</strong>. Plan ~1 hour total.
+    </div>
+  </div>
+</section>
+
+<section id="android-ga-8">
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag android">Android · GA-8</span>
+      <h3>Add Internal Testers<span class="est">~5 min</span></h3>
+      <span class="phase-status todo">Pending GA-7</span>
+    </div>
+    <ol class="steps">
+      <li>
+        <div class="step-title">Open the Testers tab</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Internal testing page</span><span class="arrow">→</span>
+            <span class="click">Top tab bar: <strong>Testers</strong></span>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Create an email list</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Testers tab</span><span class="arrow">→</span>
+            <span class="click">Section "Testers"</span><span class="arrow">→</span>
+            <span class="click">Create email list</span>
+          </div>
+          Name it "Momento Core Team". Paste tester Gmail addresses (Play requires Google accounts). Save.
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Copy the opt-in URL</div>
+        <div class="step-body">Below the tester list there's a "How testers join your test" section with an opt-in URL like <code>https://play.google.com/apps/internaltest/&lt;long-id&gt;</code>. Send this URL to each tester via email or Slack.</div>
+      </li>
+      <li>
+        <div class="step-title">Tester install flow</div>
+        <div class="step-body">Tester opens the opt-in URL on Android → "Accept invite" → "Download from Play Store" → app installs from the Internal testing track. They appear in the Play Store as a normal install but with a "Beta" label.</div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section id="android-ga-9">
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag android">Android · GA-9</span>
+      <h3>Subsequent Submissions via EAS<span class="est">~30 sec command</span></h3>
+      <span class="phase-status todo">Pending GA-7</span>
+    </div>
+    <ol class="steps">
+      <li>
+        <div class="step-title">Push the latest build straight to Internal track</div>
+        <div class="step-body">
+          <pre><code>cd apps/mobile &amp;&amp; eas submit --platform android --latest</code></pre>
+          Reads <code>submit.production.android</code> in <code>eas.json</code>, uses your service account, uploads to <code>internal</code> track (per <code>track: "internal"</code>). New build available to all internal testers within ~10 min.
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Verify in Play Console</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Play Console</span><span class="arrow">→</span>
+            <span class="click">Testing → Internal testing</span><span class="arrow">→</span>
+            <span class="click">Releases tab</span>
+          </div>
+          New release appears. Testers get an auto-notification if "Auto-update apps" is on.
+        </div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section id="android-ga-10">
+  <div class="phase">
+    <div class="phase-header">
+      <span class="phase-tag android">Android · GA-10</span>
+      <h3>Promote Internal → Closed → Open → Production<span class="est">Per-stage; Production review can take 3-7 days first time</span></h3>
+      <span class="phase-status todo">Endgame</span>
+    </div>
+    <p class="summary">Each track is a wider audience. Closed and Open testing require tester lists (or a Google Group). Production goes to everyone on the Play Store.</p>
+
+    <ol class="steps">
+      <li>
+        <div class="step-title">Open the source track</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Play Console</span><span class="arrow">→</span>
+            <span class="click">Testing → Internal testing</span><span class="arrow">→</span>
+            <span class="click">Releases tab</span>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Promote the release</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Release row</span><span class="arrow">→</span>
+            <span class="click">Three-dot menu (or "Promote release" button)</span><span class="arrow">→</span>
+            <span class="click">Pick destination: <strong>Closed</strong> / <strong>Open</strong> / <strong>Production</strong></span>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">For Closed/Open testing</div>
+        <div class="step-body">
+          <ul style="list-style: disc; padding-left: 1.2rem;">
+            <li><strong>Closed</strong>: same flow as internal but tester lists can be larger and reviewed (~24h first time).</li>
+            <li><strong>Open</strong>: anyone with the opt-in URL can join; reviewed first time (~24h).</li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">For Production</div>
+        <div class="step-body">Full Play Store review. First submission takes 3-7 days. Subsequent updates: usually &lt; 24 hours. Make sure Store listing + App content are complete (GA-7 warning).</div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section id="domain">
+  <h2 class="section-title"><span class="num">06</span> Pointing momento.network at Vercel</h2>
+  <p class="intro">Right now <code>momento.network</code> is parked on GoDaddy (responses include <code>Server: DPS/2.0.0</code>). The Vercel landing project exists but isn't reachable via the apex domain yet. One-time DNS task.</p>
+
+  <div class="phase">
+    <ol class="steps">
+      <li>
+        <div class="step-title">Add the domain to the Vercel landing project</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">Vercel Dashboard</span><span class="arrow">→</span>
+            <span class="click">landing project</span><span class="arrow">→</span>
+            <span class="click">Settings tab</span><span class="arrow">→</span>
+            <span class="click">Domains</span><span class="arrow">→</span>
+            <span class="click">Add <code>momento.network</code></span>
+          </div>
+          Vercel shows you the exact DNS records to add (A record for apex, CNAME for www).
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Update DNS at GoDaddy</div>
+        <div class="step-body">
+          <div class="screen-path">
+            <span class="where">GoDaddy account</span><span class="arrow">→</span>
+            <span class="click">Domain Portfolio</span><span class="arrow">→</span>
+            <span class="click">momento.network</span><span class="arrow">→</span>
+            <span class="click">DNS tab</span>
+            <span class="url">https://dcc.godaddy.com/manage/MOMENTO.NETWORK/dns</span>
+          </div>
+          Delete the existing "Parked" A record. Add Vercel's records:
+          <ul style="list-style: disc; padding-left: 1.2rem; margin-top: 0.4rem;">
+            <li><strong>A</strong> — Name: <code>@</code> — Value: <code>76.76.21.21</code> (Vercel's apex IP)</li>
+            <li><strong>CNAME</strong> — Name: <code>www</code> — Value: <code>cname.vercel-dns.com</code></li>
+          </ul>
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Wait for DNS propagation</div>
+        <div class="step-body">~5 min to a few hours. Verify with:
+          <pre><code>dig momento.network +short
+curl -sI https://momento.network | head -5</code></pre>
+          Response should show Vercel's edge (e.g. <code>x-vercel-cache</code> headers) once propagation is complete.
+        </div>
+      </li>
+      <li>
+        <div class="step-title">Verify this doc loads at the new domain</div>
+        <div class="step-body">
+          <code>https://momento.network/distribution.html</code> should serve this file.
+        </div>
+      </li>
+    </ol>
+  </div>
+</section>
+
+<section id="reference">
+  <h2 class="section-title"><span class="num">07</span> Reference IDs</h2>
+  <p class="intro">Everything you'll need to type into a dashboard.</p>
+
+  <div class="phase">
+    <h3>Apple Developer</h3>
+    <table>
+      <tbody>
+        <tr><td>Apple ID</td><td><code>brian@mylz.run</code></td></tr>
+        <tr><td>Team ID</td><td><code>9BJL3C9DHA</code></td></tr>
+        <tr><td>Bundle ID</td><td><code>com.momento.network</code></td></tr>
+        <tr><td>App Store Connect App ID</td><td><code>6762237065</code> (Momento Network)</td></tr>
+        <tr><td>APNs Key ID</td><td><code>7PA9M865VN</code></td></tr>
+        <tr><td>APNs Key Path</td><td><code>apps/mobile/AuthKey_7PA9M865VN.p8</code> (gitignored)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="phase">
+    <h3>EAS / Expo</h3>
+    <table>
+      <tbody>
+        <tr><td>Account</td><td><code>sangeetparashar24</code></td></tr>
+        <tr><td>Project slug</td><td><code>@sangeetparashar24/momento</code></td></tr>
+        <tr><td>Project ID</td><td><code>9a287df3-a2fd-4fdc-8e55-33fbfad22608</code></td></tr>
+        <tr><td>Dashboard</td><td><a href="https://expo.dev/accounts/sangeetparashar24/projects/momento/builds">expo.dev/...momento/builds</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="phase">
+    <h3>Privy</h3>
+    <table>
+      <tbody>
+        <tr><td>App ID</td><td><code>cmjbzyj4q00twlb0d1uc5w0sb</code></td></tr>
+        <tr><td>Client ID</td><td><code>client-WY6UDfFofojZafsbGzmGDGYExCP86xeQuKCcUvoyGmpqZ</code></td></tr>
+        <tr><td>Dashboard</td><td><a href="https://dashboard.privy.io">dashboard.privy.io</a> → Settings → Clients</td></tr>
+        <tr><td>iOS bundle allowlist</td><td>✓ <code>com.momento.network</code> already added</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="phase">
+    <h3>Infrastructure</h3>
+    <table>
+      <tbody>
+        <tr><td>API URL</td><td><a href="https://momento-api-ten.vercel.app">momento-api-ten.vercel.app</a></td></tr>
+        <tr><td>API health</td><td><a href="https://momento-api-ten.vercel.app/api/health">/api/health</a></td></tr>
+        <tr><td>Supabase project ref</td><td><code>phlkstaghvbwacmzuihr</code></td></tr>
+        <tr><td>Supabase dashboard</td><td><a href="https://app.supabase.com/project/phlkstaghvbwacmzuihr">app.supabase.com/...phlk...</a></td></tr>
+        <tr><td>Upstash Redis</td><td><code>smooth-crane-71792.upstash.io</code></td></tr>
+        <tr><td>Vercel project (API)</td><td><code>momento-api</code> · <code>prj_9dIzioCCOxWpgLsERRf9ze1TixjG</code></td></tr>
+        <tr><td>Vercel project (landing)</td><td><code>landing</code> · <code>prj_IH6VHbIRLuN6f7Nxqfy1c57qJ1Xk</code></td></tr>
+        <tr><td>Domain status</td><td><code>momento.network</code> parked on GoDaddy — needs DNS pointed at Vercel (section 06)</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <p>Generated 2026-05-16. This document is the canonical distribution reference for Momento.</p>
+  <p>Source: <code>apps/landing/public/distribution.html</code> — edit and push to <code>main</code> to update.</p>
+</footer>
+
+</body>
+</html>
