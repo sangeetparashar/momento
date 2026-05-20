@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Momento — Privacy Policy</title>
+<meta name="description" content="Privacy policy for Momento Network, the location-based creator platform with embedded Solana wallets.">
+<style>
+  :root {
+    --bg: #0D0D0D;
+    --surface: #1A1A1A;
+    --surface2: #242424;
+    --border: #333;
+    --text: #E5E5E5;
+    --text-dim: #888;
+    --text-faint: #555;
+    --accent: #00FF88;
+    --blue: #4A9EFF;
+    --warning: #FFB800;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+    max-width: 880px;
+    margin: 0 auto;
+  }
+  code, .mono { font-family: 'SF Mono', Monaco, Menlo, monospace; font-size: 0.875rem; }
+  header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 {
+    font-size: 2.25rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.02em;
+  }
+  header .subtitle { color: var(--text-dim); font-size: 1.05rem; }
+  header .meta {
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    color: var(--text-faint);
+    font-family: 'SF Mono', Monaco, monospace;
+  }
+  section {
+    margin-bottom: 2.25rem;
+    scroll-margin-top: 1rem;
+  }
+  section h2 {
+    font-size: 1.35rem;
+    font-weight: 600;
+    margin-bottom: 0.85rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+  }
+  section h2 .num {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.85rem;
+    color: var(--accent);
+    background: rgba(0,255,136,0.08);
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid rgba(0,255,136,0.25);
+  }
+  section h3 {
+    font-size: 1.05rem;
+    color: var(--text);
+    margin: 1.25rem 0 0.5rem;
+  }
+  p { margin-bottom: 0.85rem; color: var(--text); }
+  p.dim { color: var(--text-dim); }
+  ul, ol {
+    margin: 0.5rem 0 1rem 1.5rem;
+    color: var(--text);
+  }
+  li { margin-bottom: 0.4rem; }
+  strong { color: var(--text); }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--blue);
+    border-radius: 8px;
+    padding: 0.85rem 1.1rem;
+    margin: 0.85rem 0;
+    color: var(--text);
+    font-size: 0.95rem;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.75rem 0 1rem;
+    font-size: 0.9rem;
+    background: var(--surface);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  th, td {
+    padding: 0.65rem 0.9rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th {
+    background: var(--surface2);
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  tr:last-child td { border-bottom: none; }
+  td code, p code {
+    background: var(--surface2);
+    color: var(--accent);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    border: 1px solid var(--border);
+  }
+  footer {
+    margin-top: 3.5rem;
+    padding-top: 1.75rem;
+    border-top: 1px solid var(--border);
+    text-align: center;
+    color: var(--text-faint);
+    font-size: 0.85rem;
+  }
+  @media (max-width: 720px) {
+    body { padding: 1rem; }
+    header h1 { font-size: 1.6rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Privacy Policy</h1>
+  <p class="subtitle">How Momento collects, uses, and protects your information</p>
+  <p class="meta">Effective Date: May 19, 2026 · Last Updated: May 19, 2026</p>
+</header>
+
+<section id="intro">
+  <p>This Privacy Policy explains how <strong>Momento Network</strong> ("Momento," "we," "us," or "our") collects, uses, shares, and protects information when you use the Momento mobile application and related services (the "Service"). Momento is a location-based platform for content creators that incorporates Solana blockchain wallets via the Privy SDK.</p>
+  <p>By using Momento, you agree to the practices described in this policy. If you do not agree, please do not use the Service.</p>
+</section>
+
+<section id="information-we-collect">
+  <h2><span class="num">01</span> Information We Collect</h2>
+
+  <h3>Account information</h3>
+  <p>When you sign in to Momento using Privy's Google OAuth flow, we receive your email address, name, and Google profile photo from Google. We do not receive your Google password.</p>
+
+  <h3>Wallet information</h3>
+  <p>Momento uses <strong>Privy</strong> to provision embedded non-custodial Solana wallets on your behalf. Your wallet's public address is associated with your Momento account. Private keys are managed by Privy's secure key management infrastructure; <strong>we never receive, store, or have access to your private keys</strong>.</p>
+
+  <h3>Location data</h3>
+  <p>Momento is a location-based service. With your permission, we collect your device's approximate location to:</p>
+  <ul>
+    <li>Show you content from creators within a 5-100 km radius of your current location</li>
+    <li>Allow you to publish geotagged posts at your current location (only if you choose to post)</li>
+  </ul>
+  <p>Location data is stored only when you actively use the geofeed or publish a geotagged post. We do not track location in the background.</p>
+
+  <h3>Content you create</h3>
+  <p>Any posts, comments, likes, follows, or other content you create on Momento is stored on our servers and shown to other users in accordance with the Service.</p>
+
+  <h3>Device information</h3>
+  <p>We collect a device push-notification token (if you grant notification permission) so we can deliver push alerts. We also receive basic device metadata (operating system, app version, device model) for diagnostic and reliability purposes.</p>
+
+  <h3>KYC information (creators only)</h3>
+  <p>If you apply to become a verified creator on Momento, we collect additional identity verification information required by our Know Your Customer (KYC) provider, which may include name, date of birth, government-issued ID, and proof of address. This information is processed by our KYC partner and used solely for identity verification and regulatory compliance.</p>
+
+  <h3>Usage and analytics</h3>
+  <p>We collect basic usage analytics (screens viewed, actions taken) to understand how Momento is used and to improve the Service. This data is aggregated and not used to identify individual users.</p>
+</section>
+
+<section id="how-we-use">
+  <h2><span class="num">02</span> How We Use Your Information</h2>
+  <ul>
+    <li><strong>To operate the Service:</strong> deliver feeds, render posts, process interactions (likes, follows, comments)</li>
+    <li><strong>To authenticate you:</strong> via Privy and Google OAuth</li>
+    <li><strong>To enable wallet functionality:</strong> via Privy's embedded wallet infrastructure</li>
+    <li><strong>To send notifications:</strong> push alerts about new follows, likes, comments, and platform updates</li>
+    <li><strong>For safety and abuse prevention:</strong> detect and prevent fraud, spam, and Terms of Service violations</li>
+    <li><strong>To comply with legal obligations:</strong> respond to lawful requests from authorities</li>
+    <li><strong>To improve the Service:</strong> debug, analyze trends, ship new features</li>
+  </ul>
+</section>
+
+<section id="third-parties">
+  <h2><span class="num">03</span> Third-Party Services</h2>
+  <p>Momento integrates with the following third-party services. Each has its own privacy policy that governs its handling of your data.</p>
+  <table>
+    <thead>
+      <tr><th>Service</th><th>Purpose</th><th>Privacy Policy</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>Privy</strong></td><td>Authentication, embedded Solana wallets</td><td><a href="https://www.privy.io/legal/privacy-policy" target="_blank">privy.io/legal/privacy-policy</a></td></tr>
+      <tr><td><strong>Google</strong></td><td>OAuth sign-in via Privy</td><td><a href="https://policies.google.com/privacy" target="_blank">policies.google.com/privacy</a></td></tr>
+      <tr><td><strong>Solana</strong></td><td>Public blockchain transactions tied to your wallet address</td><td><a href="https://solana.org/privacy-policy" target="_blank">solana.org/privacy-policy</a></td></tr>
+      <tr><td><strong>Helius</strong></td><td>Solana RPC node provider</td><td><a href="https://helius.dev/privacy" target="_blank">helius.dev/privacy</a></td></tr>
+      <tr><td><strong>Supabase</strong></td><td>Database hosting (Postgres + PostGIS)</td><td><a href="https://supabase.com/privacy" target="_blank">supabase.com/privacy</a></td></tr>
+      <tr><td><strong>Vercel</strong></td><td>API and web hosting</td><td><a href="https://vercel.com/legal/privacy-policy" target="_blank">vercel.com/legal/privacy-policy</a></td></tr>
+      <tr><td><strong>Upstash</strong></td><td>Caching and rate-limiting</td><td><a href="https://upstash.com/static/trust/privacy.pdf" target="_blank">upstash.com/trust/privacy</a></td></tr>
+      <tr><td><strong>Expo / EAS</strong></td><td>Mobile app build and push notification routing</td><td><a href="https://expo.dev/privacy" target="_blank">expo.dev/privacy</a></td></tr>
+      <tr><td><strong>Apple</strong></td><td>iOS push delivery (APNs), App Store distribution</td><td><a href="https://www.apple.com/legal/privacy/" target="_blank">apple.com/legal/privacy</a></td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout">
+    <strong>Blockchain note:</strong> Transactions you make from your Solana wallet are recorded on a public blockchain. Anyone can view your wallet's public address and its transaction history. Your wallet address is linked to your Momento account but is not, by itself, linked to your real-world identity by us.
+  </div>
+</section>
+
+<section id="sharing">
+  <h2><span class="num">04</span> How We Share Information</h2>
+  <p>We do <strong>not</strong> sell your personal information. We share information only in the following situations:</p>
+  <ul>
+    <li><strong>With other users:</strong> Your profile (name, photo, bio), posts, comments, follows, and likes are visible to other Momento users in accordance with the Service's design.</li>
+    <li><strong>With service providers:</strong> The third parties listed in Section 03 process data on our behalf to operate the Service. They are bound by contract to use data only for the purposes we direct.</li>
+    <li><strong>For legal reasons:</strong> If required by law, court order, or to protect the rights, safety, or property of Momento, our users, or the public.</li>
+    <li><strong>Business transfers:</strong> If Momento is acquired or merges with another entity, your information may transfer as part of that transaction.</li>
+  </ul>
+</section>
+
+<section id="security">
+  <h2><span class="num">05</span> Security</h2>
+  <p>We use industry-standard safeguards to protect your information, including TLS encryption in transit, secure password handling via Privy, and access controls on our backend. <strong>No system is perfectly secure</strong>, and we cannot guarantee absolute security. If you believe your account has been compromised, contact us immediately (see Section 09).</p>
+</section>
+
+<section id="rights">
+  <h2><span class="num">06</span> Your Rights and Choices</h2>
+  <p>Depending on your jurisdiction (including under GDPR, CCPA, and similar laws), you may have rights to:</p>
+  <ul>
+    <li><strong>Access</strong> the personal information we hold about you</li>
+    <li><strong>Correct</strong> inaccurate information</li>
+    <li><strong>Delete</strong> your account and associated data</li>
+    <li><strong>Object to</strong> or restrict certain processing</li>
+    <li><strong>Withdraw consent</strong> previously granted (e.g. revoke location permission in iOS Settings)</li>
+    <li><strong>Data portability</strong> — request a machine-readable copy of your data</li>
+  </ul>
+  <p>To exercise any of these rights, email us at <a href="mailto:brian@mylz.run">brian@mylz.run</a>. We will respond within 30 days.</p>
+  <p><strong>Account deletion:</strong> You can delete your Momento account at any time from within the app (Profile → Settings → Delete Account). Account deletion removes your posts, comments, likes, follows, and KYC records from our systems within 30 days. Your Solana wallet itself is managed by Privy; deleting your Momento account does not delete your wallet on the Solana blockchain.</p>
+</section>
+
+<section id="children">
+  <h2><span class="num">07</span> Children's Privacy</h2>
+  <p>Momento is not directed at children under 13 (or 16 in the EEA / UK). We do not knowingly collect personal information from children. If you believe a child has provided us information, please contact us and we will delete it.</p>
+</section>
+
+<section id="international">
+  <h2><span class="num">08</span> International Users</h2>
+  <p>Momento is operated from Canada. If you use the Service from outside Canada, you understand that your information will be transferred to, stored, and processed in Canada and other countries where our service providers operate. Some of these jurisdictions may have data protection laws different from those in your country.</p>
+</section>
+
+<section id="changes">
+  <h2><span class="num">09</span> Changes to This Policy</h2>
+  <p>We may update this Privacy Policy from time to time. When we make material changes, we will notify you within the app, by email, or by updating the "Last Updated" date at the top of this page. Continued use of the Service after changes means you accept the updated policy.</p>
+</section>
+
+<section id="contact">
+  <h2><span class="num">10</span> Contact Us</h2>
+  <p>Questions about this Privacy Policy or our data practices? Reach us at:</p>
+  <p>
+    <strong>Momento Network</strong><br>
+    Email: <a href="mailto:brian@mylz.run">brian@mylz.run</a><br>
+    Website: <a href="https://momento.network">momento.network</a>
+  </p>
+</section>
+
+<footer>
+  <p>Momento Network · Privacy Policy</p>
+  <p>This document is also available at <code>momento.network/privacy.html</code> once DNS is pointed at Vercel.</p>
+</footer>
+
+</body>
+</html>
