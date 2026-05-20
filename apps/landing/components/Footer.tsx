@@ -4,11 +4,9 @@ import { useState } from 'react';
 import Image from 'next/image';
 import Modal from './Modal';
 import TermsContent from './TermsContent';
-import PrivacyContent from './PrivacyContent';
 
 export default function Footer() {
   const [showTerms, setShowTerms] = useState(false);
-  const [showPrivacy, setShowPrivacy] = useState(false);
 
   return (
     <>
@@ -29,15 +27,15 @@ export default function Footer() {
 
           {/* Center — Legal + social */}
           <div className="flex items-center gap-6">
-            <button
-              onClick={() => setShowPrivacy(true)}
-              className="text-[#444444] text-[10px] font-mono uppercase tracking-wider hover:text-white transition-colors duration-200"
+            <a
+              href="/privacy.html"
+              className="text-momento-text-secondary text-xs font-mono uppercase tracking-wider hover:text-momento-primary transition-colors duration-200"
             >
               Privacy
-            </button>
+            </a>
             <button
               onClick={() => setShowTerms(true)}
-              className="text-[#444444] text-[10px] font-mono uppercase tracking-wider hover:text-white transition-colors duration-200"
+              className="text-momento-text-secondary text-xs font-mono uppercase tracking-wider hover:text-momento-primary transition-colors duration-200"
             >
               Terms
             </button>
@@ -46,6 +44,7 @@ export default function Footer() {
               target="_blank"
               rel="noopener noreferrer"
               className="text-[#333333] hover:text-white transition-colors"
+              aria-label="Momento on X"
             >
               <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
@@ -66,14 +65,6 @@ export default function Footer() {
         title="Terms of Service"
       >
         <TermsContent />
-      </Modal>
-
-      <Modal
-        isOpen={showPrivacy}
-        onClose={() => setShowPrivacy(false)}
-        title="Privacy Policy"
-      >
-        <PrivacyContent />
       </Modal>
     </>
   );
