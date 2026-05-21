@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useCallback, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 interface ModalProps {
   isOpen: boolean;
@@ -11,7 +12,13 @@ interface ModalProps {
 
 export default function Modal({ isOpen, onClose, title, children }: ModalProps) {
   const [visible, setVisible] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+
+  // Mark mounted for SSR-safe portal rendering
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Animate in after mount, animate out before unmount
   useEffect(() => {
@@ -23,13 +30,15 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
     }
   }, [isOpen]);
 
-  // Lock body scroll when modal is open
+  // Lock body scroll + flag modal state when modal is open
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+      document.body.dataset.modalOpen = 'true';
     }
     return () => {
       document.body.style.overflow = '';
+      delete document.body.dataset.modalOpen;
     };
   }, [isOpen]);
 
@@ -55,9 +64,9 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
     }
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
+  const modalNode = (
     <div
       className={`fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6
                   transition-all duration-300 ease-out
@@ -105,4 +114,8 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
       </div>
     </div>
   );
+
+  // Render via portal so the modal escapes any ancestor stacking context
+  // (e.g. transformed/animated parents) and is always anchored to the viewport.
+  return createPortal(modalNode, document.body);
 }

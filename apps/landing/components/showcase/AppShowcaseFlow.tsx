@@ -72,7 +72,7 @@ export default function AppShowcaseFlow() {
 
     const handleWheel = (e: WheelEvent) => {
       // Don't intercept scroll when a modal or other component has locked body scroll
-      if (document.body.style.overflow === 'hidden') return;
+      if (document.body.dataset.modalOpen === 'true' || document.body.style.overflow === 'hidden') return;
 
       const rect = container.getBoundingClientRect();
       const scrolled = -rect.top;
@@ -123,7 +123,7 @@ export default function AppShowcaseFlow() {
 
     const handleTouchMove = (e: TouchEvent) => {
       // Don't intercept touch-scroll when a modal or other component has locked body scroll
-      if (document.body.style.overflow === 'hidden') return;
+      if (document.body.dataset.modalOpen === 'true' || document.body.style.overflow === 'hidden') return;
 
       const rect = container.getBoundingClientRect();
       const scrolled = -rect.top;
