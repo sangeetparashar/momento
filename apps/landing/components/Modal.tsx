@@ -59,16 +59,16 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6
+      className={`fixed inset-0 z-[200] flex items-center justify-center p-4 sm:p-6
                   transition-all duration-300 ease-out
                   ${visible ? 'opacity-100' : 'opacity-0'}`}
       role="dialog"
       aria-modal="true"
       aria-label={title}
     >
-      {/* Backdrop — heavy opacity + blur to fully hide the page behind */}
+      {/* Backdrop — solid black + heavy blur, fully hides the page behind */}
       <div
-        className="absolute inset-0 bg-black/92 backdrop-blur-2xl"
+        className="absolute inset-0 bg-black backdrop-blur-3xl"
         onClick={onClose}
       />
 
