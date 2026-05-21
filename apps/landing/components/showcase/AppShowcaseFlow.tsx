@@ -11,6 +11,7 @@ import TickerBanner from '../TickerBanner';
 import Manifesto from '../Manifesto';
 import Footer from '../Footer';
 import WaitlistForm from '../WaitlistForm';
+import BetaJoinCTA from '../BetaJoinCTA';
 
 const sections = [
   {
@@ -258,11 +259,23 @@ export default function AppShowcaseFlow() {
           >
             Discover creators near you. Support them directly. Build together.
           </p>
+          {/* Primary CTA — Join the iOS Beta (TestFlight is live) */}
           <div
-            id="waitlist"
-            className="anim-hero pt-2 md:pt-4"
+            className="anim-hero pt-2 md:pt-4 flex justify-center"
             style={{ opacity: 0 }}
           >
+            <BetaJoinCTA variant="primary" />
+          </div>
+
+          {/* Secondary — Waitlist for Android / general updates */}
+          <div
+            id="waitlist"
+            className="anim-hero pt-3 md:pt-4 flex flex-col items-center gap-2"
+            style={{ opacity: 0 }}
+          >
+            <p className="text-[#444444] text-[9px] font-mono uppercase tracking-[0.25em]">
+              Android coming soon · get notified
+            </p>
             <WaitlistForm />
           </div>
           <div

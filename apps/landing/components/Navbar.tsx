@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
+import BetaJoinCTA from './BetaJoinCTA';
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -11,11 +12,6 @@ export default function Navbar() {
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-
-  const scrollTo = (id: string) => {
-    const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
-  };
 
   return (
     <nav
@@ -43,15 +39,8 @@ export default function Navbar() {
           </span>
         </button>
 
-        {/* CTA */}
-        <button
-          onClick={() => scrollTo('waitlist')}
-          className="px-5 py-2 rounded-full border border-white/20 text-white text-[10px] font-mono tracking-[0.15em] uppercase
-                     hover:border-momento-primary hover:text-momento-primary
-                     transition-all duration-300"
-        >
-          Join Waitlist
-        </button>
+        {/* CTA — Join Beta opens TestFlight install modal */}
+        <BetaJoinCTA variant="compact" />
       </div>
     </nav>
   );
