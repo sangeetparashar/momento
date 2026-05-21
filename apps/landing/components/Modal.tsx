@@ -66,9 +66,9 @@ export default function Modal({ isOpen, onClose, title, children }: ModalProps) 
       aria-modal="true"
       aria-label={title}
     >
-      {/* Backdrop */}
+      {/* Backdrop — heavy opacity + blur to fully hide the page behind */}
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/92 backdrop-blur-2xl"
         onClick={onClose}
       />
 
