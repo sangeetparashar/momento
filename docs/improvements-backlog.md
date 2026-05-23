@@ -3,6 +3,10 @@
 > **Living document** capturing every known issue, gap, and improvement opportunity discovered post-beta launch.
 > Agents and engineers: read this before starting any change to the app, API, or infra.
 
+**Companion docs**:
+- [`engineering-starter-kit.md`](./engineering-starter-kit.md) — implementation guidance, recommended libraries, code patterns to mirror per issue
+- [`distribution.html`](./distribution.html) — release process / TestFlight workflow
+
 **Last updated**: 2026-05-23
 **Beta status**: iOS TestFlight live ([testflight.apple.com/join/3cPn24S8](https://testflight.apple.com/join/3cPn24S8)) · External review approved · 4 organic signups in last 24h
 **Health**: API up · DB up · Cache up · Vercel deployments green
