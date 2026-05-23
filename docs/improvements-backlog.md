@@ -50,38 +50,22 @@ These three are interrelated and should be tackled together. The combined fix re
 
 ---
 
-### 🔴 #001 — Media re-downloads on every view (Supabase `Cache-Control: no-cache`)
+### ✅ #001 — Media re-downloads on every view (Supabase `Cache-Control: no-cache`)
 
-**Status**: `open` · P0 · `[backend]` · `[dashboard]`
+**Status**: `done` · P0 · `[backend]` · `[ota]` · Shipped 2026-05-23 (OTA update group `ac1142e5-62fe-4196-8c37-25cb0a1c6985`)
 
-**Symptoms**: Videos and images "load slowly" or appear to re-load when scrolling back through the feed. Even the same post viewed twice in a row triggers a full re-download.
+**Resolution**: The bucket-level cache-control setting + SQL backfill approach didn't work because **Supabase's `/object/public/` gateway hard-codes `cache-control: no-cache` regardless of metadata**. Discovered after extensive testing:
 
-**Root cause**: Supabase Storage serves all objects in the `momento-uploads` bucket with `Cache-Control: no-cache`. Verified via:
-```
-$ curl -sI https://phlkstaghvbwacmzuihr.supabase.co/storage/v1/object/public/momento-uploads/.../foo.quicktime
-content-length: 19572196
-cache-control: no-cache    ← problem
-```
-`no-cache` forces revalidation with the origin before any cached copy can be used. Combined with 20 MB video files, this means a near-full re-download every view.
+1. SQL `UPDATE storage.objects SET metadata.cacheControl = ...` updates origin metadata but `/object/public/` ignores it
+2. SDK `.update()` with `cacheControl: 'max-age=...'` pre-wraps with `max-age=` producing `max-age=max-age=...` (use just the directive without prefix)
+3. Identical-bytes re-upload gets deduped by Supabase (returns 200 but no new version → no CF invalidation)
 
-**Proposed fix**:
-1. **One-time backfill of existing files** — update `storage.objects.metadata` for the ~30 files already uploaded:
-   ```sql
-   UPDATE storage.objects
-   SET metadata = jsonb_set(metadata, '{cacheControl}', '"max-age=31536000, immutable"')
-   WHERE bucket_id = 'momento-uploads';
-   ```
-2. **New uploads** — change `apps/api/lib/storage.ts:createPresignedUpload` to embed cache-control in the upload options OR add a post-upload hook that sets it via Supabase admin API.
-3. **Bucket default** — Supabase Dashboard → Storage → `momento-uploads` → Settings → File cache TTL → set to `31536000` (1 year).
+**Working fix** (shipped):
+- **Mobile URL rewriter** (`apps/mobile/src/utils/media.ts`): `transformMediaUrl()` rewrites `/storage/v1/object/public/` → `/storage/v1/render/image/public/` for image extensions. The `/render/image/` endpoint **respects metadata.cacheControl** AND auto-compresses images (~40% smaller payloads). Videos stay on `/object/public/` (no `/render/video/` equivalent exists).
+- **Mobile XHR upload** (`apps/mobile/src/hooks/useUpload.ts:46-50`): adds `Cache-Control: max-age=31536000, immutable` header on upload PUT. Every new upload arrives with the right metadata.
+- **Backfill of 31 existing image files** via `apps/api/scripts/fix-cache-control.ts` — appends a single null byte (safe for all image decoders, ignored after EOI/IEND markers) to force a new etag → CF cache invalidates → next request gets `max-age=31536000, immutable`. Originals backed up to `/tmp/momento-cache-fix-backup-*/`. Script is idempotent and re-runnable.
 
-**Affected files**:
-- `apps/api/lib/storage.ts` (presign generator)
-- Supabase Dashboard for bucket defaults
-- One-time SQL backfill
-
-**Effort**: ~30 min total (10 min backfill SQL, 15 min API change, 5 min dashboard click)
-
-**Expected impact**: 5-10× perceived speedup on repeat-view of media-heavy feeds. Eliminates re-download on scroll-back. CDN edge caching becomes effective.
+**Known limitation**: 6 video files still serve `no-cache` from `/object/public/`. Supabase doesn't expose a video equivalent of `/render/image/`. Solution: migrate video to Cloudflare Stream — see `docs/video-platform-decision.md`.
 
 ---
 
@@ -356,6 +340,39 @@ WHERE email='<email>' RETURNING id;
 
 ---
 
+### 🟡 #012 — Migrate video to Cloudflare Stream (HLS adaptive bitrate + faster uploads)
+
+**Status**: `open` · P1 · `[backend]` + `[ota]` · See full brief at [`docs/video-platform-decision.md`](./video-platform-decision.md)
+
+**Symptoms**: 6 beta users reported slow video uploads (20MB iPhone QuickTime captures over LTE = 30+ seconds with no progress feedback). 50MB cap blocks longer/higher-quality clips. Video playback re-downloads full MP4 every view because Supabase `/object/public/` returns `cache-control: no-cache` regardless of metadata (see #001 resolution notes).
+
+**Root cause**: Supabase Storage is object storage. No transcoding, no adaptive bitrate, single-region ingest, gateway hard-codes `no-cache` on public path. Pro tier removes per-file/storage caps but doesn't add any of the missing video infrastructure.
+
+**Proposed fix** (3-step ladder, see decision doc for full rationale):
+1. **Step 1 — this week**: Ship client-side compression via `react-native-compressor`. Cuts 20MB → 3-5MB. Solves upload-speed complaint independently of vendor choice. Native rebuild required.
+2. **Step 2 — within 2 weeks**: Add Cloudflare Stream for new video uploads. ~$13-22/mo at projected scale. HLS adaptive bitrate, edge caching, tus resumable uploads, basic analytics.
+3. **Step 3 — same release as Step 2**: Idempotent migration script for the 6 legacy Supabase videos.
+
+**Why not Mux or Bunny**: Mux is best-in-class but 30-50% more expensive than CF Stream — analytics ROI doesn't justify premium until ~1k creators. Bunny is cheaper but smaller community + weaker DX. See decision doc §3 for full comparison.
+
+**Why keep Supabase Pro**: $25/mo still pays for DB + image storage + avatars + 100GB capacity + daily backups + no DB auto-pause. Net new spend for CF Stream is only $15-25/mo on top.
+
+**Affected files** (when Step 2 ships):
+- `apps/api/app/api/uploads/video-presign/route.ts` — NEW
+- `apps/api/lib/cloudflare.ts` — NEW
+- `apps/mobile/src/hooks/useUpload.ts` — branch on mime type
+- `apps/mobile/src/components/features/PostCard.tsx` — derive HLS thumbnail URL
+- `apps/mobile/src/utils/media.ts` — already pass-through for non-Supabase URLs ✓
+- Vercel env: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_STREAM_API_TOKEN`
+
+**Effort**: Step 1 = 1 day code + Apple review. Step 2 = 2-3 days. Step 3 = 1 hour.
+
+**Decision deadline**: 2026-06-15. Re-evaluate based on whether Step 1 ends video complaints on its own.
+
+**Linked**: closes #003 (50MB cap moot), partially overlaps #008 (compression is part of media-editor scope).
+
+---
+
 ### 🟢 #011 — Apply-to-creator flow lacks visibility of pending state to admins
 
 **Status**: `open` · P2 · `[backend]` + `[ota]`
@@ -383,6 +400,7 @@ Move issues here when shipped, with commit hash + date. Acts as institutional me
 - ✅ **Landing page Join Beta CTA + modal** — shipped `801050b` (2026-05-22)
 - ✅ **Privacy policy + distribution playbook hosted** — shipped earlier in week
 - ✅ **expo-av → expo-video migration** — shipped `c5e7d48`
+- ✅ **#001 Image cache-control via `/render/image/`** — shipped 2026-05-23, OTA update group `ac1142e5-62fe-4196-8c37-25cb0a1c6985`. Mobile `transformMediaUrl()` rewrites to the cached endpoint; XHR upload sets `Cache-Control` header; 31 legacy image files re-uploaded via byte-append. Videos still uncached pending #012.
 
 ---
 
