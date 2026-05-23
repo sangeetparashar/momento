@@ -17,6 +17,7 @@ import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { FONT_FAMILY_DISPLAY_BOLD } from '@/styles/typography';
 import { formatTimeAgo } from '@/utils/formatters';
+import { transformMediaUrl } from '@/utils/media';
 
 interface ProfileDashboardProps {
   user: any;
@@ -230,15 +231,18 @@ export function ProfileDashboard({
                       </Text>
                     )}
                     {/* Image */}
-                    {post.mediaUrl && (
-                      <Image
-                        source={{ uri: post.mediaUrl }}
-                        style={styles.feedPostImage}
-                        contentFit="cover"
-                        cachePolicy="disk"
-                        recyclingKey={post.mediaUrl}
-                      />
-                    )}
+                    {post.mediaUrl && (() => {
+                      const imgSrc = transformMediaUrl(post.mediaUrl);
+                      return (
+                        <Image
+                          source={{ uri: imgSrc }}
+                          style={styles.feedPostImage}
+                          contentFit="cover"
+                          cachePolicy="disk"
+                          recyclingKey={imgSrc}
+                        />
+                      );
+                    })()}
                   </Pressable>
                 ))}
                 {hasMorePosts && (

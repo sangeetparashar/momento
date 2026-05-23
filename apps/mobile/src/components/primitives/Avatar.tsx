@@ -3,6 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Text } from './Text';
 import { COLORS, RADII } from '@/styles/theme';
+import { transformMediaUrl } from '@/utils/media';
 
 type AvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
@@ -65,11 +66,12 @@ export function Avatar({
     [dimension, borderColor],
   );
 
-  if (uri) {
+  const sourceUri = transformMediaUrl(uri);
+  if (sourceUri) {
     return (
       <View style={containerStyle}>
         <Image
-          source={{ uri }}
+          source={{ uri: sourceUri }}
           style={[
             styles.image,
             { width: dimension, height: dimension, borderRadius: dimension / 2 },
@@ -78,7 +80,7 @@ export function Avatar({
           transition={200}
           placeholder={undefined}
           cachePolicy="disk"
-          recyclingKey={uri}
+          recyclingKey={sourceUri}
         />
       </View>
     );

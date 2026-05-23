@@ -24,6 +24,7 @@ import { apiService } from '@/services/api';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatNumber, formatTimeAgo } from '@/utils/formatters';
+import { transformMediaUrl } from '@/utils/media';
 import { SOCIAL_PLATFORMS } from '@momento/shared';
 
 const COLUMN_GAP = 2;
@@ -132,7 +133,7 @@ export default function CreatorScreen() {
       <View style={[styles.heroContainer, { height: HERO_HEIGHT }]}>
         {profile?.bannerUrl || profile?.avatarUrl ? (
           <Image
-            source={{ uri: profile.bannerUrl || profile.avatarUrl }}
+            source={{ uri: transformMediaUrl(profile.bannerUrl || profile.avatarUrl) }}
             style={StyleSheet.absoluteFill}
             contentFit="cover"
             cachePolicy="disk"
@@ -196,11 +197,11 @@ export default function CreatorScreen() {
               >
                 {post.mediaUrl ? (
                   <Image
-                    source={{ uri: post.mediaUrl }}
+                    source={{ uri: transformMediaUrl(post.mediaUrl) }}
                     style={styles.masonryImage}
                     contentFit="cover"
                     cachePolicy="disk"
-                    recyclingKey={post.mediaUrl}
+                    recyclingKey={transformMediaUrl(post.mediaUrl)}
                   />
                 ) : (
                   <View style={styles.masonryTextItem}>
@@ -221,11 +222,11 @@ export default function CreatorScreen() {
               >
                 {post.mediaUrl ? (
                   <Image
-                    source={{ uri: post.mediaUrl }}
+                    source={{ uri: transformMediaUrl(post.mediaUrl) }}
                     style={styles.masonryImage}
                     contentFit="cover"
                     cachePolicy="disk"
-                    recyclingKey={post.mediaUrl}
+                    recyclingKey={transformMediaUrl(post.mediaUrl)}
                   />
                 ) : (
                   <View style={styles.masonryTextItem}>
@@ -288,11 +289,11 @@ export default function CreatorScreen() {
       {/* Image */}
       {post.mediaUrl && (
         <Image
-          source={{ uri: post.mediaUrl }}
+          source={{ uri: transformMediaUrl(post.mediaUrl) }}
           style={styles.feedPostImage}
           contentFit="cover"
           cachePolicy="disk"
-          recyclingKey={post.mediaUrl}
+          recyclingKey={transformMediaUrl(post.mediaUrl)}
         />
       )}
     </Pressable>

@@ -21,6 +21,7 @@ import { LikeButton, PostDetailSkeleton } from '@/components/features';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo, formatDistance } from '@/utils/formatters';
+import { transformMediaUrl } from '@/utils/media';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useFeed, useComments, useUserProfile } from '@/hooks';
 import { apiService } from '@/services/api';
@@ -254,7 +255,7 @@ export default function PostScreen() {
             </View>
           ) : post.mediaUrl ? (
             <Image
-              source={{ uri: post.mediaUrl }}
+              source={{ uri: transformMediaUrl(post.mediaUrl) }}
               style={styles.postImage}
               contentFit="cover"
               transition={200}

@@ -22,6 +22,7 @@ import { useFeed, useNearbyCreators, useSearch } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatDistance, formatNumber } from '@/utils/formatters';
+import { transformMediaUrl } from '@/utils/media';
 import { PostType } from '@momento/shared';
 import type { PostWithCreator, PublicCreator } from '@momento/shared';
 
@@ -103,12 +104,12 @@ function AnimatedCard({
         {item.imageUri ? (
           <>
             <Image
-              source={{ uri: item.imageUri }}
+              source={{ uri: transformMediaUrl(item.imageUri) }}
               style={styles.gridImage}
               contentFit="cover"
               transition={200}
               cachePolicy="disk"
-              recyclingKey={item.imageUri}
+              recyclingKey={transformMediaUrl(item.imageUri)}
               placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
             />
             {item.isVideo && (
@@ -179,7 +180,7 @@ function CreatorSearchRow({
       <View style={styles.creatorCardPreview}>
         {creator.bannerUrl ? (
           <Image
-            source={{ uri: creator.bannerUrl }}
+            source={{ uri: transformMediaUrl(creator.bannerUrl) }}
             style={styles.creatorCardBanner}
             contentFit="cover"
             cachePolicy="disk"
@@ -220,12 +221,12 @@ function PostSearchRow({
     <Pressable onPress={onPress} style={styles.searchRow}>
       {post.mediaUrl ? (
         <Image
-          source={{ uri: post.mediaUrl }}
+          source={{ uri: transformMediaUrl(post.mediaUrl) }}
           style={styles.searchThumb}
           contentFit="cover"
           transition={200}
           cachePolicy="disk"
-          recyclingKey={post.mediaUrl}
+          recyclingKey={transformMediaUrl(post.mediaUrl)}
         />
       ) : (
         <View style={[styles.searchThumb, styles.searchThumbText]}>

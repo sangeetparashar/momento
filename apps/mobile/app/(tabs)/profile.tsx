@@ -31,6 +31,7 @@ import { apiService } from '@/services/api';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatNumber } from '@/utils/formatters';
+import { transformMediaUrl } from '@/utils/media';
 import { UserRole, SOCIAL_PLATFORMS } from '@momento/shared';
 
 // Feature flag: set to true to use the new financial dashboard profile layout.
@@ -211,12 +212,12 @@ export default function ProfileScreen() {
               >
                 {post.mediaUrl ? (
                   <Image
-                    source={{ uri: post.mediaUrl }}
+                    source={{ uri: transformMediaUrl(post.mediaUrl) }}
                     style={styles.masonryImage}
                     contentFit="cover"
                     transition={200}
                     cachePolicy="disk"
-                    recyclingKey={post.mediaUrl}
+                    recyclingKey={transformMediaUrl(post.mediaUrl)}
                     placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
                   />
                 ) : (
@@ -238,12 +239,12 @@ export default function ProfileScreen() {
               >
                 {post.mediaUrl ? (
                   <Image
-                    source={{ uri: post.mediaUrl }}
+                    source={{ uri: transformMediaUrl(post.mediaUrl) }}
                     style={styles.masonryImage}
                     contentFit="cover"
                     transition={200}
                     cachePolicy="disk"
-                    recyclingKey={post.mediaUrl}
+                    recyclingKey={transformMediaUrl(post.mediaUrl)}
                     placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
                   />
                 ) : (
@@ -305,12 +306,12 @@ export default function ProfileScreen() {
             >
               {post.mediaUrl ? (
                 <Image
-                  source={{ uri: post.mediaUrl }}
+                  source={{ uri: transformMediaUrl(post.mediaUrl) }}
                   style={styles.masonryImage}
                   contentFit="cover"
                   transition={200}
                   cachePolicy="disk"
-                  recyclingKey={post.mediaUrl}
+                  recyclingKey={transformMediaUrl(post.mediaUrl)}
                   placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
                 />
               ) : (
@@ -332,12 +333,12 @@ export default function ProfileScreen() {
             >
               {post.mediaUrl ? (
                 <Image
-                  source={{ uri: post.mediaUrl }}
+                  source={{ uri: transformMediaUrl(post.mediaUrl) }}
                   style={styles.masonryImage}
                   contentFit="cover"
                   transition={200}
                   cachePolicy="disk"
-                  recyclingKey={post.mediaUrl}
+                  recyclingKey={transformMediaUrl(post.mediaUrl)}
                   placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
                 />
               ) : (

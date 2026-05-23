@@ -20,6 +20,7 @@ import { apiService } from '@/services/api';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatNumber } from '@/utils/formatters';
+import { transformMediaUrl } from '@/utils/media';
 import { SOCIAL_PLATFORMS } from '@momento/shared';
 import { UserRole } from '@momento/shared';
 
@@ -182,12 +183,12 @@ export default function UserScreen() {
           >
             {post.mediaUrl ? (
               <Image
-                source={{ uri: post.mediaUrl }}
+                source={{ uri: transformMediaUrl(post.mediaUrl) }}
                 style={styles.gridImage}
                 contentFit="cover"
                 transition={200}
                 cachePolicy="disk"
-                recyclingKey={post.mediaUrl}
+                recyclingKey={transformMediaUrl(post.mediaUrl)}
                 placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
               />
             ) : (

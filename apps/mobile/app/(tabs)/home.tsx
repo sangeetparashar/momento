@@ -26,6 +26,7 @@ import { apiService } from '@/services/api';
 import type { FeedSortMode } from '@/hooks/useFeed';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
+import { transformMediaUrl } from '@/utils/media';
 import { PostType } from '@momento/shared';
 import type { PostWithCreator } from '@momento/shared';
 
@@ -59,6 +60,7 @@ const FeedPage = React.memo(function FeedPage({
   const [isMuted, setIsMuted] = useState(true);
   const [isPlaying, setIsPlaying] = useState(true);
   const isVideo = isVideoPost(post);
+  const imageSrc = !isVideo ? transformMediaUrl(post.mediaUrl) : undefined;
 
   const followMutation = useMutation({
     mutationFn: () => apiService.post(`/creators/${post.creatorId}/follow`),
@@ -110,14 +112,14 @@ const FeedPage = React.memo(function FeedPage({
           contentFit="cover"
           nativeControls={false}
         />
-      ) : post.mediaUrl ? (
+      ) : imageSrc ? (
         <Image
-          source={{ uri: post.mediaUrl }}
+          source={{ uri: imageSrc }}
           style={StyleSheet.absoluteFill}
           contentFit="cover"
           placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
           cachePolicy="disk"
-          recyclingKey={post.mediaUrl}
+          recyclingKey={imageSrc}
         />
       ) : (
         <View style={styles.textPostContainer}>

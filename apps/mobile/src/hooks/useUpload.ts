@@ -43,6 +43,10 @@ export function useUpload(): UseUploadReturn {
         const xhr = new XMLHttpRequest();
         xhr.open('PUT', url);
         xhr.setRequestHeader('Content-Type', contentType);
+        // Persist on the storage object so /render/image/public/ serves with
+        // long max-age + immutable. Without this header the upload defaults
+        // to no-cache and the image re-downloads on every view.
+        xhr.setRequestHeader('Cache-Control', 'max-age=31536000, immutable');
 
         xhr.upload.onprogress = (event) => {
           if (event.lengthComputable) {

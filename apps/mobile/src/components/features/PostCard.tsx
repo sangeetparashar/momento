@@ -10,6 +10,7 @@ import { BookmarkButton } from './BookmarkButton';
 import { COLORS, SPACING } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo, formatNumber } from '@/utils/formatters';
+import { transformMediaUrl } from '@/utils/media';
 import { PostType } from '@momento/shared';
 import type { PostWithCreator } from '@momento/shared';
 
@@ -25,6 +26,7 @@ export function PostCard({ post }: PostCardProps) {
   const translateY = useRef(new Animated.Value(20)).current;
   const [isMuted, setIsMuted] = useState(true);
   const isVideo = post.postType === PostType.VIDEO;
+  const imageSrc = !isVideo ? transformMediaUrl(post.mediaUrl) : undefined;
 
   const videoPlayer = useVideoPlayer(
     isVideo && post.mediaUrl ? post.mediaUrl : null,
@@ -111,16 +113,16 @@ export function PostCard({ post }: PostCardProps) {
             />
           </Pressable>
         </Pressable>
-      ) : post.mediaUrl ? (
+      ) : imageSrc ? (
         <AnimatedPressable onPress={handleImagePress} scaleValue={0.98}>
           <Image
-            source={{ uri: post.mediaUrl }}
+            source={{ uri: imageSrc }}
             style={styles.image}
             contentFit="cover"
             transition={200}
             placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
             cachePolicy="disk"
-            recyclingKey={post.mediaUrl}
+            recyclingKey={imageSrc}
           />
         </AnimatedPressable>
       ) : post.content ? (
