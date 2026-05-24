@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { Video } from 'react-native-compressor';
 import { apiService } from '@/services/api';
 import { showErrorToast } from '@/utils/toast';
 import type { UploadPresignResponse } from '@momento/shared';
@@ -25,7 +26,17 @@ interface UseUploadReturn {
   clearError: () => void;
 }
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB — Supabase storage limit
+// 250MB cap after compression. Supabase Pro allows up to 5GB per file, so
+// this is the conservative client-side ceiling (cellular uploads above ~250MB
+// pre-compression rarely succeed within the 5-minute XHR timeout anyway).
+// Videos are auto-compressed before this check; iPhone QuickTime captures
+// usually shrink 20MB → 3-5MB.
+const MAX_FILE_SIZE = 250 * 1024 * 1024;
+const MAX_FILE_SIZE_MB = Math.round(MAX_FILE_SIZE / (1024 * 1024));
+
+// Videos smaller than this skip compression. Tiny clips compress quickly but
+// the overhead isn't worth it for already-small files (e.g. <5s recordings).
+const VIDEO_COMPRESSION_MIN_MB = 5;
 
 /**
  * Image picker + presigned upload flow.
@@ -82,7 +93,13 @@ export function useUpload(): UseUploadReturn {
       setError(null);
 
       try {
-        // Step 0: Compress images before upload
+        // Step 0: Compress media before upload.
+        // Images go through expo-image-manipulator (fast, instant — no
+        // progress UI). Videos go through react-native-compressor which is
+        // GPU-accelerated H.264 transcoding; it can take 3-8s for a 30s
+        // 1080p clip so we wire its progress into the overall progress bar
+        // (0 → 0.15 of total). After compression, the upload phase uses
+        // 0.2 → 0.9 as usual.
         let processedUri = uri;
         let processedMimeType = mimeType;
 
@@ -97,6 +114,25 @@ export function useUpload(): UseUploadReturn {
             processedMimeType = 'image/jpeg';
           } catch {
             // Fall back to original if compression fails
+          }
+        } else if (mimeType.startsWith('video/')) {
+          try {
+            const compressed = await Video.compress(
+              uri,
+              {
+                compressionMethod: 'auto',
+                minimumFileSizeForCompress: VIDEO_COMPRESSION_MIN_MB,
+              },
+              (compressionProgress) => {
+                // Map compression 0-1 to overall 0-0.15
+                setProgress(compressionProgress * 0.15);
+              },
+            );
+            processedUri = compressed;
+            // mimeType unchanged — the container (mp4/quicktime) is preserved
+          } catch {
+            // Fall back to original if compression fails (rare; usually a
+            // corrupt source). Upload will still try, just slower.
           }
         }
 
@@ -126,10 +162,14 @@ export function useUpload(): UseUploadReturn {
           throw new Error(`Blob read failed: ${e?.message || e}`);
         }
 
-        // Step 2.5: Check file size
+        // Step 2.5: Check file size (after any compression). For videos
+        // this means iPhone QuickTime captures that would have been ~20MB
+        // raw are typically 3-5MB after the Video.compress() pass above.
         if (blob.size > MAX_FILE_SIZE) {
           const sizeMB = (blob.size / (1024 * 1024)).toFixed(1);
-          throw new Error(`File is too large (${sizeMB}MB). Maximum size is 50MB. Try a shorter video or lower resolution.`);
+          throw new Error(
+            `Even after compression this file is ${sizeMB}MB — over the ${MAX_FILE_SIZE_MB}MB cap. Try a shorter clip or lower resolution.`,
+          );
         }
 
         // Step 3: Upload with real progress tracking via XHR
