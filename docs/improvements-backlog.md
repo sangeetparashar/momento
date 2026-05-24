@@ -96,9 +96,13 @@ Round 3 (warm):  99 ms total
 
 ---
 
-### 🟡 #003 — Upload size limit (50 MB hardcoded in mobile)
+### 🟦 #003 — Upload size limit (50 MB hardcoded in mobile)
 
-**Status**: `open` · P1 · `[ota]` + `[dashboard]`
+**Status**: `in-progress` · P1 · `[native]` · Code shipped 2026-05-23 (commit `e85ec57`), awaiting `eas build` + `eas submit` to deliver to TestFlight users.
+
+**Resolution**: Bundled with #012 Step 1. `react-native-compressor` added for client-side video compression; `MAX_FILE_SIZE` raised from 50MB → 250MB in `useUpload.ts:34`. Triggers native rebuild because the compressor lib includes native modules. To ship: `cd apps/mobile && eas build --profile production --platform ios && eas submit --platform ios --latest`. After TestFlight pushes the new build, this issue can be marked done.
+
+
 
 **Symptoms**: Users uploading large videos see error: *"File is too large (XX MB). Maximum size is 50MB. Try a shorter video or lower resolution."*
 
