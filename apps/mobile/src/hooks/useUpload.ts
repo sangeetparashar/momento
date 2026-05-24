@@ -38,6 +38,28 @@ const MAX_FILE_SIZE_MB = Math.round(MAX_FILE_SIZE / (1024 * 1024));
 // the overhead isn't worth it for already-small files (e.g. <5s recordings).
 const VIDEO_COMPRESSION_MIN_MB = 5;
 
+// Mime → file extension map. `mimeType.split('/')[1]` alone produces wrong
+// extensions for some types (notably `video/quicktime` → `quicktime`), which
+// causes the feed's VIDEO_EXTENSIONS check (home.tsx, explore.tsx) to miss
+// iOS captures and render them as broken images. Keep this table explicit
+// for the formats we actually handle.
+const MIME_TO_EXT: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/webm': 'webm',
+};
+
+function extensionForMime(mimeType: string): string {
+  return MIME_TO_EXT[mimeType.toLowerCase()] || mimeType.split('/')[1] || 'bin';
+}
+
 /**
  * Image picker + presigned upload flow.
  */
@@ -112,8 +134,10 @@ export function useUpload(): UseUploadReturn {
             );
             processedUri = result.uri;
             processedMimeType = 'image/jpeg';
-          } catch {
-            // Fall back to original if compression fails
+          } catch (e) {
+            // Fall back to original if compression fails — still uploads,
+            // just bigger payload. Log so we notice if this becomes frequent.
+            console.warn('[upload] image compression failed, uploading original:', e);
           }
         } else if (mimeType.startsWith('video/')) {
           try {
@@ -130,14 +154,15 @@ export function useUpload(): UseUploadReturn {
             );
             processedUri = compressed;
             // mimeType unchanged — the container (mp4/quicktime) is preserved
-          } catch {
+          } catch (e) {
             // Fall back to original if compression fails (rare; usually a
             // corrupt source). Upload will still try, just slower.
+            console.warn('[upload] video compression failed, uploading original:', e);
           }
         }
 
         // Step 1: Get presigned URL
-        const ext = processedMimeType.split('/')[1] || 'bin';
+        const ext = extensionForMime(processedMimeType);
         const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
         let uploadUrl: string;

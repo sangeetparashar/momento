@@ -1,6 +1,7 @@
 export { Text } from './Text';
 export { Button } from './Button';
 export { Avatar } from './Avatar';
+export { MediaImage } from './MediaImage';
 export { Spacer } from './Spacer';
 export { Card } from './Card';
 export { ErrorBoundary } from './ErrorBoundary';

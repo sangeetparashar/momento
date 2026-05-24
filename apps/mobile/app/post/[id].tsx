@@ -12,16 +12,14 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Image } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Text, Avatar } from '@/components/primitives';
+import { Text, Avatar, MediaImage } from '@/components/primitives';
 import { LikeButton, PostDetailSkeleton } from '@/components/features';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo, formatDistance } from '@/utils/formatters';
-import { transformMediaUrl } from '@/utils/media';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useFeed, useComments, useUserProfile } from '@/hooks';
 import { apiService } from '@/services/api';
@@ -254,11 +252,9 @@ export default function PostScreen() {
               </Pressable>
             </View>
           ) : post.mediaUrl ? (
-            <Image
-              source={{ uri: transformMediaUrl(post.mediaUrl) }}
+            <MediaImage
+              uri={post.mediaUrl}
               style={styles.postImage}
-              contentFit="cover"
-              transition={200}
             />
           ) : post.content ? (
             <View style={styles.textContentContainer}>

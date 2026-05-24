@@ -8,16 +8,14 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { Text, Avatar } from '@/components/primitives';
+import { Text, Avatar, MediaImage } from '@/components/primitives';
 import { PillTabs, StatsCard, TokenSwapWidget } from '@/components/composites';
 import { ComingSoonModal } from '@/components/features/ComingSoonModal';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { FONT_FAMILY_DISPLAY_BOLD } from '@/styles/typography';
 import { formatTimeAgo } from '@/utils/formatters';
-import { transformMediaUrl } from '@/utils/media';
 
 interface ProfileDashboardProps {
   user: any;
@@ -231,18 +229,9 @@ export function ProfileDashboard({
                       </Text>
                     )}
                     {/* Image */}
-                    {post.mediaUrl && (() => {
-                      const imgSrc = transformMediaUrl(post.mediaUrl);
-                      return (
-                        <Image
-                          source={{ uri: imgSrc }}
-                          style={styles.feedPostImage}
-                          contentFit="cover"
-                          cachePolicy="disk"
-                          recyclingKey={imgSrc}
-                        />
-                      );
-                    })()}
+                    {post.mediaUrl && (
+                      <MediaImage uri={post.mediaUrl} style={styles.feedPostImage} />
+                    )}
                   </Pressable>
                 ))}
                 {hasMorePosts && (

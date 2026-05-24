@@ -11,18 +11,16 @@ import {
   ActivityIndicator,
   PanResponder,
 } from 'react-native';
-import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Text, Avatar, CoachMark } from '@/components/primitives';
+import { Text, Avatar, CoachMark, MediaImage } from '@/components/primitives';
 import { useCoachMark } from '@/hooks/useCoachMark';
 import { ExploreSkeleton, FundWalletModal } from '@/components/features';
 import { useFeed, useNearbyCreators, useSearch } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatDistance, formatNumber } from '@/utils/formatters';
-import { transformMediaUrl } from '@/utils/media';
 import { PostType } from '@momento/shared';
 import type { PostWithCreator, PublicCreator } from '@momento/shared';
 
@@ -103,13 +101,9 @@ function AnimatedCard({
       >
         {item.imageUri ? (
           <>
-            <Image
-              source={{ uri: transformMediaUrl(item.imageUri) }}
+            <MediaImage
+              uri={item.imageUri}
               style={styles.gridImage}
-              contentFit="cover"
-              transition={200}
-              cachePolicy="disk"
-              recyclingKey={transformMediaUrl(item.imageUri)}
               placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
             />
             {item.isVideo && (
@@ -179,11 +173,9 @@ function CreatorSearchRow({
       {/* Preview area — avatar banner or placeholder */}
       <View style={styles.creatorCardPreview}>
         {creator.bannerUrl ? (
-          <Image
-            source={{ uri: transformMediaUrl(creator.bannerUrl) }}
+          <MediaImage
+            uri={creator.bannerUrl}
             style={styles.creatorCardBanner}
-            contentFit="cover"
-            cachePolicy="disk"
           />
         ) : (
           <View style={styles.creatorCardBannerPlaceholder} />
@@ -220,13 +212,9 @@ function PostSearchRow({
   return (
     <Pressable onPress={onPress} style={styles.searchRow}>
       {post.mediaUrl ? (
-        <Image
-          source={{ uri: transformMediaUrl(post.mediaUrl) }}
+        <MediaImage
+          uri={post.mediaUrl}
           style={styles.searchThumb}
-          contentFit="cover"
-          transition={200}
-          cachePolicy="disk"
-          recyclingKey={transformMediaUrl(post.mediaUrl)}
         />
       ) : (
         <View style={[styles.searchThumb, styles.searchThumbText]}>

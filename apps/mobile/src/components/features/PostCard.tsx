@@ -1,16 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, StyleSheet, Pressable, Animated, Share, useWindowDimensions } from 'react-native';
-import { Image } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Text, Avatar, AnimatedPressable } from '@/components/primitives';
+import { Text, Avatar, AnimatedPressable, MediaImage } from '@/components/primitives';
 import { LikeButton } from './LikeButton';
 import { BookmarkButton } from './BookmarkButton';
 import { COLORS, SPACING } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatTimeAgo, formatNumber } from '@/utils/formatters';
-import { transformMediaUrl } from '@/utils/media';
 import { PostType } from '@momento/shared';
 import type { PostWithCreator } from '@momento/shared';
 
@@ -26,7 +24,7 @@ export function PostCard({ post }: PostCardProps) {
   const translateY = useRef(new Animated.Value(20)).current;
   const [isMuted, setIsMuted] = useState(true);
   const isVideo = post.postType === PostType.VIDEO;
-  const imageSrc = !isVideo ? transformMediaUrl(post.mediaUrl) : undefined;
+  const hasImage = !isVideo && !!post.mediaUrl;
 
   const videoPlayer = useVideoPlayer(
     isVideo && post.mediaUrl ? post.mediaUrl : null,
@@ -113,16 +111,12 @@ export function PostCard({ post }: PostCardProps) {
             />
           </Pressable>
         </Pressable>
-      ) : imageSrc ? (
+      ) : hasImage ? (
         <AnimatedPressable onPress={handleImagePress} scaleValue={0.98}>
-          <Image
-            source={{ uri: imageSrc }}
+          <MediaImage
+            uri={post.mediaUrl}
             style={styles.image}
-            contentFit="cover"
-            transition={200}
             placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
-            cachePolicy="disk"
-            recyclingKey={imageSrc}
           />
         </AnimatedPressable>
       ) : post.content ? (

@@ -10,12 +10,11 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 // PagerView removed — using simple tab switching to avoid native module dependency
-import { Text, Avatar } from '@/components/primitives';
+import { Text, Avatar, MediaImage } from '@/components/primitives';
 import { PillTabs, StatsCard, BuySellPills, PerformanceChart } from '@/components/composites';
 import { ComingSoonModal, CreatorProfileSkeleton } from '@/components/features';
 import { useCreatorProfile } from '@/hooks';
@@ -24,7 +23,6 @@ import { apiService } from '@/services/api';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatNumber, formatTimeAgo } from '@/utils/formatters';
-import { transformMediaUrl } from '@/utils/media';
 import { SOCIAL_PLATFORMS } from '@momento/shared';
 
 const COLUMN_GAP = 2;
@@ -132,11 +130,9 @@ export default function CreatorScreen() {
       {/* Full-bleed hero image */}
       <View style={[styles.heroContainer, { height: HERO_HEIGHT }]}>
         {profile?.bannerUrl || profile?.avatarUrl ? (
-          <Image
-            source={{ uri: transformMediaUrl(profile.bannerUrl || profile.avatarUrl) }}
+          <MediaImage
+            uri={profile.bannerUrl || profile.avatarUrl}
             style={StyleSheet.absoluteFill}
-            contentFit="cover"
-            cachePolicy="disk"
             placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
           />
         ) : (
@@ -196,13 +192,7 @@ export default function CreatorScreen() {
                 style={[styles.masonryItem, { height: ITEM_WIDTH * height }]}
               >
                 {post.mediaUrl ? (
-                  <Image
-                    source={{ uri: transformMediaUrl(post.mediaUrl) }}
-                    style={styles.masonryImage}
-                    contentFit="cover"
-                    cachePolicy="disk"
-                    recyclingKey={transformMediaUrl(post.mediaUrl)}
-                  />
+                  <MediaImage uri={post.mediaUrl} style={styles.masonryImage} />
                 ) : (
                   <View style={styles.masonryTextItem}>
                     <Text style={styles.masonryText} numberOfLines={6}>
@@ -221,13 +211,7 @@ export default function CreatorScreen() {
                 style={[styles.masonryItem, { height: ITEM_WIDTH * height }]}
               >
                 {post.mediaUrl ? (
-                  <Image
-                    source={{ uri: transformMediaUrl(post.mediaUrl) }}
-                    style={styles.masonryImage}
-                    contentFit="cover"
-                    cachePolicy="disk"
-                    recyclingKey={transformMediaUrl(post.mediaUrl)}
-                  />
+                  <MediaImage uri={post.mediaUrl} style={styles.masonryImage} />
                 ) : (
                   <View style={styles.masonryTextItem}>
                     <Text style={styles.masonryText} numberOfLines={6}>
@@ -288,13 +272,7 @@ export default function CreatorScreen() {
       )}
       {/* Image */}
       {post.mediaUrl && (
-        <Image
-          source={{ uri: transformMediaUrl(post.mediaUrl) }}
-          style={styles.feedPostImage}
-          contentFit="cover"
-          cachePolicy="disk"
-          recyclingKey={transformMediaUrl(post.mediaUrl)}
-        />
+        <MediaImage uri={post.mediaUrl} style={styles.feedPostImage} />
       )}
     </Pressable>
   ), [profile, router]);

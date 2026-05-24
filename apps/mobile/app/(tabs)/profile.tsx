@@ -11,10 +11,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { Text, Avatar, CoachMark } from '@/components/primitives';
+import { Text, Avatar, CoachMark, MediaImage } from '@/components/primitives';
 import {
   ComingSoonModal,
   SettingsSheet,
@@ -31,7 +30,6 @@ import { apiService } from '@/services/api';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatNumber } from '@/utils/formatters';
-import { transformMediaUrl } from '@/utils/media';
 import { UserRole, SOCIAL_PLATFORMS } from '@momento/shared';
 
 // Feature flag: set to true to use the new financial dashboard profile layout.
@@ -211,13 +209,9 @@ export default function ProfileScreen() {
                 style={[styles.masonryItem, { height: ITEM_WIDTH * height }]}
               >
                 {post.mediaUrl ? (
-                  <Image
-                    source={{ uri: transformMediaUrl(post.mediaUrl) }}
+                  <MediaImage
+                    uri={post.mediaUrl}
                     style={styles.masonryImage}
-                    contentFit="cover"
-                    transition={200}
-                    cachePolicy="disk"
-                    recyclingKey={transformMediaUrl(post.mediaUrl)}
                     placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
                   />
                 ) : (
@@ -238,13 +232,9 @@ export default function ProfileScreen() {
                 style={[styles.masonryItem, { height: ITEM_WIDTH * height }]}
               >
                 {post.mediaUrl ? (
-                  <Image
-                    source={{ uri: transformMediaUrl(post.mediaUrl) }}
+                  <MediaImage
+                    uri={post.mediaUrl}
                     style={styles.masonryImage}
-                    contentFit="cover"
-                    transition={200}
-                    cachePolicy="disk"
-                    recyclingKey={transformMediaUrl(post.mediaUrl)}
                     placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
                   />
                 ) : (
@@ -305,13 +295,9 @@ export default function ProfileScreen() {
               style={[styles.masonryItem, { height: ITEM_WIDTH * height }]}
             >
               {post.mediaUrl ? (
-                <Image
-                  source={{ uri: transformMediaUrl(post.mediaUrl) }}
+                <MediaImage
+                  uri={post.mediaUrl}
                   style={styles.masonryImage}
-                  contentFit="cover"
-                  transition={200}
-                  cachePolicy="disk"
-                  recyclingKey={transformMediaUrl(post.mediaUrl)}
                   placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
                 />
               ) : (
@@ -332,13 +318,9 @@ export default function ProfileScreen() {
               style={[styles.masonryItem, { height: ITEM_WIDTH * height }]}
             >
               {post.mediaUrl ? (
-                <Image
-                  source={{ uri: transformMediaUrl(post.mediaUrl) }}
+                <MediaImage
+                  uri={post.mediaUrl}
                   style={styles.masonryImage}
-                  contentFit="cover"
-                  transition={200}
-                  cachePolicy="disk"
-                  recyclingKey={transformMediaUrl(post.mediaUrl)}
                   placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
                 />
               ) : (

@@ -11,12 +11,11 @@ import {
   Animated,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Image } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { Text } from '@/components/primitives';
+import { Text, MediaImage } from '@/components/primitives';
 import { PillTabs } from '@/components/composites';
 import { LikeButton, FeedSkeleton, FeedAlgorithmModal, FundWalletModal, ComingSoonModal } from '@/components/features';
 import { useNotifications } from '@/providers/NotificationProvider';
@@ -26,7 +25,6 @@ import { apiService } from '@/services/api';
 import type { FeedSortMode } from '@/hooks/useFeed';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
-import { transformMediaUrl } from '@/utils/media';
 import { PostType } from '@momento/shared';
 import type { PostWithCreator } from '@momento/shared';
 
@@ -60,7 +58,7 @@ const FeedPage = React.memo(function FeedPage({
   const [isMuted, setIsMuted] = useState(true);
   const [isPlaying, setIsPlaying] = useState(true);
   const isVideo = isVideoPost(post);
-  const imageSrc = !isVideo ? transformMediaUrl(post.mediaUrl) : undefined;
+  const hasImage = !isVideo && !!post.mediaUrl;
 
   const followMutation = useMutation({
     mutationFn: () => apiService.post(`/creators/${post.creatorId}/follow`),
@@ -112,14 +110,11 @@ const FeedPage = React.memo(function FeedPage({
           contentFit="cover"
           nativeControls={false}
         />
-      ) : imageSrc ? (
-        <Image
-          source={{ uri: imageSrc }}
+      ) : hasImage ? (
+        <MediaImage
+          uri={post.mediaUrl}
           style={StyleSheet.absoluteFill}
-          contentFit="cover"
           placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
-          cachePolicy="disk"
-          recyclingKey={imageSrc}
         />
       ) : (
         <View style={styles.textPostContainer}>
@@ -305,6 +300,9 @@ export default function HomeScreen() {
             onTabChange={(key) => handleTabPress(key as FeedTab)}
             style={{ flex: 1, marginHorizontal: SPACING.xs }}
           />
+          {/* Two placeholders to match the live header (bell + market),
+              prevents PillTabs from reflowing horizontally on feed-load. */}
+          <View style={styles.headerIcon} />
           <View style={styles.headerIcon} />
         </View>
         <FeedSkeleton />

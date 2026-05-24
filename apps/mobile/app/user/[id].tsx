@@ -9,18 +9,16 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { Text, Avatar } from '@/components/primitives';
+import { Text, Avatar, MediaImage } from '@/components/primitives';
 import { ComingSoonModal, UserProfileSkeleton } from '@/components/features';
 import { usePublicProfile, useCreatorProfile } from '@/hooks';
 import { apiService } from '@/services/api';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatNumber } from '@/utils/formatters';
-import { transformMediaUrl } from '@/utils/media';
 import { SOCIAL_PLATFORMS } from '@momento/shared';
 import { UserRole } from '@momento/shared';
 
@@ -182,13 +180,9 @@ export default function UserScreen() {
             style={[styles.gridItem, { width: GRID_ITEM_SIZE, height: GRID_ITEM_SIZE }]}
           >
             {post.mediaUrl ? (
-              <Image
-                source={{ uri: transformMediaUrl(post.mediaUrl) }}
+              <MediaImage
+                uri={post.mediaUrl}
                 style={styles.gridImage}
-                contentFit="cover"
-                transition={200}
-                cachePolicy="disk"
-                recyclingKey={transformMediaUrl(post.mediaUrl)}
                 placeholder={{ blurhash: 'L6PZfSjE.AyE_3t7t7R**0o#DgR4' }}
               />
             ) : (
