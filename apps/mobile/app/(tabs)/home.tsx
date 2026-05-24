@@ -183,6 +183,7 @@ const FeedPage = React.memo(function FeedPage({
 // ─── Main Screen ───
 export default function HomeScreen() {
   const router = useRouter();
+  const { unreadCount } = useNotifications();
   const [feedTab, setFeedTab] = useState<FeedTab>('FOR_YOU');
   const [feedSort, setFeedSort] = useState<FeedSortMode>('smart');
   const [sortLoaded, setSortLoaded] = useState(false);
@@ -334,6 +335,21 @@ export default function HomeScreen() {
         />
 
         <Pressable
+          onPress={() => router.push('/notifications')}
+          style={styles.headerIcon}
+          hitSlop={8}
+        >
+          <Ionicons name="notifications-outline" size={18} color={COLORS.textTertiary} />
+          {unreadCount > 0 && (
+            <View style={styles.headerBadge}>
+              <Text style={styles.headerBadgeText}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </Text>
+            </View>
+          )}
+        </Pressable>
+
+        <Pressable
           onPress={() => router.push('/market')}
           style={styles.headerIcon}
           hitSlop={8}
@@ -437,6 +453,24 @@ const styles = StyleSheet.create({
     height: 32,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  headerBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    minWidth: 14,
+    height: 14,
+    paddingHorizontal: 3,
+    borderRadius: 7,
+    backgroundColor: COLORS.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerBadgeText: {
+    color: COLORS.background,
+    fontSize: 9,
+    fontWeight: '700',
+    lineHeight: 12,
   },
 
   // ─── Feed Card ───

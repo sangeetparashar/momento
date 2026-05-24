@@ -419,29 +419,37 @@ export default function ExploreScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Search Bar — always visible */}
+      {/* Search Bar — always visible. Cancel button appears when focused so
+          users have an escape hatch from the keyboard (iOS HIG pattern). */}
       <View style={styles.searchContainer}>
-        <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
-          <Ionicons name="search" size={18} color={searchFocused ? COLORS.primary : COLORS.textTertiary} />
-          <TextInput
-            ref={inputRef}
-            style={styles.searchInput}
-            value={searchText}
-            onChangeText={setSearchText}
-            onFocus={() => setSearchFocused(true)}
-            onBlur={() => setSearchFocused(false)}
-            placeholder="Search creators..."
-            placeholderTextColor={COLORS.textTertiary}
-            returnKeyType="search"
-            autoCorrect={false}
-          />
-          {searchText.length > 0 && (
-            <Pressable onPress={handleClearSearch} hitSlop={8}>
-              <Ionicons name="close-circle" size={18} color={COLORS.textTertiary} />
+        <View style={styles.searchInputRow}>
+          <View style={[styles.searchBar, searchFocused && styles.searchBarFocused]}>
+            <Ionicons name="search" size={18} color={searchFocused ? COLORS.primary : COLORS.textTertiary} />
+            <TextInput
+              ref={inputRef}
+              style={styles.searchInput}
+              value={searchText}
+              onChangeText={setSearchText}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
+              placeholder="Search creators..."
+              placeholderTextColor={COLORS.textTertiary}
+              returnKeyType="search"
+              autoCorrect={false}
+            />
+            {searchText.length > 0 && (
+              <Pressable onPress={handleClearSearch} hitSlop={8}>
+                <Ionicons name="close-circle" size={18} color={COLORS.textTertiary} />
+              </Pressable>
+            )}
+            {isSearching && (
+              <ActivityIndicator size="small" color={COLORS.primary} style={{ marginLeft: 4 }} />
+            )}
+          </View>
+          {searchFocused && (
+            <Pressable onPress={handleClearSearch} hitSlop={8} style={styles.searchCancelBtn}>
+              <Text style={styles.searchCancelText}>Cancel</Text>
             </Pressable>
-          )}
-          {isSearching && (
-            <ActivityIndicator size="small" color={COLORS.primary} style={{ marginLeft: 4 }} />
           )}
         </View>
       </View>
@@ -470,6 +478,7 @@ export default function ExploreScreen() {
             )
           }
           contentContainerStyle={styles.searchListContent}
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
@@ -585,7 +594,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingBottom: SPACING.sm,
   },
+  searchInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
   searchBar: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.surface,
@@ -595,6 +610,16 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
+  },
+  searchCancelBtn: {
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: SPACING.xs,
+  },
+  searchCancelText: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.primary,
+    fontSize: 13,
+    letterSpacing: 0.5,
   },
   searchBarFocused: {
     borderColor: COLORS.primary + '60',

@@ -69,9 +69,9 @@ These three are interrelated and should be tackled together. The combined fix re
 
 ---
 
-### 🟡 #002 — Vercel function cold starts add 700 ms to first request
+### ✅ #002 — Vercel function cold starts add 700 ms to first request
 
-**Status**: `open` · P1 · `[backend]`
+**Status**: `done` · P1 · `[backend]` · Shipped 2026-05-23 (vercel.json crons added — `/api/health` hit every 5 min)
 
 **Symptoms**: First feed load after the app sat idle for ~10 min takes ~800 ms. Subsequent calls take ~100 ms.
 
@@ -173,9 +173,9 @@ This pattern is being used in lieu of a proper `[backend]` admin endpoint (see #
 
 ---
 
-### 🟡 #005 — Search keyboard has no back/dismiss button on iOS
+### 🟦 #005 — Search keyboard has no back/dismiss button on iOS
 
-**Status**: `open` · P1 · `[ota]`
+**Status**: `in-progress` · P1 · `[ota]` · Code shipped 2026-05-23 (Cancel button + keyboardDismissMode added); ships with the in-flight TestFlight build (compressor build).
 
 **Symptoms**: User taps search input on Explore tab → keyboard appears → no visible way to dismiss the keyboard or exit search mode. Trapped state.
 
@@ -218,9 +218,9 @@ This pattern is being used in lieu of a proper `[backend]` admin endpoint (see #
 
 ---
 
-### 🟡 #009 — Notifications icon missing from Home tab
+### 🟦 #009 — Notifications icon missing from Home tab
 
-**Status**: `open` · P1 · `[ota]`
+**Status**: `in-progress` · P1 · `[ota]` · Code shipped 2026-05-23 (bell icon + unreadCount badge in home header); ships with the in-flight TestFlight build.
 
 **Symptoms**: User reported no bell/notifications icon on the Home page. `app/notifications.tsx` route exists and works, but there's nothing in the Home tab to navigate to it.
 
@@ -305,9 +305,9 @@ This pattern is being used in lieu of a proper `[backend]` admin endpoint (see #
 
 ---
 
-### 🟡 #010 — No admin endpoint to promote creators (manual DB updates required)
+### ✅ #010 — No admin endpoint to promote creators (manual DB updates required)
 
-**Status**: `open` · P1 · `[backend]`
+**Status**: `done` · P1 · `[backend]` · Shipped 2026-05-23 (`POST /api/admin/users/[id]/promote-creator`). Requires one-time SQL to flip operator's `isAdmin=true` before use.
 
 **Symptoms**: Every time a new user signs up and is supposed to become a creator, we run a manual SQL update + Redis invalidation. Not scalable.
 
@@ -377,9 +377,9 @@ WHERE email='<email>' RETURNING id;
 
 ---
 
-### 🟢 #011 — Apply-to-creator flow lacks visibility of pending state to admins
+### ✅ #011 — Apply-to-creator flow lacks visibility of pending state to admins
 
-**Status**: `open` · P2 · `[backend]` + `[ota]`
+**Status**: `done` · P2 · `[backend]` · Shipped 2026-05-23 (`GET /api/admin/users/pending-creators`). Use with #010 to see-then-promote in a single cURL loop.
 
 **Symptoms**: No admin UI or queue to see who applied and is waiting. We have to query `WHERE kycStatus = 'PENDING'` to find them.
 
@@ -405,6 +405,9 @@ Move issues here when shipped, with commit hash + date. Acts as institutional me
 - ✅ **Privacy policy + distribution playbook hosted** — shipped earlier in week
 - ✅ **expo-av → expo-video migration** — shipped `c5e7d48`
 - ✅ **#001 Image cache-control via `/render/image/`** — shipped 2026-05-23, OTA update group `ac1142e5-62fe-4196-8c37-25cb0a1c6985`. Mobile `transformMediaUrl()` rewrites to the cached endpoint; XHR upload sets `Cache-Control` header; 31 legacy image files re-uploaded via byte-append. Videos still uncached pending #012.
+- ✅ **#002 Vercel keep-warm cron** — shipped 2026-05-23 in `apps/api/vercel.json`. Hits `/api/health` every 5 min via Vercel's cron (Hobby tier allows it). Eliminates 700ms cold-start penalty.
+- ✅ **#010 Admin promote-creator endpoint** — shipped 2026-05-23. `POST /api/admin/users/[id]/promote-creator`. Requires `requireAdmin` (already in `lib/auth.ts`). One-time SQL bootstrap to flip operator's `isAdmin=true`.
+- ✅ **#011 Admin pending-creators list** — shipped 2026-05-23. `GET /api/admin/users/pending-creators`. Pairs with #010 for see-then-promote cURL loop.
 
 ---
 
