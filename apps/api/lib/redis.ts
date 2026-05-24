@@ -85,6 +85,21 @@ export async function getOrSetCache<T>(
   return data;
 }
 
+/**
+ * Invalidate every cache key that depends on a user's creator status. Use
+ * after any mutation that changes role, kycStatus, isAdminApproved, or
+ * follower/follow relationships. Centralized so creators/apply (self-apply)
+ * and admin/promote-creator stay in sync — historically creators/apply
+ * missed the leaderboard key and left it stale.
+ */
+export async function invalidateCreatorCaches(userId: string): Promise<void> {
+  await invalidateCache(
+    cacheKeys.userProfile(userId),
+    cacheKeys.creatorProfile(userId),
+    cacheKeys.creatorLeaderboard(),
+  );
+}
+
 export async function invalidateCache(...patterns: string[]): Promise<void> {
   try {
     const redis = getRedis();

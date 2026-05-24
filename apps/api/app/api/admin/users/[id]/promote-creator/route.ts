@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
-import { invalidateCache, cacheKeys } from '@/lib/redis';
+import { invalidateCreatorCaches } from '@/lib/redis';
 import { writeLimiter, applyRateLimit } from '@/lib/ratelimit';
 
 /**
@@ -24,10 +24,14 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const rateLimitResponse = await applyRateLimit(request, writeLimiter);
+    // Auth FIRST so the rate-limit key is the admin's userId, not their IP.
+    // IP-keyed rate limits on unauthenticated traffic let an attacker burn
+    // through quotas from rotating IPs (or share the cap with anyone on the
+    // same NAT). Bind the limit to the verified identity instead.
+    const admin = await requireAdmin(request);
+    const rateLimitResponse = await applyRateLimit(request, writeLimiter, admin.id);
     if (rateLimitResponse) return rateLimitResponse;
 
-    const admin = await requireAdmin(request);
     const { id } = await params;
 
     const target = await prisma.user.findUnique({
@@ -68,11 +72,7 @@ export async function POST(
       },
     });
 
-    await invalidateCache(
-      cacheKeys.userProfile(id),
-      cacheKeys.creatorProfile(id),
-      cacheKeys.creatorLeaderboard(),
-    );
+    await invalidateCreatorCaches(id);
 
     console.log(
       `[admin] ${admin.id} promoted user ${id} (${target.email || target.username || 'no-identity'}) to CREATOR`,

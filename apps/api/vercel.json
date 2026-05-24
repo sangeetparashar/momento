@@ -6,7 +6,7 @@
   "regions": ["iad1"],
   "crons": [
     {
-      "path": "/api/health",
+      "path": "/api/_keep-warm",
       "schedule": "*/5 * * * *"
     }
   ],

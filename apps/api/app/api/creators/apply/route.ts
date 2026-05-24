@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
 import { createVeriffSession } from '@/lib/veriff';
-import { invalidateCache, cacheKeys } from '@/lib/redis';
+import { invalidateCache, invalidateCreatorCaches, cacheKeys } from '@/lib/redis';
 import { kycLimiter, applyRateLimit } from '@/lib/ratelimit';
 
 export async function POST(request: NextRequest) {
@@ -42,10 +42,11 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      await invalidateCache(
-        cacheKeys.userProfile(user.id),
-        cacheKeys.creatorProfile(user.id)
-      );
+      // Use the helper so the leaderboard key is also invalidated (the
+      // earlier explicit list at this site forgot creatorLeaderboard, so
+      // self-applied creators didn't show up in the leaderboard for up to
+      // 5 minutes after promotion).
+      await invalidateCreatorCaches(user.id);
 
       return NextResponse.json({
         success: true,
