@@ -166,7 +166,8 @@ async function reuploadFile(obj: ObjectInfo): Promise<{ oldSize: number; newSize
       'Cache-Control': TARGET_CACHE,
       'x-upsert': 'true',
     },
-    body: newBytes,
+    // Node 18+ fetch accepts Buffer at runtime, but TS types it as BodyInit
+    body: newBytes as unknown as BodyInit,
   });
 
   const text = await resp.text();
