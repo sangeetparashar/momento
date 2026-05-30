@@ -29,7 +29,7 @@ export async function POST(
     // through quotas from rotating IPs (or share the cap with anyone on the
     // same NAT). Bind the limit to the verified identity instead.
     const admin = await requireAdmin(request);
-    const rateLimitResponse = await applyRateLimit(request, writeLimiter, admin.id);
+    const rateLimitResponse = await applyRateLimit(request, writeLimiter, admin.id, { failClosed: true });
     if (rateLimitResponse) return rateLimitResponse;
 
     const { id } = await params;

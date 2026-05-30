@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     // Auth FIRST so the rate-limit key is the admin's userId, not their IP.
     // See promote-creator/route.ts for the security rationale.
     const admin = await requireAdmin(request);
-    const rateLimitResponse = await applyRateLimit(request, readLimiter, admin.id);
+    const rateLimitResponse = await applyRateLimit(request, readLimiter, admin.id, { failClosed: true });
     if (rateLimitResponse) return rateLimitResponse;
 
     const pending = await prisma.user.findMany({

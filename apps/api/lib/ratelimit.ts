@@ -55,6 +55,7 @@ export function readLimiter() { return getLimiter('read', 60, '1 m'); }
 export async function checkRateLimit(
   limiter: Ratelimit,
   identifier: string,
+  opts?: { failClosed?: boolean },
 ): Promise<NextResponse | null> {
   try {
     const { success, limit, remaining, reset } = await limiter.limit(identifier);
@@ -74,7 +75,15 @@ export async function checkRateLimit(
     }
     return null;
   } catch {
-    // Fail open if Redis is down
+    // Redis unavailable. Default behaviour is fail-open (favour availability).
+    // Sensitive routes (e.g. admin) pass `failClosed` so an outage can't
+    // silently disable rate limiting — they get a 503 instead.
+    if (opts?.failClosed) {
+      return NextResponse.json(
+        { success: false, error: 'Service temporarily unavailable. Please try again shortly.' },
+        { status: 503 },
+      );
+    }
     return null;
   }
 }
@@ -97,8 +106,9 @@ export async function applyRateLimit(
   request: NextRequest,
   limiterOrFn: Ratelimit | (() => Ratelimit),
   userId?: string,
+  opts?: { failClosed?: boolean },
 ): Promise<NextResponse | null> {
   const limiter = typeof limiterOrFn === 'function' ? limiterOrFn() : limiterOrFn;
   const id = getRateLimitId(request, userId);
-  return checkRateLimit(limiter, id);
+  return checkRateLimit(limiter, id, opts);
 }

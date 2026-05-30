@@ -14,8 +14,6 @@ const ALLOWED_CONTENT_TYPES = [
   'video/webm',
 ];
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
-
 export async function POST(request: NextRequest) {
   try {
     const rateLimitResponse = await applyRateLimit(request, writeLimiter);

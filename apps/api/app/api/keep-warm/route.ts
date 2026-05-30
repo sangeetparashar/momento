@@ -5,6 +5,10 @@ import prisma from '@/lib/prisma';
  * Keep-warm endpoint hit by Vercel cron every 5 min. Eliminates the
  * ~700ms cold-start penalty on idle functions.
  *
+ * NOTE: do NOT rename this folder to `_keep-warm`. App Router treats a
+ * leading underscore as a "private folder" and excludes it from routing,
+ * which silently 404s both the route and the cron that calls it.
+ *
  * Gated on CRON_SECRET so this endpoint is not a free probe/DoS surface
  * for arbitrary internet traffic. Vercel cron requests automatically
  * include `Authorization: Bearer ${process.env.CRON_SECRET}` when the
