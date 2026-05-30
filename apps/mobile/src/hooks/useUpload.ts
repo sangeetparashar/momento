@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
-import { Video } from 'react-native-compressor';
 import { apiService } from '@/services/api';
 import { showErrorToast } from '@/utils/toast';
 import type { UploadPresignResponse } from '@momento/shared';
@@ -141,6 +140,16 @@ export function useUpload(): UseUploadReturn {
           }
         } else if (mimeType.startsWith('video/')) {
           try {
+            // Lazy-require so this JS is safe to OTA onto builds whose native
+            // layer predates react-native-compressor. The library binds its
+            // native module via TurboModuleRegistry.getEnforcing(), which
+            // throws at module-eval time when the native side is absent — a
+            // static top-level import would hard-crash such builds the moment
+            // this hook loads. Requiring inside the try turns a missing native
+            // module into the same graceful "upload original" fallback we use
+            // when compression itself fails.
+            const { Video } =
+              require('react-native-compressor') as typeof import('react-native-compressor');
             const compressed = await Video.compress(
               uri,
               {
@@ -155,9 +164,9 @@ export function useUpload(): UseUploadReturn {
             processedUri = compressed;
             // mimeType unchanged — the container (mp4/quicktime) is preserved
           } catch (e) {
-            // Fall back to original if compression fails (rare; usually a
-            // corrupt source). Upload will still try, just slower.
-            console.warn('[upload] video compression failed, uploading original:', e);
+            // Fall back to original if compression fails or the native module
+            // isn't present in this build — still uploads, just larger/slower.
+            console.warn('[upload] video compression unavailable, uploading original:', e);
           }
         }
 

@@ -6,16 +6,19 @@ import {
   Pressable,
   RefreshControl,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar, MediaImage } from '@/components/primitives';
 import { PillTabs, StatsCard, TokenSwapWidget } from '@/components/composites';
 import { ComingSoonModal } from '@/components/features/ComingSoonModal';
+import { useKyc } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { FONT_FAMILY_DISPLAY_BOLD } from '@/styles/typography';
 import { formatTimeAgo } from '@/utils/formatters';
+import { KycStatus } from '@momento/shared';
 
 interface ProfileDashboardProps {
   user: any;
@@ -53,6 +56,29 @@ export function ProfileDashboard({
   const router = useRouter();
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [contentTab, setContentTab] = useState<'posts' | 'swap'>('posts');
+
+  const kyc = useKyc();
+  const kycStatus = user?.kycStatus as string | undefined;
+  const handleApplyCreator = useCallback(() => {
+    kyc.mutate(
+      {},
+      {
+        onSuccess: (data) => {
+          if (data?.status === 'approved' || data?.user?.role === 'CREATOR') {
+            Alert.alert(
+              "You're a Creator!",
+              'Your account has been upgraded — you can now post momentos and earn from your community.',
+            );
+          } else if (!data?.verificationUrl) {
+            Alert.alert(
+              'Application Submitted',
+              'Our team will review your application within 24–48 hours.',
+            );
+          }
+        },
+      },
+    );
+  }, [kyc]);
 
   const displayName = user?.displayName || user?.username || 'PROFILE';
   const change24h = walletBalance?.change24h as number | undefined;
@@ -164,6 +190,41 @@ export function ProfileDashboard({
             style={{ flex: 1 }}
           />
         </View>
+
+        {/* Become a Creator CTA — only for non-creators */}
+        {!isCreator && kycStatus !== KycStatus.VERIFIED && (
+          <View style={styles.creatorCta}>
+            <View style={styles.creatorCtaIcon}>
+              <Ionicons name="sparkles" size={22} color={COLORS.primary} />
+            </View>
+            {kycStatus === KycStatus.PENDING ? (
+              <>
+                <Text style={styles.creatorCtaTitle}>APPLICATION UNDER REVIEW</Text>
+                <Text style={styles.creatorCtaSubtext}>
+                  We're reviewing your application. This usually takes 24–48 hours.
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.creatorCtaTitle}>BECOME A CREATOR</Text>
+                <Text style={styles.creatorCtaSubtext}>
+                  Apply to post geotagged momentos and earn from your community.
+                </Text>
+                <Pressable
+                  style={styles.creatorCtaButton}
+                  onPress={handleApplyCreator}
+                  disabled={kyc.isPending}
+                >
+                  {kyc.isPending ? (
+                    <ActivityIndicator size="small" color={COLORS.textInverse} />
+                  ) : (
+                    <Text style={styles.creatorCtaButtonText}>APPLY NOW</Text>
+                  )}
+                </Pressable>
+              </>
+            )}
+          </View>
+        )}
 
         {/* Content Tabs: VIEW POSTS / SWAP */}
         <PillTabs
@@ -405,5 +466,55 @@ const styles = StyleSheet.create({
   swapSection: {
     marginTop: SPACING.sm,
     paddingHorizontal: SPACING.lg,
+  },
+
+  // Become a Creator CTA
+  creatorCta: {
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.xl,
+    padding: SPACING.lg,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADII.lg,
+    borderWidth: 1,
+    borderColor: COLORS.primary + '30',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  creatorCtaIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: RADII.full,
+    backgroundColor: COLORS.primary + '1A',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.xs,
+  },
+  creatorCtaTitle: {
+    ...TYPOGRAPHY.label,
+    color: COLORS.textPrimary,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    textAlign: 'center',
+  },
+  creatorCtaSubtext: {
+    ...TYPOGRAPHY.bodySmall,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  creatorCtaButton: {
+    marginTop: SPACING.sm,
+    paddingVertical: 10,
+    paddingHorizontal: SPACING.xl,
+    backgroundColor: COLORS.primary,
+    borderRadius: RADII.full,
+    minWidth: 140,
+    alignItems: 'center',
+  },
+  creatorCtaButtonText: {
+    color: COLORS.textInverse,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.5,
   },
 });
