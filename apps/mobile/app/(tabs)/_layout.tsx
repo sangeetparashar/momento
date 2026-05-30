@@ -79,8 +79,10 @@ export default function TabLayout() {
           paddingBottom: bottomPadding,
         },
         tabBarShowLabel: false,
-        tabBarActiveTintColor: COLORS.textPrimary,
-        tabBarInactiveTintColor: '#666666',
+        // #006: lean into the brand green for the active tab (was white) and
+        // brighten the inactive icons (#666 read as nearly invisible on black).
+        tabBarActiveTintColor: COLORS.primary,
+        tabBarInactiveTintColor: COLORS.textSecondary,
         tabBarButton: (props) => <AnimatedTabButton {...props} />,
         animation: 'none',
         sceneStyle: { backgroundColor: COLORS.background },

@@ -19,13 +19,13 @@ import { Text, MediaImage } from '@/components/primitives';
 import { PillTabs } from '@/components/composites';
 import { LikeButton, FeedSkeleton, FeedAlgorithmModal, FundWalletModal, ComingSoonModal } from '@/components/features';
 import { useNotifications } from '@/providers/NotificationProvider';
-import { useFeed } from '@/hooks';
+import { useFeed, useUserProfile } from '@/hooks';
 import { useMutation } from '@tanstack/react-query';
 import { apiService } from '@/services/api';
 import type { FeedSortMode } from '@/hooks/useFeed';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
-import { PostType } from '@momento/shared';
+import { PostType, UserRole } from '@momento/shared';
 import type { PostWithCreator } from '@momento/shared';
 
 const VIDEO_EXTENSIONS = ['.mp4', '.mov', '.webm'];
@@ -179,6 +179,8 @@ const FeedPage = React.memo(function FeedPage({
 export default function HomeScreen() {
   const router = useRouter();
   const { unreadCount } = useNotifications();
+  const { user } = useUserProfile();
+  const isCreator = user?.role === UserRole.CREATOR;
   const [feedTab, setFeedTab] = useState<FeedTab>('FOR_YOU');
   const [feedSort, setFeedSort] = useState<FeedSortMode>('smart');
   const [sortLoaded, setSortLoaded] = useState(false);
@@ -402,6 +404,19 @@ export default function HomeScreen() {
         ) : null}
       </View>
 
+      {/* #006: Create-post FAB — creators only, floats above the tab bar */}
+      {isCreator && (
+        <Pressable
+          style={({ pressed }) => [styles.fab, pressed && styles.fabPressed]}
+          onPress={() => router.push('/create-post')}
+          hitSlop={8}
+          accessibilityLabel="Create post"
+          accessibilityRole="button"
+        >
+          <Ionicons name="add" size={30} color={COLORS.background} />
+        </Pressable>
+      )}
+
       {/* Feed Algorithm Modal — triggered by long-press on "FOR YOU" */}
       <FeedAlgorithmModal
         visible={showAlgoModal}
@@ -577,5 +592,28 @@ const styles = StyleSheet.create({
     ...TYPOGRAPHY.body,
     color: COLORS.background,
     fontWeight: '700',
+  },
+
+  // #006: floating create-post button
+  fab: {
+    position: 'absolute',
+    right: SPACING.lg,
+    bottom: SPACING.xl,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Green glow so it reads as floating above the immersive feed
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  fabPressed: {
+    opacity: 0.85,
+    transform: [{ scale: 0.96 }],
   },
 });
