@@ -74,6 +74,20 @@ export async function POST(
 
     await invalidateCreatorCaches(id);
 
+    // Best-effort audit trail — never block the promotion on a log failure.
+    try {
+      await prisma.promotionLog.create({
+        data: {
+          actorId: admin.id,
+          targetId: id,
+          method: 'admin_endpoint',
+          metadata: { previousRole: target.role, previousKyc: target.kycStatus },
+        },
+      });
+    } catch (e) {
+      console.error('[admin] promotionLog write failed (non-fatal):', e);
+    }
+
     console.log(
       `[admin] ${admin.id} promoted user ${id} (${target.email || target.username || 'no-identity'}) to CREATOR`,
     );

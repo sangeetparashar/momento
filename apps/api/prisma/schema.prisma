@@ -259,3 +259,17 @@ model WalletTransaction {
   @@index([userId, chain, createdAt])
   @@map("wallet_transactions")
 }
+
+model PromotionLog {
+  id        String   @id @default(uuid())
+  actorId   String
+  targetId  String
+  method    String
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([targetId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("promotion_logs")
+}

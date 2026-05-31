@@ -48,6 +48,15 @@ export async function POST(request: NextRequest) {
       // 5 minutes after promotion).
       await invalidateCreatorCaches(user.id);
 
+      // Best-effort audit trail for the self-serve (SKIP_KYC) promotion path.
+      try {
+        await prisma.promotionLog.create({
+          data: { actorId: user.id, targetId: user.id, method: 'self_apply_skip_kyc' },
+        });
+      } catch (e) {
+        console.error('[apply] promotionLog write failed (non-fatal):', e);
+      }
+
       return NextResponse.json({
         success: true,
         data: {
