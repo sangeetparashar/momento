@@ -49,6 +49,11 @@ export function PrivyGuard({ children }: { children: React.ReactNode }) {
 function PrivyWithAuth({ children }: { children: React.ReactNode }) {
   console.log('[PrivyWithAuth] Rendering...');
   const { PrivyProvider } = require('@privy-io/expo');
+  // PrivyElements renders Privy's prebuilt modal UIs (login, signing, and the
+  // fiat-funding flow). The useFundWallet / useFundSolanaWallet hooks require
+  // it to be mounted in the tree, otherwise fundWallet() throws
+  // 'privy_elements_not_ready'. Mount it once, here, alongside the provider.
+  const { PrivyElements } = require('@privy-io/expo/ui');
   const { AuthBridge } = require('@/providers/AuthBridge');
   console.log('[PrivyWithAuth] PrivyProvider:', typeof PrivyProvider, 'AuthBridge:', typeof AuthBridge);
 
@@ -67,6 +72,10 @@ function PrivyWithAuth({ children }: { children: React.ReactNode }) {
         <AuthBridge>
           {children}
         </AuthBridge>
+        {/* Brand the Privy modal to match Momento (black surface, green accent). */}
+        <PrivyElements
+          config={{ appearance: { colorScheme: 'dark', accentColor: '#00FF88' } }}
+        />
       </PrivyProvider>
     </PrivyGuardContext.Provider>
   );

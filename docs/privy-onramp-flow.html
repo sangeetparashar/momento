@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Momento — Privy Stablecoin Onramp · Flow Design</title>
+<style>
+  :root{
+    --bg:#000;--surface:#1A1A1A;--surface2:#242424;--accent:#00FF88;--accent2:#00CC6A;
+    --txt:#fff;--txt2:#888;--txt3:#555;--border:#2A2A2A;
+    --warn:#FFB020;--err:#FF4444;--info:#3FA9FF;--future:#5A6B8C;
+    --mono:'SF Mono',ui-monospace,'Cascadia Code',Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:var(--mono);-webkit-font-smoothing:antialiased;
+    padding:28px 20px 90px;line-height:1.6;font-size:13px}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-size:16px;letter-spacing:2.5px;text-transform:uppercase;font-weight:700}
+  .sub{color:var(--txt2);font-size:11px;letter-spacing:1px;text-transform:uppercase;margin:6px 0 22px}
+  .sub b{color:var(--accent)}
+  h2{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);
+    margin:34px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--border);font-weight:700}
+  h2 .n{color:var(--txt3);margin-right:8px}
+  p{color:var(--txt2);margin-bottom:10px}
+  b,strong{color:var(--txt)}
+  code{background:var(--surface2);padding:1px 6px;border-radius:4px;color:var(--accent);font-size:11.5px}
+  a{color:var(--info);text-decoration:none;border-bottom:1px dotted var(--info)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin-bottom:12px}
+
+  /* decision banner */
+  .decision{background:linear-gradient(135deg,rgba(0,255,136,.10),rgba(0,255,136,.02));
+    border:1px solid var(--accent);border-radius:12px;padding:20px 22px;margin-bottom:16px}
+  .decision .big{font-size:19px;font-weight:700;letter-spacing:.8px;color:var(--accent);margin-bottom:6px}
+  .decision .big small{color:var(--txt2);font-size:11px;font-weight:400;letter-spacing:1px}
+  .decision p{margin:0;color:var(--txt)}
+
+  /* callouts */
+  .callout{border-left:3px solid var(--info);background:rgba(63,169,255,.06);border-radius:0 8px 8px 0;
+    padding:12px 16px;margin:12px 0;font-size:12px;color:var(--txt2)}
+  .callout.warn{border-left-color:var(--warn);background:rgba(255,176,32,.07)}
+  .callout.good{border-left-color:var(--accent);background:rgba(0,255,136,.06)}
+  .callout .lbl{display:block;font-size:9.5px;letter-spacing:1.5px;text-transform:uppercase;
+    color:var(--info);font-weight:700;margin-bottom:5px}
+  .callout.warn .lbl{color:var(--warn)} .callout.good .lbl{color:var(--accent)}
+
+  /* the account-requirement answer block */
+  .answer{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+  @media(max-width:680px){.answer{grid-template-columns:1fr}}
+  .opt{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:16px 18px}
+  .opt.pick{border:1.5px solid var(--accent);box-shadow:0 0 0 3px rgba(0,255,136,.08)}
+  .opt .tag{font-size:9px;letter-spacing:1px;text-transform:uppercase;font-weight:700;padding:3px 9px;border-radius:5px;display:inline-block;margin-bottom:9px}
+  .opt.pick .tag{background:var(--accent);color:#000}
+  .opt.alt .tag{background:var(--surface2);color:var(--txt2);border:1px solid var(--border)}
+  .opt h3{font-size:14px;margin-bottom:3px;letter-spacing:.3px}
+  .opt .one{font-size:11px;color:var(--txt2);margin-bottom:11px}
+  .opt .row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:11px}
+  .opt .row:last-child{border-bottom:0}
+  .opt .row .k{color:var(--txt3)}
+  .opt .row .v{color:var(--txt);font-weight:600;text-align:right}
+  .v.y{color:var(--accent)} .v.n{color:var(--err)} .v.warn{color:var(--warn)}
+
+  /* tables */
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:11.5px}
+  th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--txt3);font-size:9.5px;letter-spacing:1px;text-transform:uppercase;font-weight:700}
+  td{color:var(--txt2)} td b{color:var(--txt)}
+  .yes{color:var(--accent);font-weight:700} .no{color:var(--err);font-weight:700}
+
+  /* flow steps */
+  .flow{counter-reset:step}
+  .step{background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden}
+  .step .sh{display:flex;align-items:center;gap:14px;padding:13px 16px;cursor:pointer;user-select:none}
+  .step .num{counter-increment:step;flex-shrink:0;width:28px;height:28px;border-radius:50%;
+    background:var(--surface2);border:1px solid var(--border);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px}
+  .step .num::before{content:counter(step)}
+  .step .stitle{flex:1;font-size:12.5px;font-weight:600}
+  .step .who{font-size:9px;letter-spacing:1px;text-transform:uppercase;padding:3px 8px;border-radius:5px;flex-shrink:0;font-weight:700}
+  .who.client{background:rgba(63,169,255,.14);color:var(--info)}
+  .who.server{background:rgba(0,255,136,.14);color:var(--accent)}
+  .who.privy{background:rgba(123,97,255,.18);color:#B9A7FF}
+  .who.user{background:rgba(255,176,32,.14);color:var(--warn)}
+  .step .chev{color:var(--txt3);transition:.2s}
+  .step.open .chev{transform:rotate(90deg)}
+  .step .sb{max-height:0;overflow:hidden;transition:max-height .28s ease}
+  .step .sbi{padding:0 16px 16px 58px;font-size:11.5px;color:var(--txt2)}
+  .step .sbi pre{background:#0c0c0c;border:1px solid var(--border);border-radius:7px;padding:11px 13px;
+    overflow-x:auto;margin:9px 0;font-size:10.5px;line-height:1.5;color:#c8e6d4}
+  .step .sbi .reuse{color:var(--accent);font-weight:700} .step .sbi .new{color:var(--warn);font-weight:700}
+
+  /* transition map */
+  .tmap{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media(max-width:680px){.tmap{grid-template-columns:1fr}}
+  .tcol{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:6px 0}
+  .tcol h4{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;padding:12px 16px 8px;border-bottom:1px solid var(--border)}
+  .tcol.reuse h4{color:var(--accent)} .tcol.build h4{color:var(--warn)}
+  .titem{padding:9px 16px;border-bottom:1px solid var(--border);font-size:11.5px}
+  .titem:last-child{border-bottom:0}
+  .titem b{color:var(--txt);display:block;margin-bottom:2px}
+  .titem span{color:var(--txt3);font-size:10.5px}
+
+  /* phases */
+  .phase{display:flex;gap:12px;margin-bottom:9px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+  .phase .pn{flex-shrink:0;font-size:10px;letter-spacing:1px;text-transform:uppercase;font-weight:700;color:var(--accent);width:70px;padding-top:2px}
+  .phase .pc h4{font-size:12.5px;margin-bottom:4px}
+  .phase .pc p{font-size:11px;margin:0}
+  .phase .pc .est{font-size:10px;color:var(--txt3);margin-top:5px}
+
+  .pill{display:inline-block;font-size:9px;letter-spacing:.5px;text-transform:uppercase;padding:2px 7px;border-radius:4px;font-weight:700;margin-left:4px}
+  .pill.ok{background:rgba(0,255,136,.14);color:var(--accent)}
+  .footer{margin-top:34px;text-align:center;color:var(--txt3);font-size:10px;letter-spacing:1px}
+  ul{margin:6px 0 10px 18px;color:var(--txt2)} li{margin-bottom:5px}
+  .q{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--warn);border-radius:0 8px 8px 0;padding:12px 16px;margin-bottom:8px}
+  .q b{color:var(--warn)}
+  del{color:var(--txt3);text-decoration-color:var(--err)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Stablecoin Onramp · Privy</h1>
+  <div class="sub">End-to-end flow design · <b>fast rollout, no service account</b> · transition from existing onramp · updated 2026-05-31</div>
+
+  <div class="decision">
+    <div class="big">Recommendation: Privy widget onramp (no Bridge account, no fee) <small>— ship fast now, add the fee later only if you want it</small></div>
+    <p>You asked the decisive question: <b>do I need a separate service account?</b> Answer — <b>only the fee path does.</b> The fee requires a standalone <b>Bridge account + business KYB + a USD payout account</b>. The no-account path is Privy's built-in <b>widget onramp</b> (<code>useFiatOnramp</code>): it runs inside the Privy modal you already have, supports <b>Base AND Solana</b>, takes <b>cards + Apple/Google Pay</b> — but exposes <b>no developer fee</b>. Since you're happy to skip the fee for a quick rollout, this is the pick.</p>
+  </div>
+
+  <!-- ───────── THE ANSWER ───────── -->
+  <h2><span class="n">01</span>Do I need a service account? — the direct answer</h2>
+  <div class="answer">
+    <div class="opt pick">
+      <span class="tag">✓ Recommended — your choice</span>
+      <h3>Widget onramp</h3>
+      <div class="one"><code>useFiatOnramp()</code> · Meld / MoonPay / Coinbase inside the Privy modal</div>
+      <div class="row"><span class="k">Separate service account?</span><span class="v y">NO</span></div>
+      <div class="row"><span class="k">Business KYB (you)?</span><span class="v y">None*</span></div>
+      <div class="row"><span class="k">Setup</span><span class="v">Dashboard: Request Access → toggle</span></div>
+      <div class="row"><span class="k">Developer fee</span><span class="v n">Not available</span></div>
+      <div class="row"><span class="k">Chains</span><span class="v y">Base + Solana</span></div>
+      <div class="row"><span class="k">Payment methods</span><span class="v y">Cards, Apple/Google Pay, bank</span></div>
+      <div class="row"><span class="k">Webhooks / server routes</span><span class="v y">None needed</span></div>
+      <div class="row"><span class="k">Effort</span><span class="v y">Low · OTA-only</span></div>
+    </div>
+    <div class="opt alt">
+      <span class="tag">Upgrade later (optional)</span>
+      <h3>Bridge onramp</h3>
+      <div class="one"><code>POST /v1/users/&#123;id&#125;/fiat/onramp</code> · the API you originally linked</div>
+      <div class="row"><span class="k">Separate service account?</span><span class="v n">YES — Bridge account + API keys</span></div>
+      <div class="row"><span class="k">Business KYB (you)?</span><span class="v warn">Required + USD payout acct</span></div>
+      <div class="row"><span class="k">Setup</span><span class="v">Bridge KYB → keys → Privy Integrations page</span></div>
+      <div class="row"><span class="k">Developer fee</span><span class="v y">Yes (~0.5–1%)</span></div>
+      <div class="row"><span class="k">Chains</span><span class="v warn">Base only (EVM)</span></div>
+      <div class="row"><span class="k">Payment methods</span><span class="v warn">Bank only (ACH/SEPA/wire)</span></div>
+      <div class="row"><span class="k">Webhooks / server routes</span><span class="v warn">Required</span></div>
+      <div class="row"><span class="k">Effort</span><span class="v warn">High · KYB + backend + webhooks</span></div>
+    </div>
+  </div>
+  <div class="callout warn">
+    <span class="lbl">*One caveat on "no account"</span>
+    The widget path still needs a one-time <b>dashboard enablement</b>: Privy Console → <b>Plugins → MoonPay Fiat On-Ramp → Request Access</b>. Privy's team reviews and flips it on, and <b>MoonPay may ask for basic KYB info about your product</b> (this is Privy/MoonPay's compliance, not you opening a MoonPay merchant account). It's a request-and-wait, not an integration build. No API keys to manage, no payout account, no separate login.
+  </div>
+
+  <!-- ───────── WHY THIS IS A TRANSITION ───────── -->
+  <h2><span class="n">02</span>Why this is a transition, not a rebuild</h2>
+  <div class="card">
+    <p>We already have: Privy login wired end-to-end, embedded wallets for <b>both</b> Solana and Base per user, a <code>FundWalletModal</code> + <code>useOnramp</code> hook + <code>/api/wallet/onramp</code> route (currently Ramp/MoonPay/Transak via raw WebView URLs), and the <code>&#123;success,data&#125;</code> envelope. The widget onramp <b>replaces the hand-built WebView URL plumbing with Privy's native hook</b> — fewer moving parts than today, not more. We delete provider-URL builders; we add one hook call.</p>
+  </div>
+  <div class="callout good">
+    <span class="lbl">Net simplification</span>
+    Moving to <code>useFiatOnramp</code> lets us retire the bespoke MoonPay/Ramp/Transak URL builders in <code>/api/wallet/onramp/route.ts</code> and the Transak 2-step token dance. Privy handles provider selection, region routing, KYC, and the payment UI. We keep our wallet-address logic and the modal shell.
+  </div>
+
+  <!-- ───────── END TO END FLOW ───────── -->
+  <h2><span class="n">03</span>End-to-end flow (widget path) <span style="font-size:10px;color:var(--txt3);letter-spacing:1px">— tap a step</span></h2>
+  <div class="flow" id="flow"></div>
+
+  <!-- ───────── TRANSITION MAP ───────── -->
+  <h2><span class="n">04</span>What we reuse vs. what we build</h2>
+  <div class="tmap">
+    <div class="tcol reuse">
+      <h4>♻ Reuse / already done</h4>
+      <div class="titem"><b>Privy auth + embedded wallets</b><span>login, AuthBridge, both Solana + Base wallets already provisioned per user</span></div>
+      <div class="titem"><b>FundWalletModal shell</b><span>header, method picker, on-chain-transfer screen — all stays</span></div>
+      <div class="titem"><b>useChain / wallet address logic</b><span>picks Base vs Solana wallet for the onramp destination</span></div>
+      <div class="titem"><b>@privy-io/expo SDK</b><span>already a dependency for login — the onramp hook ships in the same SDK</span></div>
+      <div class="titem"><b>Wallet balance refresh</b><span>useWalletBalance refetch already wired for post-fund updates</span></div>
+    </div>
+    <div class="tcol build">
+      <h4>⊕ Build / change (small)</h4>
+      <div class="titem"><b>Dashboard: enable MoonPay plugin</b><span>Request Access on Privy Console → wait for enablement (no code)</span></div>
+      <div class="titem"><b>Swap WebView method → useFiatOnramp</b><span>replace the 3 provider WebView branches with one native hook call</span></div>
+      <div class="titem"><b>Retire /api/wallet/onramp URL builders</b><span>no longer need server-built MoonPay/Ramp/Transak URLs (can keep as fallback during transition)</span></div>
+      <div class="titem"><b>Confirm hook is in the Expo SDK</b><span>verify useFiatOnramp / useFundWallet availability in @privy-io/expo (vs react-auth)</span></div>
+    </div>
+  </div>
+  <div class="callout warn">
+    <span class="lbl">⚠ One thing to verify before building (mobile-specific)</span>
+    Privy's onramp hooks (<code>useFiatOnramp</code> / legacy <code>useFundWallet</code>) are documented for <code>@privy-io/react-auth</code> (web/React). We use <b><code>@privy-io/expo</code></b> on mobile. <b>Confirm the equivalent hook exists in the Expo SDK</b> — if not, the fallback is the current approach: keep our <code>/api/wallet/onramp</code> route building provider URLs and render in a WebView (which already works today). Either way: <b>no service account</b>.
+  </div>
+
+  <!-- ───────── FEE NOTE ───────── -->
+  <h2><span class="n">05</span>On the fee — explicitly deferred</h2>
+  <div class="card">
+    <p>You're <b>okay skipping the onramp fee</b> in exchange for the quick, no-account rollout. So:</p>
+    <ul>
+      <li><b>Onramp fee — none</b> on the widget path. Users buy USDC at the provider's rate; Momento takes nothing on the onramp itself.</li>
+      <li><b>Trading fee — still live.</b> Your 4% Jupiter fee (<code>MOMENTO_PLATFORM_FEE_BPS=400</code> → <code>MOMENTO_FEE_WALLET</code>) is untouched and still earns once funded USDC is traded. <span class="pill ok">already shipped</span></li>
+      <li><b>LP fee — future</b>, unchanged by this decision.</li>
+    </ul>
+    <p>So the revenue model still works — we simply don't tax the <i>entry</i> of money, only its <i>use</i> (trading) inside the app. If onramp volume later justifies the Bridge KYB lift, the fee path is documented above as a clean upgrade.</p>
+  </div>
+
+  <!-- ───────── ROLLOUT ───────── -->
+  <h2><span class="n">06</span>Phased rollout (fast path)</h2>
+  <div class="phase"><div class="pn">Phase 0</div><div class="pc"><h4>Enable the plugin + confirm Expo hook</h4><p>Privy Console → Plugins → MoonPay Fiat On-Ramp → Request Access. In parallel, confirm <code>useFiatOnramp</code> (or <code>useFundWallet</code>) exists in <code>@privy-io/expo</code>. No code ships yet.</p><div class="est">~1 day of work + Privy review wait (request-and-wait)</div></div></div>
+  <div class="phase"><div class="pn">Phase 1</div><div class="pc"><h4>Swap the WebView method for the native hook</h4><p>In <code>FundWalletModal</code>, replace the provider WebView branch with a single <code>fund()</code> call (asset USDC, chain = current Base/Solana). Keep the on-chain-transfer screen as-is.</p><div class="est">~half day · <span class="pill ok">OTA — no rebuild</span></div></div></div>
+  <div class="phase"><div class="pn">Phase 2</div><div class="pc"><h4>Verify + clean up</h4><p>Device-test a sandbox onramp on Base and Solana, confirm balance refresh. Then retire the now-unused server URL builders (or leave as fallback).</p><div class="est">~half day</div></div></div>
+  <div class="callout good">
+    <span class="lbl">Bottom line</span>
+    No Bridge account, no KYB, no webhooks, no new DB table. Largely an <b>OTA</b> change on top of infrastructure you already have. The only external dependency is Privy flipping on the MoonPay plugin.
+  </div>
+
+  <!-- ───────── OPEN QUESTIONS ───────── -->
+  <h2><span class="n">07</span>Decisions / open questions for you</h2>
+  <div class="q"><b>Q1.</b> Confirmed direction: <b>widget onramp, no fee, no service account.</b> Good to proceed on that basis?</div>
+  <div class="q"><b>Q2.</b> Want me to verify the <code>@privy-io/expo</code> hook availability now (quick SDK check), so Phase 0 has no surprises?</div>
+  <div class="q"><b>Q3.</b> Default onramp chain — keep it following the app's current chain selector (Base/Solana), or default everyone to one for simplicity?</div>
+  <div class="q"><b>Q4.</b> Keep the existing WebView providers (Transak etc.) as a fallback during transition, or cut straight over to the Privy hook?</div>
+
+  <div class="footer">Design doc · static · sources: Privy fiat-onramp guide, Privy bridge-onramp recipe, Privy Plugins (MoonPay) docs, Bridge developer-fees. Fee path requires a Bridge account; widget path does not.</div>
+</div>
+
+<script>
+const STEPS=[
+  {who:'user',t:'User taps "Add funds" → "Buy USDC (card or bank)"',
+   d:`In <span class="reuse">FundWalletModal</span> (reused shell), the buy method now triggers Privy's native onramp instead of loading a hand-built provider URL in a WebView. Destination wallet (Base or Solana) comes from our existing <span class="reuse">useChain</span> + wallet logic — no address entry.`},
+  {who:'privy',t:'Privy opens the onramp modal (provider auto-selected)',
+   d:`A single hook call launches the flow. Privy routes to <b>Meld / MoonPay / Coinbase</b> based on the user's region and picks the payment methods available there.
+<pre>// one call replaces the whole WebView-URL pipeline
+const { fund } = useFiatOnramp();   // (confirm Expo SDK)
+await fund({
+  amount: '100',
+  card: { ... },                    // provider UI handles entry
+  asset: 'USDC',
+  chain: 'solana:mainnet'           // or 'eip155:8453' for Base
+});</pre>`},
+  {who:'user',t:'User pays — card, Apple/Google Pay, or bank',
+   d:`Inside Privy's modal: the provider collects payment + runs <b>any KYC it needs</b> (provider-side, not ours). This is the conversion win vs. the bank-only Bridge path — cards and mobile wallets are supported.`},
+  {who:'privy',t:'Provider settles USDC to the user\'s embedded wallet',
+   d:`The purchased USDC is delivered directly to the user's Privy embedded wallet on the chosen chain. No Momento-controlled wallet ever touches the funds — <b>no custody, no money-transmitter exposure</b> for us.`},
+  {who:'client',t:'Hook resolves → we refresh balance',
+   d:`The <code>fund()</code> promise resolves <code>'confirmed'</code> (completed) or <code>'submitted'</code> (user exited early). On confirm we invalidate <span class="reuse">useWalletBalance</span> so USDC appears immediately. <b>No webhook or server route required</b> — the client knows the outcome.`},
+  {who:'server',t:'(Later) user trades → existing 4% fee applies',
+   d:`Funded USDC is now tradable. Any swap routes through <span class="reuse">lib/jupiter.ts</span>, which already adds <code>MOMENTO_PLATFORM_FEE_BPS=400</code> to <span class="reuse">MOMENTO_FEE_WALLET</span>. <b>This is where Momento earns</b> — the onramp is free, the usage is monetized. LP fee is the future third leg.`},
+];
+const flow=document.getElementById('flow');
+flow.innerHTML=STEPS.map(s=>`
+  <div class="step">
+    <div class="sh">
+      <div class="num"></div>
+      <div class="stitle">${s.t}</div>
+      <span class="who ${s.who}">${s.who}</span>
+      <span class="chev">▶</span>
+    </div>
+    <div class="sb"><div class="sbi">${s.d}</div></div>
+  </div>`).join('');
+document.querySelectorAll('.step').forEach(st=>{
+  st.querySelector('.sh').onclick=()=>{
+    const open=st.classList.toggle('open');
+    const sb=st.querySelector('.sb');
+    sb.style.maxHeight=open?sb.querySelector('.sbi').scrollHeight+24+'px':'0';
+  };
+});
+</script>
+</body>
+</html>

@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '@/components/primitives';
 import { useOnramp } from '@/hooks/useOnramp';
+import { usePrivyFunding } from '@/hooks/usePrivyFunding';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useAuth } from '@/hooks/useAuth';
 import { useChain } from '@/hooks/useChain';
@@ -22,10 +23,11 @@ import { ENV } from '@/config/env';
 import { CHAIN_CONFIG } from '@momento/shared';
 import type { ChainType, OnrampProvider } from '@momento/shared';
 
-type FundingMethod = 'picker' | OnrampProvider | 'onchain';
+type FundingMethod = 'picker' | 'privy' | OnrampProvider | 'onchain';
 
 const HEADER_TITLES: Record<FundingMethod, string> = {
   picker: 'Fund Your Account',
+  privy: 'Buy USDC',
   ramp: 'Buy USDC via Ramp',
   moonpay: 'Buy USDC via MoonPay',
   transak: 'Buy USDC via Transak',
@@ -41,6 +43,7 @@ export function FundWalletModal({ visible, onClose }: FundWalletModalProps) {
   const insets = useSafeAreaInsets();
   const { chain } = useChain() as { chain: 'solana' | 'base' };
   const [method, setMethod] = useState<FundingMethod>('picker');
+  const { fund, isFunding } = usePrivyFunding();
 
   const handleClose = useCallback(() => {
     setMethod('picker');
@@ -50,6 +53,21 @@ export function FundWalletModal({ visible, onClose }: FundWalletModalProps) {
   const handleBack = useCallback(() => {
     setMethod('picker');
   }, []);
+
+  // 'privy' opens Privy's own native funding modal (rendered by PrivyElements,
+  // on top of this sheet) rather than navigating to a sub-screen. Close our
+  // sheet on success; stay put if the user cancels or it errors.
+  const handleSelect = useCallback(
+    async (m: FundingMethod) => {
+      if (m === 'privy') {
+        const result = await fund();
+        if (result === 'completed') handleClose();
+        return;
+      }
+      setMethod(m);
+    },
+    [fund, handleClose],
+  );
 
   const isWebView = method === 'ramp' || method === 'moonpay' || method === 'transak';
 
@@ -82,7 +100,9 @@ export function FundWalletModal({ visible, onClose }: FundWalletModalProps) {
           )}
         </View>
 
-        {method === 'picker' && <MethodPicker chain={chain} onSelect={setMethod} />}
+        {method === 'picker' && (
+          <MethodPicker chain={chain} onSelect={handleSelect} isFunding={isFunding} />
+        )}
         {isWebView && (
           <OnrampWebView
             provider={method as OnrampProvider}
@@ -103,9 +123,11 @@ export function FundWalletModal({ visible, onClose }: FundWalletModalProps) {
 function MethodPicker({
   chain,
   onSelect,
+  isFunding,
 }: {
   chain: ChainType;
   onSelect: (m: FundingMethod) => void;
+  isFunding: boolean;
 }) {
   const chainName = CHAIN_CONFIG[chain].name;
   return (
@@ -114,19 +136,30 @@ function MethodPicker({
         Choose how you'd like to add USDC to your {chainName} wallet
       </Text>
 
-      <Pressable style={styles.methodCard} onPress={() => onSelect('transak')}>
-        <View style={[styles.methodIcon, { backgroundColor: '#4643E8' }]}>
-          <Ionicons name="logo-usd" size={24} color="#FFFFFF" />
+      {/* Privy native funding — card / Apple Pay / Google Pay in Privy's modal */}
+      <Pressable
+        style={[styles.methodCard, isFunding && styles.methodCardDisabled]}
+        onPress={() => onSelect('privy')}
+        disabled={isFunding}
+      >
+        <View style={[styles.methodIcon, { backgroundColor: COLORS.primary }]}>
+          {isFunding ? (
+            <ActivityIndicator size="small" color={COLORS.background} />
+          ) : (
+            <Ionicons name="card" size={24} color={COLORS.background} />
+          )}
         </View>
         <View style={styles.methodInfo}>
           <View style={styles.methodTitleRow}>
-            <Text style={styles.methodTitle}>Transak</Text>
+            <Text style={styles.methodTitle}>Buy USDC</Text>
             <View style={styles.recommendedBadge}>
               <Text style={styles.recommendedText}>RECOMMENDED</Text>
             </View>
           </View>
           <Text style={styles.methodDesc}>
-            Apple Pay, Google Pay, card, or bank transfer. Lite KYC available.
+            {isFunding
+              ? 'Opening secure checkout…'
+              : 'Card, Apple Pay, or Google Pay. Powered by Privy — no extra account needed.'}
           </Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
