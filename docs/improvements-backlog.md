@@ -71,7 +71,7 @@ These three are interrelated and should be tackled together. The combined fix re
 
 ### ✅ #002 — Vercel function cold starts add 700 ms to first request
 
-**Status**: `done` · P1 · `[backend]` · Shipped 2026-05-23 (vercel.json crons added — `/api/health` hit every 5 min)
+**Status**: `done` · P1 · `[backend]` · Truly fixed 2026-05-30 (commit `6bf995f`). The 2026-05-23 cron was a no-op — it pointed at `/api/_keep-warm`, but Next.js App Router treats a leading-underscore folder as private and 404s it. Route renamed to `/api/keep-warm`, `vercel.json` path updated, `CRON_SECRET` set in Vercel Production. Verified: 401 without the secret, 200 from the cron.
 
 **Symptoms**: First feed load after the app sat idle for ~10 min takes ~800 ms. Subsequent calls take ~100 ms.
 
@@ -93,6 +93,11 @@ Round 3 (warm):  99 ms total
 **Recommendation**: A first (free + fast). B later if you upgrade Supabase to Pro anyway. C only if A doesn't deliver and traffic stays high.
 
 **Affected files**: `apps/api/vercel.json`
+
+
+### ✅ S4 — PromotionLog audit table
+
+**Status**: `done` · P2 · `[backend]` · Shipped 2026-05-30 (commit `007b880`). `PromotionLog` model (actorId, targetId, method, metadata, createdAt) → `promotion_logs`; best-effort non-fatal audit writes on both promotion paths (admin promote-creator + SKIP_KYC self-apply); `GET /api/admin/promotions` (requireAdmin, fail-closed). Table created in prod via additive raw SQL — `prisma db push` was attempted and correctly refused (would drop PostGIS `location` columns). Verified: endpoint returns 401 unauthenticated.
 
 ---
 
@@ -133,9 +138,9 @@ Round 3 (warm):  99 ms total
 
 ---
 
-### 🟡 #004 — No path to "Apply to be a Creator" screen on iOS (likely Android too)
+### ✅ #004 — No path to "Apply to be a Creator" screen on iOS (likely Android too)
 
-**Status**: `open` · P1 · `[ota]` or `[native]` depending on fix scope
+**Status**: `done` · P1 · `[ota]` · Shipped 2026-05-30 (commit `98933ba`, OTA group `4b78130d`). Status-aware "Become a Creator" card on the active `ProfileDashboard` for non-creators (prior CTA was dead code in the disabled legacy layout), wired to `useKyc` — handles SKIP_KYC instant-promote, Veriff URL, and pending-review states.
 
 **Symptoms**: Reported during beta — users sign up but cannot find how to apply to become a creator. New signups (lotanna27, chaisullivan, gracie) all started as `role=USER, kycStatus=NONE` and required manual admin promotion via DB update.
 
@@ -194,9 +199,9 @@ This pattern is being used in lieu of a proper `[backend]` admin endpoint (see #
 
 ---
 
-### 🟢 #006 — Action icons (create post, wallet) need more vibrant treatment
+### ✅ #006 — Action icons (create post, wallet) need more vibrant treatment
 
-**Status**: `open` · P2 · `[ota]` + `[design]`
+**Status**: `done` · P2 · `[ota]` · Shipped 2026-05-30 (commit `8eb4c39`, OTA group `a283db16`). Tab bar active tint white→green (`COLORS.primary`), inactive `#666`→`COLORS.textSecondary` (#888); creator-only create-post FAB on Home. Design note: Figma exports unverified this session — confirm on device.
 
 **Symptoms**: Users don't immediately see how to access create-post / wallet / etc. The current icons are likely too subtle (`COLORS.textTertiary` or similar).
 
