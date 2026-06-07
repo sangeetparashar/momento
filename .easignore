@@ -1,7 +1,25 @@
-# Exclude files from EAS Build uploads
+# Exclude files from EAS Build uploads.
+# IMPORTANT: when this file exists, EAS uses it INSTEAD of .gitignore — so
+# anything .gitignore was excluding (notably the native dirs) must be repeated
+# here or it gets uploaded. Without the ios/ + dist/ lines below, the upload
+# ballooned to ~540 MB (apps/mobile/ios = 940 MB of Pods/DerivedData) and
+# stalled every build for ~10 min. EAS regenerates native dirs via prebuild,
+# so they never need uploading.
 package-lock.json
 yarn.lock
 docs/
 AGENT_MEMORY.md
 scripts/
 *.log
+
+# Native build dirs (gitignored but NOT auto-excluded once .easignore exists)
+apps/mobile/ios/
+apps/mobile/android/
+ios/
+android/
+
+# OTA export output + caches
+apps/mobile/dist/
+dist/
+**/.expo/
+.DS_Store
