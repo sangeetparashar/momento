@@ -43,6 +43,35 @@ A location-based creator platform with Solana wallet integration.
 
 ---
 
+## 🔑 Secrets & Environment Files (where the `.env` lives)
+
+The `.env*` files, the Apple App Store Connect `.p8` key, and `.vercel/` project
+links are **gitignored** and are **NOT** in this repo. On a fresh clone you must
+restore them before the app will run/deploy.
+
+**Encrypted backup of all secrets → private repo `sangeetparashar/momento-secrets-vault`**
+(file: `momento-secrets-backup.enc`, AES-256). Decrypt + restore:
+
+```bash
+gh repo clone sangeetparashar/momento-secrets-vault
+cd momento-secrets-vault
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 \
+  -in momento-secrets-backup.enc -out momento-secrets.zip && \
+unzip momento-secrets.zip      # restores files under their original paths
+```
+The passphrase is in the owner's password manager (not stored anywhere in git).
+
+**Files restored** (copy back into this repo's matching paths):
+`apps/api/.env.local`, `apps/api/.env.development`, `apps/landing/.env.*`,
+`apps/mobile/.env*`, `apps/mobile/AuthKey_7PA9M865VN.p8`, `.vercel/` links,
+`.claude/settings.local.json`.
+
+> Most secrets also live in **Vercel** (API env vars → `momento-api` → Settings →
+> Environment Variables) and **EAS** (Apple key + Android keystore). The vault is a
+> belt-and-suspenders copy. See the vault repo's README for full details.
+
+---
+
 ## Architecture
 
 ```

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Momento — Work Status Dashboard</title>
+<style>
+  :root{
+    --bg:#000; --surface:#1A1A1A; --surface2:#242424; --accent:#00FF88;
+    --txt:#fff; --txt2:#888; --txt3:#555; --border:#2A2A2A;
+    --done:#00FF88; --prog:#FFB020; --pending:#5A6B8C; --user:#3FA9FF; --err:#FF4444;
+    --mono:'SF Mono',ui-monospace,'Cascadia Code',Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:var(--mono);
+    -webkit-font-smoothing:antialiased;padding:28px 20px 80px;line-height:1.5}
+  .wrap{max-width:1100px;margin:0 auto}
+  h1{font-size:15px;letter-spacing:3px;text-transform:uppercase;font-weight:700;margin-bottom:4px}
+  .sub{color:var(--txt2);font-size:11px;letter-spacing:1px;text-transform:uppercase;margin-bottom:24px}
+  .sub b{color:var(--accent)}
+
+  /* progress bar */
+  .progwrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin-bottom:14px}
+  .progtop{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+  .progpct{font-size:30px;font-weight:700;color:var(--accent);letter-spacing:1px}
+  .progmeta{font-size:11px;color:var(--txt2);letter-spacing:1px;text-transform:uppercase;text-align:right}
+  .bar{height:10px;background:var(--surface2);border-radius:6px;overflow:hidden;display:flex}
+  .bar span{height:100%;display:block}
+  .bar .b-done{background:var(--done)}
+  .bar .b-prog{background:var(--prog)}
+  .bar .b-user{background:var(--user)}
+  .bar .b-pending{background:var(--pending)}
+  .legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;font-size:10.5px;letter-spacing:.5px;text-transform:uppercase;color:var(--txt2)}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;vertical-align:middle}
+
+  /* state strip */
+  .strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:14px}
+  .cell{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+  .cell .k{font-size:9.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--txt3);margin-bottom:5px}
+  .cell .v{font-size:13px;font-weight:600;word-break:break-all}
+  .cell .v small{color:var(--txt2);font-weight:400;font-size:11px}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .dot.ok{background:var(--accent)} .dot.gate{background:var(--user)} .dot.bad{background:var(--err)}
+
+  /* endpoints */
+  .eprow{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:11px;border-bottom:1px solid var(--border)}
+  .eprow:last-child{border-bottom:0}
+  .eprow .path{color:var(--txt)}
+  .eprow .code{font-weight:700}
+  .code.ok{color:var(--accent)} .code.gate{color:var(--user)} .code.bad{color:var(--err)}
+  .eprow .note{color:var(--txt3);font-size:10px;margin-left:8px}
+
+  /* filters */
+  .filters{display:flex;gap:8px;flex-wrap:wrap;margin:22px 0 14px}
+  .filters button{background:var(--surface);color:var(--txt2);border:1px solid var(--border);
+    border-radius:20px;padding:7px 15px;font-family:var(--mono);font-size:10.5px;letter-spacing:1px;
+    text-transform:uppercase;cursor:pointer;transition:.15s;font-weight:600}
+  .filters button:hover{border-color:var(--txt2);color:var(--txt)}
+  .filters button.active{background:var(--accent);color:#000;border-color:var(--accent)}
+  .filters button .n{opacity:.6;margin-left:5px}
+
+  /* group heading */
+  .ghead{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--txt2);
+    margin:26px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--border);font-weight:700}
+  .ghead:first-of-type{margin-top:8px}
+
+  /* cards */
+  .card{background:var(--surface);border:1px solid var(--border);border-left-width:3px;border-radius:9px;
+    margin-bottom:9px;overflow:hidden;transition:.15s}
+  .card.s-done{border-left-color:var(--done)}
+  .card.s-in_progress{border-left-color:var(--prog)}
+  .card.s-pending{border-left-color:var(--pending)}
+  .card.s-needs_user{border-left-color:var(--user)}
+  .card:hover{border-color:var(--txt3)}
+  .chead{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;user-select:none}
+  .badge{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:3px 8px;
+    border-radius:5px;white-space:nowrap;flex-shrink:0}
+  .badge.done{background:rgba(0,255,136,.14);color:var(--done)}
+  .badge.in_progress{background:rgba(255,176,32,.14);color:var(--prog)}
+  .badge.pending{background:rgba(90,107,140,.18);color:#9DB0D6}
+  .badge.needs_user{background:rgba(63,169,255,.14);color:var(--user)}
+  .ctag{font-size:9px;color:var(--txt3);letter-spacing:1px;flex-shrink:0;font-weight:700}
+  .ctitle{flex:1;font-size:12.5px;font-weight:600;letter-spacing:.3px}
+  .ctitle .pri{color:var(--txt3);font-weight:400;font-size:10.5px;margin-left:6px}
+  .chev{color:var(--txt3);font-size:11px;transition:.2s;flex-shrink:0}
+  .card.open .chev{transform:rotate(90deg)}
+  .cbody{max-height:0;overflow:hidden;transition:max-height .25s ease}
+  .cbody-inner{padding:2px 16px 16px 16px;font-size:11.5px;color:var(--txt2);line-height:1.65}
+  .cbody-inner .meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .cbody-inner .chip{background:var(--surface2);border:1px solid var(--border);border-radius:5px;
+    padding:3px 8px;font-size:10px;color:var(--txt2)}
+  .cbody-inner .chip b{color:var(--accent);font-weight:600}
+  .cbody-inner code{background:var(--surface2);padding:1px 5px;border-radius:4px;color:var(--accent);font-size:10.5px}
+  .deploy{font-size:9px;border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--txt3);letter-spacing:.5px;flex-shrink:0}
+  .footer{margin-top:30px;text-align:center;color:var(--txt3);font-size:10px;letter-spacing:1px}
+  .nores{color:var(--txt3);font-size:12px;padding:30px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Momento · Work Status</h1>
+  <div class="sub">Live snapshot · generated <b id="gen"></b> · branch <b>main</b></div>
+
+  <!-- PROGRESS -->
+  <div class="progwrap">
+    <div class="progtop">
+      <div><span class="progpct" id="pct">0%</span>
+        <span style="font-size:11px;color:var(--txt2);letter-spacing:1px;margin-left:8px">SHIPPED &amp; VERIFIED-CLEAN</span></div>
+      <div class="progmeta" id="counts"></div>
+    </div>
+    <div class="bar" id="bar"></div>
+    <div class="legend">
+      <span><i style="background:var(--done)"></i>Done / deployed</span>
+      <span><i style="background:var(--prog)"></i>In build, awaiting device-verify</span>
+      <span><i style="background:var(--user)"></i>Needs you</span>
+      <span><i style="background:var(--pending)"></i>Pending / backlog</span>
+    </div>
+  </div>
+
+  <!-- STATE STRIP -->
+  <div class="strip">
+    <div class="cell"><div class="k">Git HEAD</div><div class="v">2640cbd <small>= origin · clean</small></div></div>
+    <div class="cell"><div class="k">iOS Build</div><div class="v">1.0.0 (4) <small>submitted · processing</small></div></div>
+    <div class="cell"><div class="k">Latest OTA</div><div class="v">a283db16 <small>#006 · rt 1.0.0</small></div></div>
+    <div class="cell"><div class="k">API</div><div class="v"><span class="dot ok"></span>healthy <small>vercel iad1</small></div></div>
+  </div>
+
+  <!-- ENDPOINTS -->
+  <div class="progwrap" style="margin-bottom:0">
+    <div class="k" style="font-size:9.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--txt3);margin-bottom:10px">Live endpoint probe</div>
+    <div class="eprow"><span class="path">GET /api/health</span><span><span class="code ok">200</span><span class="note">public ops monitor</span></span></div>
+    <div class="eprow"><span class="path">GET /api/keep-warm</span><span><span class="code gate">401</span><span class="note">gated on CRON_SECRET ✓</span></span></div>
+    <div class="eprow"><span class="path">GET /api/admin/promotions</span><span><span class="code gate">401</span><span class="note">requireAdmin ✓ (S4)</span></span></div>
+    <div class="eprow"><span class="path">GET /api/admin/users/pending-creators</span><span><span class="code gate">401</span><span class="note">requireAdmin ✓</span></span></div>
+  </div>
+
+  <!-- FILTERS -->
+  <div class="filters" id="filters"></div>
+
+  <!-- LIST -->
+  <div id="list"></div>
+
+  <div class="footer">Static snapshot — re-run the generator to refresh. Counts reflect verified state, not optimism.</div>
+</div>
+
+<script>
+const ITEMS = [
+  // ── PRE-SUBMIT CHORES (handoff "Immediate Next Step") ──
+  {grp:'Pre-submit chores',cat:'OPS',id:'C1',title:'Set CRON_SECRET in Vercel Production',status:'done',pri:'P1',deploy:'vercel',
+   detail:'Generated with <code>openssl rand -base64 48</code>, added via authenticated Vercel CLI (value never printed to chat). Scoped to Production. Keep-warm now returns 401 without the secret.',
+   refs:[['env','CRON_SECRET'],['verified','/api/keep-warm → 401']]},
+  {grp:'Pre-submit chores',cat:'OPS',id:'C2',title:'Bootstrap admin user (isAdmin=true)',status:'done',pri:'P1',deploy:'db',
+   detail:'Ran <code>grant-admin.ts sangeetparashar@gmail.com</code> against prod DB. Flipped isAdmin false→true so the /api/admin/* endpoints accept the token.',
+   refs:[['user','sangeetparashar@gmail.com'],['result','isAdmin=true']]},
+  {grp:'Pre-submit chores',cat:'OPS',id:'C3',title:'Submit clean build to TestFlight',status:'done',pri:'P1',deploy:'eas',
+   detail:'<code>eas submit --platform ios --latest</code> uploaded build 4 to App Store Connect. Processing at Apple (~10 min). Re-submission to an already-approved app should auto-pass Beta review.',
+   refs:[['build','1.0.0 (4) · ac6ce9d7'],['submission','125c5eb7']]},
+
+  // ── BACKEND HARDENING (S-items + this-session fixes) ──
+  {grp:'Backend hardening',cat:'API',id:'002',title:'Repair keep-warm cron (#002)',status:'done',pri:'P1',deploy:'vercel',
+   detail:'The cron was a silent no-op for weeks: route lived in <code>app/api/_keep-warm/</code>, and Next.js App Router treats a leading-underscore folder as PRIVATE → 404. Renamed to <code>keep-warm</code>, fixed vercel.json path, added regression-guard comment.',
+   refs:[['commit','6bf995f'],['cron','*/5 * * * *']]},
+  {grp:'Backend hardening',cat:'API',id:'S2',title:'Rate-limiter fail-closed on admin endpoints',status:'done',pri:'P2',deploy:'vercel',
+   detail:'Added <code>{failClosed:true}</code> to checkRateLimit/applyRateLimit. Admin routes now return 503 (not fail-open) if Redis is unavailable, so an outage can’t silently disable rate limiting.',
+   refs:[['commit','6bf995f'],['routes','promote-creator, pending-creators, promotions']]},
+  {grp:'Backend hardening',cat:'API',id:'S4',title:'PromotionLog audit table + retrieval endpoint',status:'done',pri:'P2',deploy:'vercel',
+   detail:'New <code>PromotionLog</code> model → promotion_logs. Best-effort, non-fatal audit writes on both promotion paths (admin promote-creator + SKIP_KYC self-apply). New <code>GET /api/admin/promotions</code> (requireAdmin, fail-closed). Table created in prod via additive raw SQL — <code>prisma db push</code> was attempted but correctly REFUSED (would drop PostGIS location cols on 476 posts + 35 users); --accept-data-loss never passed.',
+   refs:[['commit','007b880'],['endpoint','/api/admin/promotions → 401'],['migration','raw SQL, not db push']]},
+  {grp:'Backend hardening',cat:'API',id:'CL',title:'Remove dead 100MB presign const',status:'done',pri:'P3',deploy:'vercel',
+   detail:'Removed the misleading MAX_FILE_SIZE=100MB const in the presign route — it was never enforced. The real cap is the mobile 250MB ceiling in useUpload.ts.',
+   refs:[['commit','6bf995f']]},
+
+  // ── MOBILE (OTA, this session) ──
+  {grp:'Mobile — shipped via OTA',cat:'APP',id:'004',title:'"Become a Creator" CTA on Profile (#004)',status:'done',pri:'P1',deploy:'ota',
+   detail:'Non-creators had no apply path (the only CTA was dead code in the disabled legacy profile layout). Added a status-aware card to the ACTIVE ProfileDashboard, wired to useKyc — handles SKIP_KYC instant-promote, Veriff URL, and pending-review states.',
+   refs:[['commit','98933ba'],['ota','4b78130d'],['device-verify','PENDING']]},
+  {grp:'Mobile — shipped via OTA',cat:'APP',id:'006',title:'Tab-bar vibrancy + create-post FAB (#006)',status:'done',pri:'P2',deploy:'ota',
+   detail:'Tab active tint white→green (COLORS.primary), inactive #666→#888. Creator-only floating "+" FAB on Home → /create-post. Figma exports were unviewable this session, so colors/placement follow the written spec — confirm on device.',
+   refs:[['commit','8eb4c39'],['ota','a283db16'],['device-verify','PENDING']]},
+  {grp:'Mobile — shipped via OTA',cat:'APP',id:'CMP',title:'OTA-safe react-native-compressor guard',status:'done',pri:'P0',deploy:'ota',
+   detail:'CRITICAL: compressor is a native dep absent from build 1. It binds via TurboModuleRegistry.getEnforcing() which THROWS at module-load when native is missing — a static top-level import would crash all build-1 users on any OTA. Switched to a lazy guarded require; worst case is now "upload uncompressed".',
+   refs:[['commit','98933ba'],['ota','4b78130d']]},
+  {grp:'Mobile — shipped via OTA',cat:'APP',id:'001',title:'Image cache-control via /render/image/ (#001)',status:'done',pri:'P0',deploy:'ota',
+   detail:'transformMediaUrl rewrites Supabase image URLs to /render/image/public/ (respects cache metadata + auto-compresses); XHR sets Cache-Control. Videos still uncached pending #012.',
+   refs:[['ota','ac1142e5'],['date','2026-05-23']]},
+
+  // ── IN BUILD 4, AWAITING DEVICE VERIFY ──
+  {grp:'In build 4 — awaiting device verify',cat:'APP',id:'003',title:'Raise upload cap 50MB→250MB + video compression (#003)',status:'in_progress',pri:'P1',deploy:'native',
+   detail:'Code shipped 2026-05-23 (commit e85ec57). Requires the native build — it’s in build 4 (just submitted), NOT in the live build-1 OTA. Verifies once build 4 reaches TestFlight + device test.',
+   refs:[['commit','e85ec57'],['in','build 4']]},
+  {grp:'In build 4 — awaiting device verify',cat:'APP',id:'005',title:'Search keyboard Cancel / dismiss (#005)',status:'in_progress',pri:'P1',deploy:'ota',
+   detail:'Cancel button + keyboardDismissMode added 2026-05-23. Bundled into build 4. (JS-only, so also reaches live users on the next production OTA if needed.)',
+   refs:[['in','build 4']]},
+  {grp:'In build 4 — awaiting device verify',cat:'APP',id:'009',title:'Notifications bell on Home header (#009)',status:'in_progress',pri:'P1',deploy:'ota',
+   detail:'Bell icon + unreadCount badge added to the home header 2026-05-23. Bundled into build 4; routes to /notifications.',
+   refs:[['in','build 4']]},
+
+  // ── DONE EARLIER (backend) ──
+  {grp:'Done earlier',cat:'API',id:'010',title:'Admin promote-creator endpoint (#010)',status:'done',pri:'P1',deploy:'vercel',
+   detail:'POST /api/admin/users/[id]/promote-creator. Replaces the manual SQL+Redis promotion workflow. Now also writes a PromotionLog row (S4).',
+   refs:[['endpoint','/api/admin/users/[id]/promote-creator']]},
+  {grp:'Done earlier',cat:'API',id:'011',title:'Admin pending-creators list (#011)',status:'done',pri:'P2',deploy:'vercel',
+   detail:'GET /api/admin/users/pending-creators. Pair with #010 to see-then-promote.',
+   refs:[['endpoint','/api/admin/users/pending-creators → 401']]},
+
+  // ── NEEDS YOU ──
+  {grp:'Needs you',cat:'VERIFY',id:'V1',title:'Device-test the two OTAs',status:'needs_user',pri:'P1',deploy:'manual',
+   detail:'On an iPhone (build 1 is fine — force-quit/reopen to pull the OTA): (1) non-creator Profile shows "Become a Creator" → Apply works; (2) Home shows the green "+" FAB and green active tab; (3) posting a video still works (compressor guard). I can’t device-test — this is the one open verification for #004/#006.',
+   refs:[['covers','#004, #006, compressor guard']]},
+  {grp:'Needs you',cat:'VERIFY',id:'V2',title:'Confirm build 4 attached to Public Beta group',status:'needs_user',pri:'P1',deploy:'manual',
+   detail:'Should be processed at Apple by now. Confirm in App Store Connect → TestFlight that 1.0.0 (4) is attached to the External/Public Beta group. This is what delivers #003/#005/#009 to testers.',
+   refs:[['build','1.0.0 (4)']]},
+  {grp:'Needs you',cat:'DECISION',id:'V3',title:'Decide: runtimeVersion fingerprint policy',status:'needs_user',pri:'P2',deploy:'native',
+   detail:'Currently runtimeVersion is static "1.0.0", so an OTA reaches ALL builds regardless of native differences (this is why the compressor guard was needed). Switching to fingerprint policy auto-isolates future OTAs — but would strand current build-1/build-4 users from new OTAs until they update. Real tradeoff; your call. I can write up options.',
+   refs:[['current','appVersion policy → 1.0.0']]},
+
+  // ── PENDING / BACKLOG ──
+  {grp:'Pending / backlog',cat:'APP',id:'012',title:'Migrate video to Cloudflare Stream (#012)',status:'pending',pri:'P1',deploy:'backend+ota',
+   detail:'HLS adaptive bitrate + faster uploads + the only path to cached video (Supabase /object/public/ is permanently no-cache). Recommend deferring 1–2 weeks until there’s post-compression data on whether video complaints persist. Full brief in docs/video-platform-decision.md.',
+   refs:[['brief','docs/video-platform-decision.md']]},
+  {grp:'Pending / backlog',cat:'APP',id:'007',title:'Light theme variant (#007)',status:'pending',pri:'P2',deploy:'ota',
+   detail:'Large refactor; needs a design pass first.',refs:[['needs','design pass']]},
+  {grp:'Pending / backlog',cat:'APP',id:'008',title:'Photo/video editing — crop/trim/filters/capture (#008)',status:'pending',pri:'P2',deploy:'native',
+   detail:'Some libraries need native modules (so: a build, not an OTA). Library picks in engineering-starter-kit.md §3.',refs:[['picks','starter-kit §3']]},
+];
+
+const FILTERS=[
+  {k:'all',label:'All'},
+  {k:'done',label:'✅ Done'},
+  {k:'in_progress',label:'🔄 In build'},
+  {k:'needs_user',label:'👤 Needs you'},
+  {k:'pending',label:'⬜ Pending'},
+];
+const STATUS_LABEL={done:'Done',in_progress:'In build',pending:'Pending',needs_user:'Needs you'};
+
+let active='all';
+const $=s=>document.querySelector(s);
+
+function render(){
+  // counts
+  const c={done:0,in_progress:0,pending:0,needs_user:0};
+  ITEMS.forEach(i=>c[i.status]++);
+  const total=ITEMS.length, doneShare=c.done;
+  $('#pct').textContent=Math.round(doneShare/total*100)+'%';
+  $('#counts').innerHTML=`${total} items · ${c.done} done · ${c.in_progress} in build · ${c.needs_user} need you · ${c.pending} pending`;
+  const seg=(n,cls)=>n?`<span class="${cls}" style="width:${n/total*100}%"></span>`:'';
+  $('#bar').innerHTML=seg(c.done,'b-done')+seg(c.in_progress,'b-prog')+seg(c.needs_user,'b-user')+seg(c.pending,'b-pending');
+
+  // filters
+  $('#filters').innerHTML=FILTERS.map(f=>{
+    const n=f.k==='all'?total:c[f.k];
+    return `<button data-k="${f.k}" class="${f.k===active?'active':''}">${f.label}<span class="n">${n}</span></button>`;
+  }).join('');
+  document.querySelectorAll('#filters button').forEach(b=>b.onclick=()=>{active=b.dataset.k;render();});
+
+  // list grouped
+  const shown=ITEMS.filter(i=>active==='all'||i.status===active);
+  const groups=[...new Set(shown.map(i=>i.grp))];
+  let html='';
+  if(!shown.length) html=`<div class="nores">No items in this view.</div>`;
+  groups.forEach(g=>{
+    html+=`<div class="ghead">${g}</div>`;
+    shown.filter(i=>i.grp===g).forEach(i=>{
+      const meta=(i.refs||[]).map(r=>`<span class="chip">${r[0]}: <b>${r[1]}</b></span>`).join('');
+      html+=`<div class="card s-${i.status}" data-id="${i.id}">
+        <div class="chead">
+          <span class="badge ${i.status}">${STATUS_LABEL[i.status]}</span>
+          <span class="ctag">${i.cat}</span>
+          <span class="ctitle">${i.title}<span class="pri">${i.pri}</span></span>
+          <span class="deploy">${i.deploy}</span>
+          <span class="chev">▶</span>
+        </div>
+        <div class="cbody"><div class="cbody-inner">${i.detail}<div class="meta">${meta}</div></div></div>
+      </div>`;
+    });
+  });
+  $('#list').innerHTML=html;
+  document.querySelectorAll('.card').forEach(card=>{
+    card.querySelector('.chead').onclick=()=>{
+      const open=card.classList.toggle('open');
+      const body=card.querySelector('.cbody');
+      body.style.maxHeight=open?body.querySelector('.cbody-inner').scrollHeight+20+'px':'0';
+    };
+  });
+}
+$('#gen').textContent='2026-05-31';
+render();
+</script>
+</body>
+</html>

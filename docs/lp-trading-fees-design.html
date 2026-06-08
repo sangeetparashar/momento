@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Momento — LP + Trading Fees · Chain Investigation & Design</title>
+<style>
+  :root{
+    --bg:#000;--surface:#1A1A1A;--surface2:#242424;--accent:#00FF88;
+    --txt:#fff;--txt2:#888;--txt3:#555;--border:#2A2A2A;
+    --warn:#FFB020;--err:#FF4444;--info:#3FA9FF;--sol:#14F195;--base:#0052FF;
+    --done:#00FF88;--build:#FFB020;--future:#5A6B8C;
+    --mono:'SF Mono',ui-monospace,'Cascadia Code',Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--txt);font-family:var(--mono);-webkit-font-smoothing:antialiased;
+    padding:28px 20px 90px;line-height:1.6;font-size:13px}
+  .wrap{max-width:1100px;margin:0 auto}
+  h1{font-size:16px;letter-spacing:2.5px;text-transform:uppercase;font-weight:700}
+  .sub{color:var(--txt2);font-size:11px;letter-spacing:1px;text-transform:uppercase;margin:6px 0 22px}
+  .sub b{color:var(--accent)}
+  h2{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);
+    margin:34px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--border);font-weight:700}
+  h2 .n{color:var(--txt3);margin-right:8px}
+  p{color:var(--txt2);margin-bottom:10px}
+  b,strong{color:var(--txt)}
+  code{background:var(--surface2);padding:1px 6px;border-radius:4px;color:var(--accent);font-size:11.5px}
+  a{color:var(--info);text-decoration:none;border-bottom:1px dotted var(--info)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 20px;margin-bottom:12px}
+
+  .decision{background:linear-gradient(135deg,rgba(20,241,149,.10),rgba(20,241,149,.02));
+    border:1px solid var(--sol);border-radius:12px;padding:20px 22px;margin-bottom:16px}
+  .decision .big{font-size:19px;font-weight:700;letter-spacing:.6px;color:var(--sol);margin-bottom:6px}
+  .decision .big small{color:var(--txt2);font-size:11px;font-weight:400;letter-spacing:1px}
+  .decision p{margin:0;color:var(--txt)}
+
+  .callout{border-left:3px solid var(--info);background:rgba(63,169,255,.06);border-radius:0 8px 8px 0;
+    padding:12px 16px;margin:12px 0;font-size:12px;color:var(--txt2)}
+  .callout.warn{border-left-color:var(--warn);background:rgba(255,176,32,.07)}
+  .callout.good{border-left-color:var(--accent);background:rgba(0,255,136,.06)}
+  .callout.crit{border-left-color:var(--err);background:rgba(255,68,68,.07)}
+  .callout .lbl{display:block;font-size:9.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--info);font-weight:700;margin-bottom:5px}
+  .callout.warn .lbl{color:var(--warn)} .callout.good .lbl{color:var(--accent)} .callout.crit .lbl{color:var(--err)}
+
+  /* fee legs */
+  .legs{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin:10px 0}
+  .leg{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:15px 16px;border-top:3px solid var(--future)}
+  .leg.done{border-top-color:var(--done)} .leg.now{border-top-color:var(--build)} .leg.future{border-top-color:var(--future)}
+  .leg .st{font-size:9px;letter-spacing:1px;text-transform:uppercase;font-weight:700;margin-bottom:7px;display:inline-block;padding:2px 7px;border-radius:4px}
+  .leg.done .st{background:rgba(0,255,136,.14);color:var(--done)}
+  .leg.now .st{background:rgba(255,176,32,.14);color:var(--build)}
+  .leg.future .st{background:rgba(90,107,140,.18);color:#9DB0D6}
+  .leg h4{font-size:13px;margin-bottom:5px}
+  .leg p{font-size:11px;margin:0}
+  .leg .rate{font-size:20px;color:var(--accent);font-weight:700;margin:5px 0}
+
+  /* comparison matrix */
+  table{width:100%;border-collapse:collapse;margin:10px 0;font-size:11.5px}
+  th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--border);vertical-align:top}
+  th{color:var(--txt3);font-size:9.5px;letter-spacing:1px;text-transform:uppercase;font-weight:700}
+  td{color:var(--txt2)} td b{color:var(--txt)}
+  .yes{color:var(--accent);font-weight:700}.no{color:var(--err);font-weight:700}.mid{color:var(--warn);font-weight:700}
+  tr.hl td{background:rgba(20,241,149,.05)}
+  .chip-sol{color:var(--sol);font-weight:700}.chip-base{color:#5B8DEF;font-weight:700}
+
+  /* protocol cards */
+  .protos{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0}
+  @media(max-width:720px){.protos{grid-template-columns:1fr}}
+  .proto{background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:16px 18px}
+  .proto.pick{border:1.5px solid var(--sol);box-shadow:0 0 0 3px rgba(20,241,149,.08)}
+  .proto .tag{font-size:9px;letter-spacing:1px;text-transform:uppercase;font-weight:700;padding:3px 9px;border-radius:5px;display:inline-block;margin-bottom:9px}
+  .proto.pick .tag{background:var(--sol);color:#000}
+  .proto.alt .tag{background:var(--surface2);color:var(--txt2);border:1px solid var(--border)}
+  .proto h3{font-size:14px;margin-bottom:2px}
+  .proto .chain{font-size:10px;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px}
+  .proto .row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:11px;gap:10px}
+  .proto .row:last-child{border-bottom:0}
+  .proto .row .k{color:var(--txt3);flex-shrink:0}
+  .proto .row .v{color:var(--txt);font-weight:600;text-align:right}
+
+  /* flow steps */
+  .flow{counter-reset:step}
+  .step{background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden}
+  .step .sh{display:flex;align-items:center;gap:14px;padding:13px 16px;cursor:pointer;user-select:none}
+  .step .num{counter-increment:step;flex-shrink:0;width:28px;height:28px;border-radius:50%;background:var(--surface2);border:1px solid var(--border);color:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px}
+  .step .num::before{content:counter(step)}
+  .step .stitle{flex:1;font-size:12.5px;font-weight:600}
+  .step .stat{font-size:9px;letter-spacing:1px;text-transform:uppercase;padding:3px 8px;border-radius:5px;flex-shrink:0;font-weight:700}
+  .stat.done{background:rgba(0,255,136,.14);color:var(--done)}
+  .stat.build{background:rgba(255,176,32,.14);color:var(--build)}
+  .step .chev{color:var(--txt3);transition:.2s}
+  .step.open .chev{transform:rotate(90deg)}
+  .step .sb{max-height:0;overflow:hidden;transition:max-height .28s ease}
+  .step .sbi{padding:0 16px 16px 58px;font-size:11.5px;color:var(--txt2)}
+  .step .sbi code{font-size:10.5px}
+  .step .sbi .done{color:var(--done);font-weight:700}.step .sbi .build{color:var(--build);font-weight:700}
+
+  .phase{display:flex;gap:12px;margin-bottom:9px;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+  .phase .pn{flex-shrink:0;font-size:10px;letter-spacing:1px;text-transform:uppercase;font-weight:700;color:var(--accent);width:74px;padding-top:2px}
+  .phase .pc h4{font-size:12.5px;margin-bottom:4px}
+  .phase .pc p{font-size:11px;margin:0}
+  .phase .pc .est{font-size:10px;color:var(--txt3);margin-top:5px}
+
+  .q{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--warn);border-radius:0 8px 8px 0;padding:12px 16px;margin-bottom:8px}
+  .q b{color:var(--warn)}
+  .footer{margin-top:34px;text-align:center;color:var(--txt3);font-size:10px;letter-spacing:1px;line-height:1.7}
+  ul{margin:6px 0 10px 18px;color:var(--txt2)}li{margin-bottom:5px}
+  .conf{font-size:9px;letter-spacing:.5px;text-transform:uppercase;padding:2px 6px;border-radius:4px;font-weight:700}
+  .conf.v{background:rgba(0,255,136,.14);color:var(--accent)}
+  .conf.s{background:rgba(255,176,32,.14);color:var(--warn)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>LP + Trading Fees · Chain Investigation</h1>
+  <div class="sub">Investigation + design phase · <b>Solana vs Base</b> · token creation · LP · fee capture · trading config · drafted 2026-05-31</div>
+
+  <div class="decision">
+    <div class="big">Recommendation: Solana + Meteora DBC for the launchpad/LP leg <small>— keep trading-fee capture on both chains (already built)</small></div>
+    <p>Two of your three fee legs split cleanly by maturity. <b>Trading fees already work on both chains</b> (Jupiter on Solana, KyberSwap on Base — both take <code>MOMENTO_PLATFORM_FEE_BPS</code>). The genuinely new leg is <b>token creation + LP + LP-fee capture</b>, and the single best fit is <b>Meteora DBC on Solana</b>: it's explicitly "launchpad-as-a-service" (their words), and per Meteora's own repo, after a protocol cut <b>"the rest of [the] trading fee belongs to partner"</b> — i.e. <i>us</i>. We set the <code>fee_claimer</code>, the curve, the fees, and the creator's split (<code>creator_trading_fee_percentage</code>), and it maps 1:1 onto the <code>CreatorToken</code> schema you already have (bonding curve → graduate → locked LP fees).</p>
+  </div>
+
+  <div class="callout good">
+    <span class="lbl">Confidence + method note (v3 — deep ecosystem dive, source-verified)</span>
+    Fee constants below were read <b>directly from on-chain program source via GitHub</b>, not blogs. Independently confirmed this pass: Meteora DBC <code>PROTOCOL_FEE_PERCENT = 20</code> → <b>partner keeps 80%</b> (the earlier "couldn't find the number" gap is now closed); Clanker <code>PROTOCOL_FEE_NUMERATOR = 200_000</code> = <b>20% of LP fees</b>. Figures tagged <span class="conf v">verified</span> (read from program source / official docs) vs <span class="conf s">confirm</span> (secondary, validate in Phase 0). <b>Design doc, not a spec</b> — no code written. Full per-protocol detail in §04.
+  </div>
+
+  <!-- ───────── THE THREE LEGS ───────── -->
+  <h2><span class="n">01</span>The three fee legs — current state</h2>
+  <div class="legs">
+    <div class="leg done">
+      <span class="st">✅ Built — both chains</span>
+      <h4>Trading fee</h4>
+      <div class="rate">4.00%</div>
+      <p><code>MOMENTO_PLATFORM_FEE_BPS=400</code>. Solana: <code>lib/jupiter.ts</code> (platformFee on output → <code>MOMENTO_FEE_WALLET</code> ATA). Base: <code>lib/base-swap.ts</code> (KyberSwap <code>chargeFeeBy=currency_out</code> → <code>BASE_FEE_WALLET</code>). Config = one env var.</p>
+    </div>
+    <div class="leg future">
+      <span class="st">⊕ New — this design</span>
+      <h4>LP / launchpad fee</h4>
+      <div class="rate">80% <span class="conf v" style="font-size:8px;vertical-align:middle">verified</span></div>
+      <p>Earn a share of trading fees on creator-token pools you launch. Meteora DBC gives the <b>partner 80%</b> of every pool trading fee (protocol takes 20%, source-verified), shareable with the creator. This — being the <i>protocol-level</i> fee earned on every trade <i>anywhere</i>, not just in-app — is the core of this investigation.</p>
+    </div>
+    <div class="leg done">
+      <span class="st">✅ Decided — onramp</span>
+      <h4>Onramp fee</h4>
+      <div class="rate">0%</div>
+      <p>Deferred by design (last session): Privy widget path, no Bridge account, no onramp fee. Revenue comes from trading + LP instead. See <code>docs/privy-onramp-flow.html</code>.</p>
+    </div>
+  </div>
+  <div class="callout good">
+    <span class="lbl">Key insight</span>
+    "Allow configuration for trading" is <b>already done</b> — both swap libs read <code>MOMENTO_PLATFORM_FEE_BPS</code> and route to a per-chain fee wallet. The open work is almost entirely the <b>LP/launchpad</b> leg: actually <i>creating</i> creator tokens and <i>owning</i> their pools so we earn the LP cut.
+  </div>
+
+  <!-- ───────── WHAT EXISTS ───────── -->
+  <h2><span class="n">02</span>What the codebase already has</h2>
+  <table>
+    <tr><th>Piece</th><th>State</th><th>Where</th></tr>
+    <tr class="hl"><td><b>Trading-fee capture (Solana)</b></td><td class="yes">Built</td><td><code>lib/jupiter.ts</code> — platformFeeBps, fee ATA, feeless-retry fallback</td></tr>
+    <tr class="hl"><td><b>Trading-fee capture (Base)</b></td><td class="yes">Built</td><td><code>lib/base-swap.ts</code> — KyberSwap referral fee → BASE_FEE_WALLET</td></tr>
+    <tr><td><b>CreatorToken schema</b></td><td class="mid">Modeled, unused</td><td>schema.prisma — mintAddress, poolAddress, <code>poolType</code> (BONDING_CURVE / RAYDIUM / AERODROME), bondingCurveParams, status (…/GRADUATED)</td></tr>
+    <tr><td><b>Token creation / deploy</b></td><td class="no">Not built</td><td>no mint, no pool-create, no bonding-curve logic anywhere</td></tr>
+    <tr><td><b>LP-fee claiming</b></td><td class="no">Not built</td><td>no claim flow, no fee-accounting table</td></tr>
+    <tr><td><b>Wallets (both chains)</b></td><td class="yes">Built</td><td>Privy embedded Solana + Base wallets per user; primaryChain defaults solana</td></tr>
+    <tr><td><b>Balance / price reads</b></td><td class="yes">Built</td><td><code>lib/helius.ts</code> (Solana), <code>lib/base.ts</code> (Base, read-only)</td></tr>
+  </table>
+  <div class="callout">
+    <span class="lbl">Schema already leans Solana-first</span>
+    <code>PoolType</code> enumerates <code>BONDING_CURVE</code>, <code>RAYDIUM</code> (Solana), <code>AERODROME</code> (Base). The <code>GRADUATED</code> status + <code>bondingCurveParams</code> + <code>graduatedAt</code> fields describe exactly the pump.fun/Meteora bonding-curve→DEX lifecycle. Whoever drafted the schema was already thinking Solana launchpad.
+  </div>
+
+  <!-- ───────── BANKR CLARIFICATION ───────── -->
+  <h2><span class="n">03</span>On Bankr (bnkr) — important reframing</h2>
+  <div class="card">
+    <p>You flagged Bankr specifically, and the research changed how to think about it. <b>Bankr is not infrastructure to integrate into — it's a peer doing exactly what Momento would do.</b> Per Bankr's own docs, it lets users <i>"deploy a fair-launch token on Base (via <b>Clanker</b>) or Solana (via <b>Raydium LaunchLab</b>)"</i> <span class="conf v">verified: docs.bankr.chat</span>. It charges <b>1.2% swap fee on Base, 57% to creator</b> <span class="conf v">verified</span> — i.e. Bankr <i>is</i> a Clanker interface keeping the interface slice.</p>
+    <p><b>The takeaway:</b> Bankr proves the "be a launchpad interface and keep a per-swap cut" model works at scale. There is <b>no Bankr partner/white-label fee-share API</b> for a third-party app to earn through <span class="conf s">could not find one; Bankr's <code>@bankr/sdk</code> drives its agent, not white-label launches</span>. So: <b>don't integrate Bankr — integrate the layer beneath it (Clanker / LaunchLab) directly</b> and capture the slice Bankr keeps for itself.</p>
+  </div>
+
+  <!-- ───────── CHAIN COMPARISON ───────── -->
+  <h2><span class="n">04</span>Chain comparison — for the launchpad/LP leg</h2>
+  <table>
+    <tr><th>Dimension</th><th class="chip-sol">Solana</th><th class="chip-base">Base / ETH L2</th></tr>
+    <tr><td><b>Best "earn-as-integrator" option</b></td><td class="chip-sol">Meteora DBC</td><td>Clanker v4.1 or Flaunch</td></tr>
+    <tr class="hl"><td><b>Platform/partner fee share</b></td><td class="yes">Partner keeps <b>80%</b> of every trading fee (protocol = 20%) <span class="conf v">verified in program source</span></td><td class="yes">App sets its own bps of the ~80% post-protocol LP fees (Clanker) / sets <code>protocolFeePercent</code> (Flaunch) <span class="conf v">verified</span></td></tr>
+    <tr><td><b>Protocol's own cut</b></td><td><code>PROTOCOL_FEE_PERCENT = 20</code> <span class="conf v">verified</span></td><td>Clanker <code>PROTOCOL_FEE_NUMERATOR = 200_000</code> = 20% of LP fees <span class="conf v">verified</span></td></tr>
+    <tr><td><b>Launch model</b></td><td>Bonding curve → graduate to Meteora DAMM v1/v2, LP locked, both claim</td><td>Mostly direct Uniswap v4 LP (Clanker/Flaunch/Zora); Doppler = auction-style</td></tr>
+    <tr><td><b>SDK (TS, verified)</b></td><td><code>@meteora-ag/dynamic-bonding-curve-sdk</code></td><td><code>clanker-sdk</code>, <code>@flaunch/sdk</code>, <code>@zoralabs/coins-sdk</code>, doppler-sdk</td></tr>
+    <tr><td><b>Claim mechanism</b></td><td><code>claimPartnerTradingFee</code> to <code>fee_claimer</code></td><td>Clanker: permissionless <code>ClankerFeeLocker.claim()</code>; Flaunch: <code>revenueManagerProtocolClaim()</code>; Zora: <b>auto-paid per swap</b></td></tr>
+    <tr><td><b>Our existing infra depth</b></td><td class="yes">Deep — Helius, Jupiter fee-taking, primaryChain=solana, schema RAYDIUM enum</td><td class="mid">Shallower — balance reads + KyberSwap swaps only</td></tr>
+    <tr><td><b>Cultural fit</b></td><td>pump.fun / Believe / Bonk — consumer token launches</td><td>Clanker / Zora / Bankr / Farcaster — creator-coin + social</td></tr>
+    <tr><td><b>Tx cost</b></td><td class="yes">~$0.0001</td><td>cents</td></tr>
+  </table>
+
+  <!-- ───────── THE PROTOCOLS ───────── -->
+  <h2><span class="n">05</span>The candidate protocols — verified</h2>
+  <p style="font-size:11px;color:var(--txt2)">Every protocol below was checked for the one question that matters: <b>can Momento, as the integrating app, earn a recurring fee — and how is it claimed?</b> Ranked best-fit first within each chain.</p>
+
+  <h3 style="font-size:12px;color:var(--sol);letter-spacing:1px;margin:16px 0 8px">◆ SOLANA</h3>
+  <div class="protos">
+    <div class="proto pick">
+      <span class="tag">✓ Top pick overall</span>
+      <h3>Meteora DBC</h3>
+      <div class="chain chip-sol">Solana · launchpad-as-a-service</div>
+      <div class="row"><span class="k">Our cut</span><span class="v"><b>80%</b> of trading fee <span class="conf v">verified</span></span></div>
+      <div class="row"><span class="k">Protocol cut</span><span class="v">20% (referral carved from <i>their</i> 20%)</span></div>
+      <div class="row"><span class="k">Claim</span><span class="v"><code>claimPartnerTradingFee</code> → <code>fee_claimer</code></span></div>
+      <div class="row"><span class="k">Creator split</span><span class="v"><code>creatorTradingFeePercentage</code> (of our 80%)</span></div>
+      <div class="row"><span class="k">Post-grad</span><span class="v">DAMM v2 (also 20% protocol); locked-LP fees to partner+creator</span></div>
+      <div class="row"><span class="k">Curve fee range</span><span class="v">0.25%–99% (we set it)</span></div>
+      <div class="row"><span class="k">Used by</span><span class="v">Believe, Jupiter Studio</span></div>
+    </div>
+    <div class="proto alt">
+      <span class="tag">Strong #2 (Solana)</span>
+      <h3>Raydium LaunchLab</h3>
+      <div class="chain chip-sol">Solana · platform-config model</div>
+      <div class="row"><span class="k">Our cut</span><span class="v">app-set <code>fee_rate</code> via <code>create_platform_config</code> <span class="conf v">verified</span></span></div>
+      <div class="row"><span class="k">Protocol cut</span><span class="v">flat 0.25% off the top (unavoidable)</span></div>
+      <div class="row"><span class="k">Claim</span><span class="v"><code>claim_platform_fee</code> → <code>platform_fee_wallet</code></span></div>
+      <div class="row"><span class="k">Creator</span><span class="v">app-set <code>creator_fee_rate</code> + post-grad "Fee Key" NFT</span></div>
+      <div class="row"><span class="k">Used by</span><span class="v">LetsBONK + 10 platforms</span></div>
+      <div class="row"><span class="k">Tradeoff</span><span class="v">less curve flexibility; 0.25% Raydium tax</span></div>
+    </div>
+  </div>
+  <p style="font-size:10.5px;color:var(--txt3);margin-top:6px">Also surveyed: <b>pump.fun/PumpSwap</b> — highest volume but <span class="no">no partner economics</span> (you'd only bolt a fee in your own UI). <b>Jupiter Studio</b> — is just DBC under the hood, gives only the <i>creator</i> side; better to integrate DBC directly + use the <b>Jupiter Referral program</b> (<code>platformFeeBps</code>/<code>feeAccount</code>) for the secondary-trading fee layer (which is what our existing 4% already leans on).</p>
+
+  <h3 style="font-size:12px;color:#5B8DEF;letter-spacing:1px;margin:20px 0 8px">◆ BASE / ETH L2</h3>
+  <div class="protos">
+    <div class="proto alt">
+      <span class="tag">Base #1 — most battle-tested</span>
+      <h3>Clanker v4.1</h3>
+      <div class="chain chip-base">Base · token factory on Uniswap v4</div>
+      <div class="row"><span class="k">Our cut</span><span class="v">app-set bps of post-protocol LP fees via <code>rewards.recipients[]</code> <span class="conf v">verified in SDK+source</span></span></div>
+      <div class="row"><span class="k">Protocol cut</span><span class="v">20% of LP fees (<code>PROTOCOL_FEE_NUMERATOR</code>)</span></div>
+      <div class="row"><span class="k">Swap fee</span><span class="v">creator-set 1–3% (LP fee cap 30%)</span></div>
+      <div class="row"><span class="k">Claim</span><span class="v">permissionless <code>ClankerFeeLocker.claim()</code></span></div>
+      <div class="row"><span class="k">Used by</span><span class="v">Bankr, Pool.fans — ~200k+ tokens</span></div>
+    </div>
+    <div class="proto alt">
+      <span class="tag">Base #2 — cleanest white-label</span>
+      <h3>Flaunch</h3>
+      <div class="chain chip-base">Base · RevenueManager</div>
+      <div class="row"><span class="k">Our cut</span><span class="v"><code>deployRevenueManager({protocolFeePercent})</code> — purpose-built for "platforms building on top" <span class="conf v">verified</span></span></div>
+      <div class="row"><span class="k">Swap fee</span><span class="v">1% (buys + sells)</span></div>
+      <div class="row"><span class="k">Claim</span><span class="v"><code>revenueManagerProtocolClaim()</code></span></div>
+      <div class="row"><span class="k">Extras</span><span class="v">auto-buyback (Progressive Bid Wall); &lt;$10k mcap = no protocol fee</span></div>
+      <div class="row"><span class="k">Note</span><span class="v">README: "build your own token launchpads on top of flaunch"</span></div>
+    </div>
+  </div>
+  <div class="protos" style="margin-top:8px">
+    <div class="proto alt">
+      <span class="tag">Base — simplest ops</span>
+      <h3>Zora</h3>
+      <div class="chain chip-base">Base · "post = coin"</div>
+      <div class="row"><span class="k">Our cut</span><span class="v"><code>platformReferrer</code> = <b>20% of total fees</b>, <b>auto-paid every swap</b> (zero claim ops) <span class="conf v">verified in coins-sdk</span></span></div>
+      <div class="row"><span class="k">Swap fee</span><span class="v">1% total (creator 50 / platform-ref 20 / LP 20 / …)</span></div>
+      <div class="row"><span class="k">Tradeoff</span><span class="v">opinionated UX; fees denominated in ZORA</span></div>
+    </div>
+    <div class="proto alt">
+      <span class="tag">Base — the engine beneath</span>
+      <h3>Doppler</h3>
+      <div class="chain chip-base">Base+ · auction launch infra</div>
+      <div class="row"><span class="k">Our cut</span><span class="v">add self to <code>beneficiaries[]</code> / <code>.withIntegrator()</code> <span class="conf v">verified</span></span></div>
+      <div class="row"><span class="k">Protocol cut</span><span class="v">≥5% to airlock owner</span></div>
+      <div class="row"><span class="k">Claim</span><span class="v">permissionless <code>collectFees()</code></span></div>
+      <div class="row"><span class="k">Note</span><span class="v">powers Zora/Bankr; lower-level, more config</span></div>
+    </div>
+  </div>
+  <p style="font-size:10.5px;color:var(--txt3);margin-top:6px"><b>Skip for fee-earning:</b> <b>Aerodrome</b> (no native app-referral fee — trading fees go to veAERO voters; it's a liquidity venue, not a fee source) and raw <b>Uniswap v4 hooks</b> (you'd write+audit your own hook — heavy; the four above already did this for you).</p>
+
+  <!-- ───────── FEE FLOW ───────── -->
+  <h2><span class="n">06</span>How fees would flow (Meteora DBC path) <span style="font-size:10px;color:var(--txt3);letter-spacing:1px">— tap a step</span></h2>
+  <div class="flow" id="flow"></div>
+
+  <!-- ───────── CONFIG MODEL ───────── -->
+  <h2><span class="n">07</span>Unified fee configuration model</h2>
+  <div class="card">
+    <p>Goal: every fee leg reads from one coherent config, so rates are tunable without code changes.</p>
+    <ul>
+      <li><code>MOMENTO_PLATFORM_FEE_BPS</code> — trading fee (exists, 400 = 4%). Already wired both chains.</li>
+      <li><code>MOMENTO_FEE_WALLET</code> / <code>BASE_FEE_WALLET</code> — per-chain fee sinks (exist).</li>
+      <li><b>New:</b> <code>MOMENTO_LP_FEE_CLAIMER</code> — the Solana wallet registered as Meteora <code>fee_claimer</code> (where the partner share accrues).</li>
+      <li><b>New:</b> <code>MOMENTO_CREATOR_FEE_PCT</code> — how much of the partner share we pass to the creator (e.g. 50%). Drives <code>creator_trading_fee_percentage</code> in the DBC config key.</li>
+      <li><b>New table</b> (additive raw SQL, like promotion_logs): <code>fee_events</code> — log every claim/accrual for accounting &amp; the future reconciliation dashboard.</li>
+    </ul>
+  </div>
+  <div class="callout crit">
+    <span class="lbl">⚠ Custody / compliance — flag before building</span>
+    Launching tokens + holding pool fee-claim authority is a materially bigger regulatory surface than swaps. The <code>feeClaimer</code> wallet accrues real revenue; creator-token issuance may implicate securities/MSB questions depending on jurisdiction and how "creator tokens" are marketed. <b>Get a legal read before shipping the launchpad leg.</b> The trading-fee leg (already live) is lower-risk by comparison.
+  </div>
+
+  <!-- ───────── PHASES ───────── -->
+  <h2><span class="n">08</span>Suggested phasing</h2>
+  <div class="phase"><div class="pn">Phase 0</div><div class="pc"><h4>Decide chain + legal read</h4><p>Confirm Solana+Meteora (rec) vs a Base option (Clanker/Flaunch/Zora). 80/20 partner split is now source-verified; still get a compliance read on token issuance + fee custody, and confirm the creator-split + payout-token + Privy-wallet-claim specifics for the chosen protocol.</p><div class="est">~2–3 days incl. external input</div></div></div>
+  <div class="phase"><div class="pn">Phase 1</div><div class="pc"><h4>Spike: one config key + one test launch</h4><p>Create the Meteora partner config key (fee schedule, creatorTradingFeePercentage, migration target). Launch one test token on devnet via the SDK; confirm a swap accrues partner fees and <code>claimTradingFee</code> works.</p><div class="est">~3–5 days</div></div></div>
+  <div class="phase"><div class="pn">Phase 2</div><div class="pc"><h4>Wire CreatorToken lifecycle</h4><p>Implement create→DEPLOYING→ACTIVE→GRADUATED against the existing schema. Server route to deploy, client UI to launch (gate behind creator + KYC). <code>fee_events</code> table + claim job.</p><div class="est">~1–2 weeks</div></div></div>
+  <div class="phase"><div class="pn">Phase 3</div><div class="pc"><h4>Fee dashboard + reconciliation</h4><p>Surface accrued/claimed fees (platform + per-creator). Extend the trading-fee config to be admin-tunable. Reconcile against on-chain claims.</p><div class="est">~1 week</div></div></div>
+
+  <!-- ───────── OPEN QUESTIONS ───────── -->
+  <h2><span class="n">09</span>Decisions for you</h2>
+  <div class="q"><b>Q1 — Chain.</b> Solana + <b>Meteora DBC</b> (my rec: verified 80% partner share, deepest existing infra, schema already fits, bonding-curve lifecycle) — or a Base option if Base/Farcaster creator-coin culture is the target? Base best picks: <b>Clanker v4.1</b> (most battle-tested), <b>Flaunch</b> (cleanest white-label <code>RevenueManager</code>), or <b>Zora</b> (simplest — auto-paid 20% platformReferrer).</div>
+  <div class="q"><b>Q2 — Launch model.</b> Bonding-curve (Meteora/Raydium: start cheap, graduate once it fills) or direct-LP (Clanker/Flaunch/Zora: immediate Uniswap pool)? Partly downstream of Q1, partly a product call.</div>
+  <div class="q"><b>Q3 — Creator fee split.</b> Of our partner share, what % do we pass to creators? Comps: pump.fun ~50%, Jupiter 50%, Clanker-bot 80%, Zora 50%, Bankr 57%. Generous splits drive creator acquisition but cut platform revenue.</div>
+  <div class="q"><b>Q4 — Scope of "trading config."</b> Is the existing single <code>MOMENTO_PLATFORM_FEE_BPS</code> enough, or do you want per-creator / per-token configurable trading fees (more complex, needs a config store + admin UI)?</div>
+  <div class="q"><b>Q5 — Legal.</b> Do you have / want a compliance read before the launchpad leg? Strongly recommended given fee custody + token issuance.</div>
+
+  <div class="footer">
+    Investigation + design · static · no code written · v3 (deep ecosystem dive).<br>
+    <b>Read from on-chain program source (gh):</b> Meteora DBC <code>PROTOCOL_FEE_PERCENT=20</code>, <code>HOST_FEE_PERCENT=20</code>, <code>PARTNER_AND_CREATOR_SURPLUS_SHARE=80</code>, <code>MIN/MAX_FEE_BPS</code> (MeteoraAg/dynamic-bonding-curve + damm-v2); Clanker <code>PROTOCOL_FEE_NUMERATOR=200_000</code>, <code>MAX_LP_FEE=300_000</code> (clanker-devco/v4-contracts). <b>From SDK READMEs/docs:</b> Zora <code>platformReferrer</code> (ourzora/zora-protocol coins-sdk), Flaunch <code>RevenueManager</code> (flayerlabs/flaunch-sdk), Doppler beneficiaries (whetstoneresearch/doppler-sdk), Raydium <code>create_platform_config</code>/<code>claim_platform_fee</code> (raydium IDL/sdk-v2), Bankr 1.2%/57% (docs.bankr.chat), pump.fun fee schedule.<br>
+    <b>Still confirm in Phase 0:</b> Raydium's exact platform/protocol % (docs site 404s to fetchers; structure verified in IDL); Jupiter referral take-rate; payout-token denomination per protocol + whether Privy embedded wallets can hold/claim; Flaunch referrer %.
+  </div>
+</div>
+
+<script>
+const STEPS=[
+  {s:'done',t:'User onramps USDC (Privy widget) — already wired',
+   d:`Funded USDC lands in the user's Solana wallet via the Privy modal (<span class="done">already built</span>, pending dashboard enablement). This is the capital that flows into launches and trades.`},
+  {s:'build',t:'Creator launches a token via our Meteora partner config',
+   d:`We hold one <b>partner config key</b> (fee schedule + <code>creatorTradingFeePercentage</code> + migration target). The creator's launch uses it, so every token inherits our fee terms. <span class="build">New: deploy route + launch UI</span>. Writes a <code>CreatorToken</code> row (status DEPLOYING→ACTIVE).`},
+  {s:'build',t:'Users trade on the bonding curve — 80% of fees accrue to us',
+   d:`Pre-graduation the DBC pool charges a trading fee on every swap. Verified split (program source): <b>protocol 20%, partner 80%</b>. A swap host's referral is carved from the protocol's 20%, NOT our 80%. Our 80% is split with the creator via <code>creatorTradingFeePercentage</code>; fees accrue on-chain to the <code>fee_claimer</code> wallet (= ours).`},
+  {s:'build',t:'We claim accrued fees',
+   d:`<code>claimPartnerTradingFee</code> (SDK) sweeps the accrued partner fees to <code>MOMENTO_LP_FEE_CLAIMER</code>. Log each claim to the new <code>fee_events</code> table. Scheduled job (cron) or on-demand.`},
+  {s:'build',t:'Token graduates → migrates to DAMM, LP locked',
+   d:`When the curve fills, liquidity migrates to a Meteora DAMM pool and LP is <b>locked</b> for partner + creator per config. Update the row to <code>GRADUATED</code>. Post-grad, both sides keep claiming fees against the locked LP.`},
+  {s:'done',t:'Separately: any normal swap still takes the 4% trading fee',
+   d:`Independent of launches — any USDC↔token swap through <code>lib/jupiter.ts</code> already adds <code>MOMENTO_PLATFORM_FEE_BPS</code> to <code>MOMENTO_FEE_WALLET</code>. <span class="done">Already live.</span> The LP leg stacks on top; it doesn't replace this.`},
+];
+const flow=document.getElementById('flow');
+flow.innerHTML=STEPS.map(s=>`
+  <div class="step">
+    <div class="sh"><div class="num"></div><div class="stitle">${s.t}</div>
+      <span class="stat ${s.s}">${s.s==='done'?'built':'new'}</span><span class="chev">▶</span></div>
+    <div class="sb"><div class="sbi">${s.d}</div></div>
+  </div>`).join('');
+document.querySelectorAll('.step').forEach(st=>{
+  st.querySelector('.sh').onclick=()=>{
+    const open=st.classList.toggle('open');
+    const sb=st.querySelector('.sb');
+    sb.style.maxHeight=open?sb.querySelector('.sbi').scrollHeight+24+'px':'0';
+  };
+});
+</script>
+</body>
+</html>
