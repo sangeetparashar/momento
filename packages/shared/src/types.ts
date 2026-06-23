@@ -11,7 +11,10 @@ export enum KycStatus {
   REJECTED = 'REJECTED',
 }
 
-export type ChainType = 'solana' | 'base';
+// Solana-only after the 2026-06 migration. Kept as a 1-member union (not deleted)
+// so existing `ChainType` annotations keep compiling and any leftover `=== 'base'`
+// branch becomes a type error. See docs/solana-migration/README.md.
+export type ChainType = 'solana';
 
 export enum TokenStatus {
   PENDING = 'PENDING',
@@ -24,7 +27,6 @@ export enum TokenStatus {
 export enum PoolType {
   BONDING_CURVE = 'BONDING_CURVE',
   RAYDIUM = 'RAYDIUM',
-  AERODROME = 'AERODROME',
 }
 
 export enum PostType {
@@ -50,8 +52,6 @@ export interface User {
   id: string;
   privyUserId: string;
   walletAddress: string;
-  baseWalletAddress?: string;
-  primaryChain: ChainType;
   email?: string;
   username?: string;
   displayName?: string;

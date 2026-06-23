@@ -1,3 +1,5 @@
+> ⚠️ SUPERSEDED by the Solana-only migration (2026-06). See docs/solana-migration/README.md. Retained for history.
+
 # Phase 2 Agent Prompts — Backend (all 4 run in parallel after Phase 1 merge)
 
 ---

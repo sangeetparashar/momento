@@ -20,17 +20,6 @@ export const CHAIN_CONFIG = {
     usdcAddress: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
     usdcDecimals: 6,
   },
-  base: {
-    name: 'Base',
-    symbol: 'ETH',
-    decimals: 18,
-    nativeIcon: 'Ξ',
-    iconColor: '#0052FF',
-    explorerUrl: 'https://basescan.org',
-    explorerName: 'BaseScan',
-    usdcAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-    usdcDecimals: 6,
-  },
 } as const;
 
 export type ChainConfig = typeof CHAIN_CONFIG;

@@ -19,19 +19,17 @@ import {
   ComingSoonModal,
   FundWalletModal,
   SendModal,
-  ChainSwitcher,
 } from '@/components/features';
 import { useWalletBalance, useWalletTransactions } from '@/hooks';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useAuth } from '@/hooks/useAuth';
-import { useChain } from '@/hooks/useChain';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatCurrency, formatPercentage, truncateAddress } from '@/utils/formatters';
 import { ENV } from '@/config/env';
 import { usePressLogger } from '@/utils/pressLogger';
 import { CHAIN_CONFIG } from '@momento/shared';
-import type { TokenHolding, ChainType } from '@momento/shared';
+import type { TokenHolding } from '@momento/shared';
 
 /** Transaction record (from API or local AsyncStorage fallback) */
 interface TxRecord {
@@ -46,25 +44,19 @@ const MAX_TX_RECORDS = 20;
 
 /**
  * Per the project memory, AsyncStorage keys MUST be namespaced by userId so
- * each account gets its own state, AND recent transactions are chain-specific
- * (you can't show Solana txs while viewing the Base wallet). The key format is
- * `momento_recent_txs:<userId>:<chain>`. Falls back to a global key when no
+ * each account gets its own state. The key format is
+ * `momento_recent_txs:<userId>:solana`. Falls back to a global key when no
  * user is loaded yet so initial render doesn't crash.
  */
-function getTxStorageKey(userId: string | undefined, chain: ChainType): string {
-  if (!userId) return `${TX_STORAGE_KEY_BASE}:${chain}`;
-  return `${TX_STORAGE_KEY_BASE}:${userId}:${chain}`;
+function getTxStorageKey(userId: string | undefined): string {
+  if (!userId) return `${TX_STORAGE_KEY_BASE}:solana`;
+  return `${TX_STORAGE_KEY_BASE}:${userId}:solana`;
 }
 
 function getExplorerUrl(
-  chain: ChainType,
   addressOrTx: string,
   type: 'address' | 'tx' = 'address',
 ): string {
-  if (chain === 'base') {
-    return `https://basescan.org/${type}/${addressOrTx}`;
-  }
-  // Solana
   const cluster = ENV.SOLANA_NETWORK === 'devnet' ? '?cluster=devnet' : '';
   const solType = type === 'address' ? 'account' : 'tx';
   return `https://solscan.io/${solType}/${addressOrTx}${cluster}`;
@@ -72,13 +64,12 @@ function getExplorerUrl(
 
 export default function WalletScreen() {
   const router = useRouter();
-  const { chain } = useChain();
-  const chainConfig = CHAIN_CONFIG[chain];
+  const chainConfig = CHAIN_CONFIG.solana;
   const walletQuery = useWalletBalance();
   const balance = walletQuery.data;
   const { startFastPolling } = walletQuery;
   const { user: profile } = useUserProfile();
-  const { walletAddress: solWalletAddress, ethWalletAddress } = useAuth();
+  const { walletAddress: solWalletAddress } = useAuth();
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [showFundModal, setShowFundModal] = useState(false);
@@ -91,11 +82,11 @@ export default function WalletScreen() {
   // Fallback: load from AsyncStorage if API hasn't returned yet
   useEffect(() => {
     if (!txQuery.data) {
-      AsyncStorage.getItem(getTxStorageKey(profile?.id, chain))
+      AsyncStorage.getItem(getTxStorageKey(profile?.id))
         .then(raw => setOfflineTxs(raw ? JSON.parse(raw) : []))
         .catch(() => setOfflineTxs([]));
     }
-  }, [txQuery.data, profile?.id, chain]);
+  }, [txQuery.data, profile?.id]);
 
   // Refetch tx history + start fast balance polling after modals close
   useEffect(() => {
@@ -119,16 +110,12 @@ export default function WalletScreen() {
     walletQuery.refetch();
   }, [walletQuery]);
 
-  // Choose the wallet address based on the currently-selected chain. For Base
-  // we use the Privy embedded ETH wallet address; for Solana we prefer the
-  // Privy embedded Solana wallet, falling back to the server profile.
+  // Prefer the Privy embedded Solana wallet, falling back to the server profile.
   const walletAddress =
-    chain === 'base'
-      ? ethWalletAddress
-      : solWalletAddress ||
-        (profile?.walletAddress && !profile.walletAddress.startsWith('pending-')
-          ? profile.walletAddress
-          : null);
+    solWalletAddress ||
+    (profile?.walletAddress && !profile.walletAddress.startsWith('pending-')
+      ? profile.walletAddress
+      : null);
 
   const handleBack = useCallback(() => {
     if (router.canGoBack()) {
@@ -163,8 +150,8 @@ export default function WalletScreen() {
 
   const handleOpenExplorer = useCallback(() => {
     if (!walletAddress) return;
-    Linking.openURL(getExplorerUrl(chain, walletAddress, 'address'));
-  }, [walletAddress, chain]);
+    Linking.openURL(getExplorerUrl(walletAddress, 'address'));
+  }, [walletAddress]);
 
   const change24h = balance?.change24h ?? 0;
   const isPositive = change24h >= 0;
@@ -207,13 +194,11 @@ export default function WalletScreen() {
         {walletAddress ? (
           <View style={styles.addressCard}>
             <View style={styles.addressRow}>
-              <ChainSwitcher />
-              <View style={{ flex: 1 }} />
+              <View style={[styles.addressDot, { backgroundColor: chainConfig.iconColor }]} />
+              <Text style={styles.addressLabel}>{chainConfig.name} Wallet</Text>
               <View style={styles.networkBadge}>
                 <Text style={styles.networkText}>
-                  {chain === 'base'
-                    ? (ENV.BASE_NETWORK === 'testnet' ? 'TESTNET' : 'MAINNET')
-                    : (ENV.SOLANA_NETWORK === 'devnet' ? 'DEVNET' : 'MAINNET')}
+                  {ENV.SOLANA_NETWORK === 'devnet' ? 'DEVNET' : 'MAINNET'}
                 </Text>
               </View>
             </View>
@@ -269,7 +254,7 @@ export default function WalletScreen() {
         {/* Asset Cards */}
         {balance && (
           <View style={styles.assetsSection}>
-            {/* Native Token Card (SOL or ETH depending on chain) */}
+            {/* Native Token Card (SOL) */}
             {(() => {
               const nativeAmount = balance.nativeBalance ?? balance.solBalance ?? 0;
               const nativePrice = balance.nativePriceUsd ?? balance.solPriceUsd ?? 0;
@@ -365,7 +350,7 @@ export default function WalletScreen() {
               <Pressable
                 key={tx.signature}
                 style={styles.txRow}
-                onPress={() => Linking.openURL(getExplorerUrl(chain, tx.signature, 'tx'))}
+                onPress={() => Linking.openURL(getExplorerUrl(tx.signature, 'tx'))}
               >
                 <View style={styles.txLeft}>
                   <View style={styles.txIcon}>

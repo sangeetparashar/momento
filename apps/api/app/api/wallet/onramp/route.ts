@@ -15,7 +15,7 @@ type OnrampProvider = (typeof PROVIDERS)[number];
  * Apple Pay, Google Pay, cards, and bank transfers across 150+ countries.
  * Asset code format: SOLANA_USDC
  */
-function buildRampUrl(walletAddress: string, chain: string): string {
+function buildRampUrl(walletAddress: string): string {
   const apiKey = process.env.RAMP_API_KEY || '';
   const env = process.env.RAMP_ENVIRONMENT || 'sandbox';
 
@@ -24,9 +24,9 @@ function buildRampUrl(walletAddress: string, chain: string): string {
       ? 'https://app.rampnetwork.com'
       : 'https://app.demo.rampnetwork.com';
 
-  // Ramp asset code format is {CHAIN}_{SYMBOL}, e.g. SOLANA_USDC, BASE_USDC.
+  // Ramp asset code format is {CHAIN}_{SYMBOL}, e.g. SOLANA_USDC.
   // Verified 2026-04-07 against https://api.ramp.network/api/host-api/v3/assets
-  const swapAsset = chain === 'base' ? 'BASE_USDC' : 'SOLANA_USDC';
+  const swapAsset = 'SOLANA_USDC';
 
   const params = new URLSearchParams({
     hostApiKey: apiKey,
@@ -46,7 +46,7 @@ function buildRampUrl(walletAddress: string, chain: string): string {
  * MoonPay supports Apple Pay, Google Pay, PayPal, Venmo, cards, and bank
  * transfers across 180+ countries. Currency code: usdc_sol.
  */
-function buildMoonPayUrl(walletAddress: string, chain: string): string {
+function buildMoonPayUrl(walletAddress: string): string {
   const apiKey = process.env.MOONPAY_API_KEY;
   const env = process.env.MOONPAY_ENVIRONMENT || 'sandbox';
 
@@ -55,9 +55,9 @@ function buildMoonPayUrl(walletAddress: string, chain: string): string {
       ? 'https://buy.moonpay.com'
       : 'https://buy-sandbox.moonpay.com';
 
-  // MoonPay currency codes are network-suffixed: usdc_sol, usdc_base.
+  // MoonPay currency codes are network-suffixed: usdc_sol.
   // Verified 2026-04-07 against https://api.moonpay.com/v3/currencies
-  const currencyCode = chain === 'base' ? 'usdc_base' : 'usdc_sol';
+  const currencyCode = 'usdc_sol';
 
   const params = new URLSearchParams({
     apiKey: apiKey || 'pk_test_123',
@@ -147,7 +147,7 @@ async function getTransakAccessToken(): Promise<string> {
  *
  * Falls back to the 2-step API flow only if needed for advanced features.
  */
-function buildTransakDirectUrl(walletAddress: string, chain: string): string {
+function buildTransakDirectUrl(walletAddress: string): string {
   const { env, apiKey } = getTransakConfig();
 
   const base =
@@ -157,7 +157,7 @@ function buildTransakDirectUrl(walletAddress: string, chain: string): string {
 
   // Transak network slug is lowercase chain name.
   // Verified 2026-04-07 against https://api.transak.com/api/v2/currencies/crypto-currencies
-  const network = chain === 'base' ? 'base' : 'solana';
+  const network = 'solana';
 
   const params = new URLSearchParams({
     apiKey,
@@ -175,8 +175,8 @@ function buildTransakDirectUrl(walletAddress: string, chain: string): string {
   return `${base}?${params.toString()}`;
 }
 
-async function buildTransakUrl(walletAddress: string, chain: string): Promise<string> {
-  const network = chain === 'base' ? 'base' : 'solana';
+async function buildTransakUrl(walletAddress: string): Promise<string> {
+  const network = 'solana';
 
   // Try the 2-step API flow first (better UX, pre-authenticated session)
   try {
@@ -212,7 +212,7 @@ async function buildTransakUrl(walletAddress: string, chain: string): Promise<st
       // Clear cached token so next attempt re-authenticates
       _transakAccessToken = null;
       _transakTokenExpiry = 0;
-      return buildTransakDirectUrl(walletAddress, chain);
+      return buildTransakDirectUrl(walletAddress);
     }
 
     const json = await res.json();
@@ -243,7 +243,6 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const provider = (searchParams.get('provider') || 'ramp') as OnrampProvider;
-    const chain = searchParams.get('chain') || 'solana';
 
     if (!PROVIDERS.includes(provider)) {
       return NextResponse.json(
@@ -252,11 +251,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Resolve wallet address for the requested chain
-    const walletAddress = getWalletForChain(user, chain);
+    // Resolve the user's Solana wallet address
+    const walletAddress = getWalletForChain(user);
     if (!walletAddress) {
       return NextResponse.json(
-        { success: false, error: `No ${chain} wallet found. Please try again in a moment.` },
+        { success: false, error: 'No solana wallet found. Please try again in a moment.' },
         { status: 400 }
       );
     }
@@ -264,13 +263,13 @@ export async function GET(request: NextRequest) {
     let url: string;
     switch (provider) {
       case 'ramp':
-        url = buildRampUrl(walletAddress, chain);
+        url = buildRampUrl(walletAddress);
         break;
       case 'moonpay':
-        url = buildMoonPayUrl(walletAddress, chain);
+        url = buildMoonPayUrl(walletAddress);
         break;
       case 'transak':
-        url = await buildTransakUrl(walletAddress, chain);
+        url = await buildTransakUrl(walletAddress);
         break;
     }
 
@@ -281,7 +280,7 @@ export async function GET(request: NextRequest) {
         provider,
         coin: 'USDC',
         walletAddress,
-        chain,
+        chain: 'solana',
       },
     });
   } catch (error) {

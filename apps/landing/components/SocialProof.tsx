@@ -38,7 +38,7 @@ function useCountUp(target: number, duration: number, start: boolean): number {
 const stats = [
   { value: 1000, suffix: '+', label: 'Early Access Signups' },
   { value: 50, suffix: '+', label: 'Creator Applications' },
-  { value: 4, suffix: '', label: 'Blockchain Partners' },
+  { value: 1, suffix: '', label: 'Blockchain: Solana' },
   { value: 0, suffix: '', prefix: '$', label: 'Platform Fees for Fans' },
 ];
 

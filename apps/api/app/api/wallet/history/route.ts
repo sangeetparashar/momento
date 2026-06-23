@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth, getChainParam } from '@/lib/auth';
+import { requireAuth } from '@/lib/auth';
 import { getOrSetCache, cacheTTL, cacheKeys } from '@/lib/redis';
 import { readLimiter, applyRateLimit } from '@/lib/ratelimit';
 
@@ -17,8 +17,7 @@ export async function GET(request: NextRequest) {
     if (rateLimitResponse) return rateLimitResponse;
     await requireAuth(request);
 
-    const chain = getChainParam(request);
-    const coinId = chain === 'base' ? 'ethereum' : 'solana';
+    const coinId = 'solana';
 
     const { searchParams } = new URL(request.url);
     const range = searchParams.get('range') || '1M';

@@ -19,23 +19,20 @@ import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/hooks/useAuth';
-import { useChain } from '@/hooks/useChain';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { apiService } from '@/services/api';
 import { ENV } from '@/config/env';
 import { CHAIN_CONFIG } from '@momento/shared';
-import type { ChainType } from '@momento/shared';
 
 const TX_STORAGE_KEY_BASE = 'momento_recent_txs';
 const MAX_TX_RECORDS = 20;
 
-/** Per-user, per-chain tx storage key — must match wallet.tsx getTxStorageKey */
-function getTxStorageKey(userId: string | undefined, chain: ChainType): string {
-  if (!userId) return `${TX_STORAGE_KEY_BASE}:${chain}`;
-  return `${TX_STORAGE_KEY_BASE}:${userId}:${chain}`;
+/** Per-user tx storage key — must match wallet.tsx getTxStorageKey */
+function getTxStorageKey(userId: string | undefined): string {
+  if (!userId) return `${TX_STORAGE_KEY_BASE}:solana`;
+  return `${TX_STORAGE_KEY_BASE}:${userId}:solana`;
 }
-const BASE_CHAIN_ID_HEX = '0x2105'; // 8453
 
 interface SendModalProps {
   visible: boolean;
@@ -47,14 +44,10 @@ type SendToken = string;
 /** Minimum amounts to send (per token symbol) */
 const MIN_SEND: Record<string, number> = {
   SOL: 0.001,
-  ETH: 0.0001,
   USDC: 0.01,
 };
-/** Minimum native token to keep for fees */
-const MIN_NATIVE_FOR_FEES: Record<'solana' | 'base', number> = {
-  solana: 0.005,
-  base: 0.0002,
-};
+/** Minimum native (SOL) token to keep for fees */
+const MIN_NATIVE_FOR_FEES = 0.005;
 
 type SendStep = 'form' | 'confirming' | 'success' | 'error';
 
@@ -67,16 +60,15 @@ export function SendModal({ visible, onClose }: SendModalProps) {
   const insets = useSafeAreaInsets();
   const auth = useAuth();
   const { walletAddress, getWalletProvider } = auth;
-  const { chain } = useChain();
   const { user: profile } = useUserProfile();
   const balanceQuery = useWalletBalance();
   const balance: any = balanceQuery.data;
 
-  const nativeSymbol = CHAIN_CONFIG[chain].symbol; // 'SOL' or 'ETH'
-  const explorerBase = CHAIN_CONFIG[chain].explorerUrl;
-  const explorerName = CHAIN_CONFIG[chain].explorerName;
-  const minNativeForFees = MIN_NATIVE_FOR_FEES[chain];
-  const myAddress = chain === 'base' ? auth.ethWalletAddress : walletAddress;
+  const nativeSymbol = CHAIN_CONFIG.solana.symbol; // 'SOL'
+  const explorerBase = CHAIN_CONFIG.solana.explorerUrl;
+  const explorerName = CHAIN_CONFIG.solana.explorerName;
+  const minNativeForFees = MIN_NATIVE_FOR_FEES;
+  const myAddress = walletAddress;
 
   const [token, setToken] = useState<SendToken>(nativeSymbol);
   const [amount, setAmount] = useState('');
@@ -96,17 +88,8 @@ export function SendModal({ visible, onClose }: SendModalProps) {
     }
   }, [visible]);
 
-  // Reset selected token when chain changes
-  useEffect(() => {
-    setToken(CHAIN_CONFIG[chain].symbol);
-    setAmount('');
-    setRecipientAddress('');
-  }, [chain]);
-
   const nativeBalance: number =
-    balance?.nativeBalance ??
-    (chain === 'solana' ? balance?.solBalance : 0) ??
-    0;
+    balance?.nativeBalance ?? balance?.solBalance ?? 0;
   const usdcBalance: number = (() => {
     const usdc = balance?.tokens?.find(
       (t: any) => t.symbol === 'USDC' || t.symbol === 'usdc',
@@ -117,11 +100,8 @@ export function SendModal({ visible, onClose }: SendModalProps) {
   const currentBalance = token === nativeSymbol ? nativeBalance : usdcBalance;
   const parsedAmount = parseFloat(amount) || 0;
 
-  // Address validation (chain-aware)
-  const isValidAddress =
-    chain === 'base'
-      ? /^0x[a-fA-F0-9]{40}$/.test(recipientAddress)
-      : /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(recipientAddress);
+  // Address validation (Solana base58)
+  const isValidAddress = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(recipientAddress);
   const isSelfSend =
     !!myAddress && recipientAddress.toLowerCase() === myAddress.toLowerCase();
   const minForToken = MIN_SEND[token] ?? 0;
@@ -137,11 +117,7 @@ export function SendModal({ visible, onClose }: SendModalProps) {
 
   const getButtonText = () => {
     if (!recipientAddress) return 'Enter recipient address';
-    if (!isValidAddress) {
-      return chain === 'base'
-        ? 'Invalid Base address'
-        : 'Invalid Solana address';
-    }
+    if (!isValidAddress) return 'Invalid Solana address';
     if (isSelfSend) return "Can't send to yourself";
     if (!amount || parsedAmount === 0) return 'Enter amount';
     if (!isAmountValid) return `Min ${minForToken} ${token}`;
@@ -165,112 +141,51 @@ export function SendModal({ visible, onClose }: SendModalProps) {
     try {
       setStep('confirming');
 
-      let signature: string;
-
-      if (chain === 'base') {
-        // ─── BASE SEND ───
-        const txParams = await apiService.post<{
-          chain: 'base';
-          to: string;
-          value: string;
-          data?: string;
-          gas?: string;
-          chainId?: number;
-          from?: string;
-        }>('/wallet/send', {
-          chain: 'base',
+      // ─── SOLANA SEND ───
+      const { transaction: serializedTx } = await apiService.post<{ transaction: string }>(
+        '/wallet/send',
+        {
+          chain: 'solana',
           recipientAddress,
           amount: parsedAmount.toString(),
           token,
-        });
+        },
+      );
 
-        const provider = await auth.getEthWalletProvider?.();
-        if (!provider) {
-          throw new Error('ETH wallet provider not available — try again in a moment');
-        }
-
-        const sendTx: Record<string, string> = {
-          from: myAddress,
-          to: txParams.to,
-          value: txParams.value || '0x0',
-          data: txParams.data || '0x',
-          chainId: BASE_CHAIN_ID_HEX,
-        };
-        if (txParams.gas) {
-          sendTx.gas = txParams.gas.startsWith('0x')
-            ? txParams.gas
-            : '0x' + parseInt(txParams.gas, 10).toString(16);
-        }
-
-        const txHash: string = await provider.request({
-          method: 'eth_sendTransaction',
-          params: [sendTx],
-        });
-
-        // Poll for receipt
-        const start = Date.now();
-        let receipt: any = null;
-        while (Date.now() - start < 60000) {
-          try {
-            receipt = await provider.request({
-              method: 'eth_getTransactionReceipt',
-              params: [txHash],
-            });
-            if (receipt) break;
-          } catch {
-            // ignore transient errors
-          }
-          await new Promise((r) => setTimeout(r, 2000));
-        }
-
-        signature = txHash;
-      } else {
-        // ─── SOLANA SEND (unchanged) ───
-        const { transaction: serializedTx } = await apiService.post<{ transaction: string }>(
-          '/wallet/send',
-          {
-            chain,
-            recipientAddress,
-            amount: parsedAmount.toString(),
-            token,
-          },
-        );
-
-        const provider = await getWalletProvider();
-        if (!provider) {
-          throw new Error('Wallet provider not available — try again in a moment');
-        }
-
-        const { Buffer } = require('buffer');
-        const { VersionedTransaction, Connection } = require('@solana/web3.js');
-
-        const txBytes = Buffer.from(serializedTx, 'base64');
-        const tx = VersionedTransaction.deserialize(txBytes);
-
-        const connection = new Connection(ENV.SOLANA_RPC_URL, 'confirmed');
-
-        const signedResult = await provider.signTransaction(tx);
-        const rawTx = signedResult.serialize();
-        signature = await connection.sendRawTransaction(rawTx, {
-          skipPreflight: false,
-          preflightCommitment: 'confirmed',
-        });
-
-        await connection.confirmTransaction(signature, 'confirmed');
+      const provider = await getWalletProvider();
+      if (!provider) {
+        throw new Error('Wallet provider not available — try again in a moment');
       }
+
+      const { Buffer } = require('buffer');
+      const { VersionedTransaction, Connection } = require('@solana/web3.js');
+
+      const txBytes = Buffer.from(serializedTx, 'base64');
+      const tx = VersionedTransaction.deserialize(txBytes);
+
+      const connection = new Connection(ENV.SOLANA_RPC_URL, 'confirmed');
+
+      const signedResult = await provider.signTransaction(tx);
+      const rawTx = signedResult.serialize();
+      const signature: string = await connection.sendRawTransaction(rawTx, {
+        skipPreflight: false,
+        preflightCommitment: 'confirmed',
+      });
+
+      await connection.confirmTransaction(signature, 'confirmed');
 
       setTxSignature(signature);
       setStep('success');
 
       // Store in local tx history
       try {
-        const txKey = getTxStorageKey(profile?.id, chain);
+        const txKey = getTxStorageKey(profile?.id);
         const raw = await AsyncStorage.getItem(txKey);
         const existing = raw ? JSON.parse(raw) : [];
         const newTx = {
           signature,
           type: 'send',
-          chain,
+          chain: 'solana',
           label: `Sent ${parsedAmount} ${token}`,
           timestamp: Date.now(),
         };
@@ -280,7 +195,7 @@ export function SendModal({ visible, onClose }: SendModalProps) {
 
       // Log to server for persistent history (fire-and-forget)
       apiService.post('/wallet/transactions/log', {
-        chain,
+        chain: 'solana',
         signature,
         type: 'send',
         label: `Sent ${parsedAmount} ${token}`,
@@ -298,7 +213,7 @@ export function SendModal({ visible, onClose }: SendModalProps) {
       setErrorMessage(err?.message || 'Transaction failed. Please try again.');
       setStep('error');
     }
-  }, [canSend, myAddress, chain, recipientAddress, parsedAmount, token, getWalletProvider, auth, balanceQuery]);
+  }, [canSend, myAddress, recipientAddress, parsedAmount, token, getWalletProvider, auth, balanceQuery]);
 
   const handleClose = useCallback(() => {
     setStep('form');
@@ -306,9 +221,7 @@ export function SendModal({ visible, onClose }: SendModalProps) {
   }, [onClose]);
 
   const explorerUrl = txSignature
-    ? chain === 'base'
-      ? `${explorerBase}/tx/${txSignature}`
-      : `${explorerBase}/tx/${txSignature}${ENV.SOLANA_NETWORK === 'devnet' ? '?cluster=devnet' : ''}`
+    ? `${explorerBase}/tx/${txSignature}${ENV.SOLANA_NETWORK === 'devnet' ? '?cluster=devnet' : ''}`
     : null;
 
   return (
@@ -348,12 +261,12 @@ export function SendModal({ visible, onClose }: SendModalProps) {
                         styles.tokenTabIcon,
                         {
                           color: isNative
-                            ? CHAIN_CONFIG[chain].iconColor
+                            ? CHAIN_CONFIG.solana.iconColor
                             : '#2775CA',
                         },
                       ]}
                     >
-                      {isNative ? CHAIN_CONFIG[chain].nativeIcon : '$'}
+                      {isNative ? CHAIN_CONFIG.solana.nativeIcon : '$'}
                     </Text>
                     <Text style={[styles.tokenTabText, token === t && styles.tokenTabTextActive]}>
                       {t}
@@ -395,11 +308,7 @@ export function SendModal({ visible, onClose }: SendModalProps) {
                 style={styles.addressInput}
                 value={recipientAddress}
                 onChangeText={setRecipientAddress}
-                placeholder={
-                  chain === 'base'
-                    ? 'Enter Base (0x...) wallet address...'
-                    : 'Enter Solana wallet address...'
-                }
+                placeholder="Enter Solana wallet address..."
                 placeholderTextColor={COLORS.textTertiary}
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -407,9 +316,7 @@ export function SendModal({ visible, onClose }: SendModalProps) {
               />
               {recipientAddress.length > 0 && !isValidAddress && (
                 <Text style={styles.inputError}>
-                  {chain === 'base'
-                    ? 'Enter a valid Base address (0x... 40 hex chars)'
-                    : 'Enter a valid Solana address (32-44 chars)'}
+                  Enter a valid Solana address (32-44 chars)
                 </Text>
               )}
               {isSelfSend && (
@@ -421,7 +328,7 @@ export function SendModal({ visible, onClose }: SendModalProps) {
             <View style={styles.warningCard}>
               <Ionicons name="warning-outline" size={18} color={COLORS.warning} />
               <Text style={styles.warningText}>
-                Double-check the recipient address. Transactions on the {CHAIN_CONFIG[chain].name} blockchain are irreversible.
+                Double-check the recipient address. Transactions on the {CHAIN_CONFIG.solana.name} blockchain are irreversible.
               </Text>
             </View>
 
@@ -430,9 +337,7 @@ export function SendModal({ visible, onClose }: SendModalProps) {
               <Text style={styles.networkLabel}>Network</Text>
               <View style={styles.networkBadge}>
                 <Text style={styles.networkText}>
-                  {chain === 'base'
-                    ? 'BASE'
-                    : ENV.SOLANA_NETWORK === 'devnet'
+                  {ENV.SOLANA_NETWORK === 'devnet'
                     ? 'SOLANA DEVNET'
                     : 'SOLANA MAINNET'}
                 </Text>

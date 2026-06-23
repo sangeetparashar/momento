@@ -1,11 +1,9 @@
 import { useCallback, useState } from 'react';
-import { useFundWallet, useFundSolanaWallet } from '@privy-io/expo/ui';
+import { useFundSolanaWallet } from '@privy-io/expo/ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
-import { useChain } from '@/hooks/useChain';
 import { ENV } from '@/config/env';
 import { showErrorToast } from '@/utils/toast';
-import type { ChainType } from '@momento/shared';
 
 /**
  * Privy-native fiat onramp ("buy USDC") using Privy's prebuilt funding modal.
@@ -20,65 +18,43 @@ import type { ChainType } from '@momento/shared';
  *     'privy_elements_not_ready'.
  *   - The MoonPay fiat-onramp plugin enabled in the Privy dashboard (Phase 0).
  *
- * Sandbox vs production is derived from the existing network flags so we don't
- * add another env var: Solana uses SOLANA_NETWORK, Base uses BASE_NETWORK.
+ * Sandbox vs production is derived from SOLANA_NETWORK so we don't add another env var.
  */
 export function usePrivyFunding() {
   const queryClient = useQueryClient();
-  const { chain } = useChain() as { chain: ChainType };
-  const { walletAddress, ethWalletAddress, user } = useAuth();
+  const { walletAddress, user } = useAuth();
 
-  // Both hooks expose `fundWallet(config)`. They must be called
-  // unconditionally (rules of hooks); we pick which to invoke at call time.
-  const { fundWallet: fundEvmWallet } = useFundWallet();
   const { fundWallet: fundSolanaWallet } = useFundSolanaWallet();
 
   const [isFunding, setIsFunding] = useState(false);
 
   const fund = useCallback(async (): Promise<'completed' | 'cancelled' | 'error'> => {
-    const isBase = chain === 'base';
-    const address = isBase ? ethWalletAddress : walletAddress;
+    const address = walletAddress;
 
     if (!address) {
-      showErrorToast(
-        `No ${isBase ? 'Base' : 'Solana'} wallet found yet. Please try again in a moment.`,
-      );
+      showErrorToast('No Solana wallet found yet. Please try again in a moment.');
       return 'error';
     }
 
     setIsFunding(true);
     try {
-      if (isBase) {
-        const useSandbox = ENV.BASE_NETWORK !== 'mainnet';
-        await fundEvmWallet({
-          address,
-          asset: 'USDC',
-          defaultPaymentMethod: 'card',
-          card: { preferredProvider: 'moonpay' },
-          moonpay: {
-            useSandbox,
-            uiConfig: { theme: 'dark', accentColor: '#00FF88' },
-          },
-        });
-      } else {
-        const useSandbox = ENV.SOLANA_NETWORK !== 'mainnet-beta';
-        await fundSolanaWallet({
-          address,
-          asset: 'USDC',
-          // SolanaCluster is an object ({ name, rpcUrl? }), not a bare string.
-          cluster: { name: useSandbox ? 'devnet' : 'mainnet-beta' },
-          defaultPaymentMethod: 'card',
-          card: { preferredProvider: 'moonpay' },
-          moonpay: {
-            useSandbox,
-            uiConfig: { theme: 'dark', accentColor: '#00FF88' },
-          },
-        });
-      }
+      const useSandbox = ENV.SOLANA_NETWORK !== 'mainnet-beta';
+      await fundSolanaWallet({
+        address,
+        asset: 'USDC',
+        // SolanaCluster is an object ({ name, rpcUrl? }), not a bare string.
+        cluster: { name: useSandbox ? 'devnet' : 'mainnet-beta' },
+        defaultPaymentMethod: 'card',
+        card: { preferredProvider: 'moonpay' },
+        moonpay: {
+          useSandbox,
+          uiConfig: { theme: 'dark', accentColor: '#00FF88' },
+        },
+      });
 
       // Funds can take a few minutes to land, but refetch now so the balance
       // updates as soon as the chain confirms. Keyed by userId + chain.
-      queryClient.invalidateQueries({ queryKey: ['walletBalance', user?.id, chain] });
+      queryClient.invalidateQueries({ queryKey: ['walletBalance', user?.id, 'solana'] });
       return 'completed';
     } catch (err: any) {
       // funding_flow_cancelled is a normal user action, not an error.
@@ -92,7 +68,7 @@ export function usePrivyFunding() {
     } finally {
       setIsFunding(false);
     }
-  }, [chain, ethWalletAddress, walletAddress, user?.id, fundEvmWallet, fundSolanaWallet, queryClient]);
+  }, [walletAddress, user?.id, fundSolanaWallet, queryClient]);
 
   return { fund, isFunding };
 }

@@ -29,6 +29,8 @@ export const cacheKeys = {
 
   userProfile: (id: string) => `user:${id}`,
 
+  // Momento is Solana-only; `chain` is always 'solana'. Kept in the signature
+  // and key format so existing cache entries and callers stay compatible.
   walletBalance: (userId: string, chain: string = 'solana') => `wallet:balance:${chain}:${userId}`,
 
   postDetail: (id: string) => `post:${id}`,
@@ -40,7 +42,7 @@ export const cacheKeys = {
 
   priceHistory: (coinId: string, range: string) => `price:history:${coinId}:${range}`,
 
-  walletTransactions: (userId: string, chain: string, cursor?: string | null) =>
+  walletTransactions: (userId: string, chain: string = 'solana', cursor?: string | null) =>
     `wallet:txs:${chain}:${userId}:${cursor || 'first'}`,
 };
 

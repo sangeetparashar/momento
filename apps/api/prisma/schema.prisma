@@ -30,7 +30,6 @@ model User {
   id              String    @id @default(uuid())
   privyUserId     String    @unique
   walletAddress     String    @unique
-  baseWalletAddress String?   @unique
   primaryChain      String    @default("solana")
   email             String?
   username        String?   @unique
@@ -192,7 +191,6 @@ enum TokenStatus {
 enum PoolType {
   BONDING_CURVE
   RAYDIUM
-  AERODROME
 }
 
 model CreatorToken {

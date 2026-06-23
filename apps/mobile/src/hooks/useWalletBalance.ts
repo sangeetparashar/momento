@@ -3,7 +3,6 @@ import { AppState } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WalletBalance } from '@momento/shared';
 import { apiService } from '@/services/api';
-import { useChain } from '@/hooks/useChain';
 import { useAuth } from '@/hooks/useAuth';
 
 /**
@@ -16,7 +15,6 @@ import { useAuth } from '@/hooks/useAuth';
 export function useWalletBalance(enabled = true) {
   const [isActive, setIsActive] = useState(AppState.currentState === 'active');
   const [fastPoll, setFastPoll] = useState(false);
-  const { chain } = useChain();
   // Per-user query keys are required so cached data from a previous account
   // doesn't bleed through after logout/login. The user object comes from Privy.
   const { user } = useAuth();
@@ -30,8 +28,8 @@ export function useWalletBalance(enabled = true) {
   }, []);
 
   const query = useQuery<WalletBalance>({
-    queryKey: ['walletBalance', userId, chain],
-    queryFn: () => apiService.get<WalletBalance>(`/wallet/balance?chain=${chain}`),
+    queryKey: ['walletBalance', userId, 'solana'],
+    queryFn: () => apiService.get<WalletBalance>('/wallet/balance'),
     enabled,
     refetchInterval: isActive ? (fastPoll ? 10_000 : 30_000) : false,
     staleTime: fastPoll ? 5_000 : 15_000,

@@ -1,3 +1,5 @@
+> ⚠️ SUPERSEDED by the Solana-only migration (2026-06). See docs/solana-migration/README.md. Retained for history.
+
 # Executable Agent Prompts
 
 This document contains the **exact prompts** the orchestrator should send to each sub-agent. Each prompt is self-contained — the agent receives ONLY this prompt and has access to the full repo in an isolated worktree.

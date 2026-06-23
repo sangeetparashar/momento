@@ -15,12 +15,10 @@ import { Text } from '@/components/primitives';
 import {
   SwapModal,
   ComingSoonModal,
-  ChainSwitcher,
 } from '@/components/features';
 import { useWalletBalance } from '@/hooks';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useAuth } from '@/hooks/useAuth';
-import { useChain } from '@/hooks/useChain';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { formatCurrency, formatPercentage, truncateAddress } from '@/utils/formatters';
@@ -28,13 +26,10 @@ import { CHAIN_CONFIG } from '@momento/shared';
 import { ENV } from '@/config/env';
 import type { TokenHolding } from '@momento/shared';
 
-function getExplorerAccountUrl(address: string, chain: 'solana' | 'base'): string {
-  const base = CHAIN_CONFIG[chain].explorerUrl;
-  if (chain === 'solana') {
-    const cluster = ENV.SOLANA_NETWORK === 'devnet' ? '?cluster=devnet' : '';
-    return `${base}/account/${address}${cluster}`;
-  }
-  return `${base}/address/${address}`;
+function getExplorerAccountUrl(address: string): string {
+  const base = CHAIN_CONFIG.solana.explorerUrl;
+  const cluster = ENV.SOLANA_NETWORK === 'devnet' ? '?cluster=devnet' : '';
+  return `${base}/account/${address}${cluster}`;
 }
 
 export default function WalletScreen() {
@@ -42,21 +37,18 @@ export default function WalletScreen() {
   const walletQuery = useWalletBalance();
   const balance = walletQuery.data;
   const { user: profile } = useUserProfile();
-  const { walletAddress: solWalletAddress, ethWalletAddress } = useAuth();
-  const { chain } = useChain();
+  const { walletAddress: solWalletAddress } = useAuth();
   const [showSwapModal, setShowSwapModal] = useState(false);
   const [showComingSoon, setShowComingSoon] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const chainConfig = CHAIN_CONFIG[chain];
+  const chainConfig = CHAIN_CONFIG.solana;
 
-  // Pick the correct wallet address for the active chain
-  const walletAddress = chain === 'base'
-    ? (ethWalletAddress || profile?.baseWalletAddress || null)
-    : (solWalletAddress ||
-        (profile?.walletAddress && !profile.walletAddress.startsWith('pending-')
-          ? profile.walletAddress
-          : null));
+  const walletAddress =
+    solWalletAddress ||
+    (profile?.walletAddress && !profile.walletAddress.startsWith('pending-')
+      ? profile.walletAddress
+      : null);
 
   const handleBuyPress = useCallback((_token: TokenHolding) => {
     setShowComingSoon(true);
@@ -84,8 +76,8 @@ export default function WalletScreen() {
 
   const handleOpenExplorer = useCallback(() => {
     if (!walletAddress) return;
-    Linking.openURL(getExplorerAccountUrl(walletAddress, chain));
-  }, [walletAddress, chain]);
+    Linking.openURL(getExplorerAccountUrl(walletAddress));
+  }, [walletAddress]);
 
   const change24h = balance?.change24h ?? 0;
   const isPositive = change24h >= 0;
@@ -111,11 +103,6 @@ export default function WalletScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
       >
-        {/* Chain Switcher */}
-        <View style={styles.chainSwitcherRow}>
-          <ChainSwitcher />
-        </View>
-
         {/* Wallet Address Card */}
         {walletAddress ? (
           <View style={styles.addressCard}>
@@ -124,7 +111,7 @@ export default function WalletScreen() {
               <Text style={styles.addressLabel}>{chainConfig.name} Wallet</Text>
               <View style={styles.networkBadge}>
                 <Text style={styles.networkText}>
-                  {chain === 'solana' && ENV.SOLANA_NETWORK === 'devnet' ? 'DEVNET' : 'MAINNET'}
+                  {ENV.SOLANA_NETWORK === 'devnet' ? 'DEVNET' : 'MAINNET'}
                 </Text>
               </View>
             </View>
@@ -389,11 +376,6 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
     fontWeight: '600',
     fontSize: 13,
-  },
-  chainSwitcherRow: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    alignItems: 'flex-start',
   },
   // Balance
   balanceContainer: {

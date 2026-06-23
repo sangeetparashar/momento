@@ -16,12 +16,11 @@ import { useOnramp } from '@/hooks/useOnramp';
 import { usePrivyFunding } from '@/hooks/usePrivyFunding';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { useAuth } from '@/hooks/useAuth';
-import { useChain } from '@/hooks/useChain';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
 import { ENV } from '@/config/env';
 import { CHAIN_CONFIG } from '@momento/shared';
-import type { ChainType, OnrampProvider } from '@momento/shared';
+import type { OnrampProvider } from '@momento/shared';
 
 type FundingMethod = 'picker' | 'privy' | OnrampProvider | 'onchain';
 
@@ -41,7 +40,6 @@ interface FundWalletModalProps {
 
 export function FundWalletModal({ visible, onClose }: FundWalletModalProps) {
   const insets = useSafeAreaInsets();
-  const { chain } = useChain() as { chain: 'solana' | 'base' };
   const [method, setMethod] = useState<FundingMethod>('picker');
   const { fund, isFunding } = usePrivyFunding();
 
@@ -101,16 +99,15 @@ export function FundWalletModal({ visible, onClose }: FundWalletModalProps) {
         </View>
 
         {method === 'picker' && (
-          <MethodPicker chain={chain} onSelect={handleSelect} isFunding={isFunding} />
+          <MethodPicker onSelect={handleSelect} isFunding={isFunding} />
         )}
         {isWebView && (
           <OnrampWebView
             provider={method as OnrampProvider}
-            chain={chain}
             onClose={handleClose}
           />
         )}
-        {method === 'onchain' && <OnChainTransfer chain={chain} />}
+        {method === 'onchain' && <OnChainTransfer />}
       </View>
     </Modal>
   );
@@ -121,15 +118,13 @@ export function FundWalletModal({ visible, onClose }: FundWalletModalProps) {
 // ---------------------------------------------------------------------------
 
 function MethodPicker({
-  chain,
   onSelect,
   isFunding,
 }: {
-  chain: ChainType;
   onSelect: (m: FundingMethod) => void;
   isFunding: boolean;
 }) {
-  const chainName = CHAIN_CONFIG[chain].name;
+  const chainName = CHAIN_CONFIG.solana.name;
   return (
     <ScrollView style={styles.pickerContainer} contentContainerStyle={styles.pickerContent}>
       <Text style={styles.pickerSubtitle}>
@@ -169,7 +164,7 @@ function MethodPicker({
         <View
           style={[
             styles.methodIcon,
-            { backgroundColor: CHAIN_CONFIG[chain].iconColor },
+            { backgroundColor: CHAIN_CONFIG.solana.iconColor },
           ]}
         >
           <Ionicons name="wallet" size={24} color="#FFFFFF" />
@@ -177,9 +172,7 @@ function MethodPicker({
         <View style={styles.methodInfo}>
           <Text style={styles.methodTitle}>Transfer from Wallet</Text>
           <Text style={styles.methodDesc}>
-            {chain === 'base'
-              ? 'Send ETH or USDC from Coinbase, MetaMask, or any Base-compatible wallet'
-              : 'Send SOL or USDC from Phantom, Solflare, or any Solana wallet'}
+            Send SOL or USDC from Phantom, Solflare, or any Solana wallet
           </Text>
         </View>
         <Ionicons name="chevron-forward" size={20} color={COLORS.textTertiary} />
@@ -243,14 +236,12 @@ const PROVIDER_LABELS: Record<OnrampProvider, string> = {
 
 function OnrampWebView({
   provider,
-  chain,
   onClose,
 }: {
   provider: OnrampProvider;
-  chain: ChainType;
   onClose: () => void;
 }) {
-  const { data, isLoading, error } = useOnramp({ provider, chain, enabled: true });
+  const { data, isLoading, error } = useOnramp({ provider, enabled: true });
   const [webViewLoading, setWebViewLoading] = useState(true);
   const webViewRef = useRef<WebView>(null);
 
@@ -276,7 +267,7 @@ function OnrampWebView({
       <View style={styles.infoBanner}>
         <Ionicons name="shield-checkmark" size={16} color={COLORS.primary} />
         <Text style={styles.infoText}>
-          Powered by {label}. USDC on {CHAIN_CONFIG[chain].name} will be sent directly to your wallet.
+          Powered by {label}. USDC on {CHAIN_CONFIG.solana.name} will be sent directly to your wallet.
         </Text>
       </View>
 
@@ -333,27 +324,20 @@ function OnrampWebView({
 // On-Chain Transfer
 // ---------------------------------------------------------------------------
 
-function OnChainTransfer({ chain }: { chain: ChainType }) {
+function OnChainTransfer() {
   const auth = useAuth();
-  const { walletAddress: clientWalletAddress, ethWalletAddress } = auth;
+  const { walletAddress: clientWalletAddress } = auth;
   const { user: profile } = useUserProfile();
   const [copied, setCopied] = useState(false);
 
-  const solAddress =
+  const walletAddress =
     clientWalletAddress ||
     (profile?.walletAddress && !profile.walletAddress.startsWith('pending-')
       ? profile.walletAddress
       : null);
 
-  const walletAddress = chain === 'base' ? ethWalletAddress : solAddress;
-
-  const chainName = CHAIN_CONFIG[chain].name;
-  const network =
-    chain === 'base'
-      ? 'mainnet'
-      : ENV.SOLANA_NETWORK === 'devnet'
-      ? 'devnet'
-      : 'mainnet';
+  const chainName = CHAIN_CONFIG.solana.name;
+  const network = ENV.SOLANA_NETWORK === 'devnet' ? 'devnet' : 'mainnet';
 
   const handleCopy = useCallback(async () => {
     if (!walletAddress) return;
@@ -386,20 +370,12 @@ function OnChainTransfer({ chain }: { chain: ChainType }) {
     );
   }
 
-  const instructions =
-    chain === 'base'
-      ? [
-          'Copy your wallet address above',
-          'Open Coinbase, MetaMask, or any ETH wallet',
-          'Select the Base network and send ETH or USDC',
-          'Funds arrive in ~1 minute',
-        ]
-      : [
-          'Copy your wallet address above',
-          'Open Phantom, Solflare, or any Solana wallet',
-          'Send SOL or USDC to the address above',
-          'Your balance will update automatically',
-        ];
+  const instructions = [
+    'Copy your wallet address above',
+    'Open Phantom, Solflare, or any Solana wallet',
+    'Send SOL or USDC to the address above',
+    'Your balance will update automatically',
+  ];
 
   return (
     <ScrollView style={styles.onchainContainer} contentContainerStyle={styles.onchainContent}>
@@ -452,9 +428,7 @@ function OnChainTransfer({ chain }: { chain: ChainType }) {
       <View style={styles.networkBanner}>
         <Ionicons name="information-circle" size={16} color={COLORS.warning} />
         <Text style={styles.networkBannerText}>
-          {chain === 'base'
-            ? 'Make sure to send on the Base network. Sending on other networks (Ethereum, Polygon, etc.) may result in lost funds.'
-            : `Make sure to send on the Solana ${network} network. Sending on the wrong network may result in lost funds.`}
+          {`Make sure to send on the Solana ${network} network. Sending on the wrong network may result in lost funds.`}
         </Text>
       </View>
     </ScrollView>

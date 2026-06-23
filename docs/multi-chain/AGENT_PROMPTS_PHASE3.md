@@ -1,3 +1,5 @@
+> ⚠️ SUPERSEDED by the Solana-only migration (2026-06). See docs/solana-migration/README.md. Retained for history.
+
 # Phase 3 Agent Prompts — Mobile (Agent 8 first, then 9 and 10 in parallel)
 
 ---
