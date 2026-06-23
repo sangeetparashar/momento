@@ -1,7 +1,16 @@
 # Phase 0 + Phase 1 — Implementation Plan (file-level)
 
-**Status:** Ready to execute. Pre-coding plan for hand-off to coding agents.
+**Status:** Phase 1 (EVM removal) ✅ DONE (commit `3f00f5e`). Phase 0 in progress (secrets noted; spikes next).
 **Date:** 2026-06-23 · **Branch:** `claude/gifted-pascal-fcyskz`
+
+> **Progress log**
+> - ✅ **Phase 1 EVM removal** — 60 files, −1,902/+361. Grep gate clean. Forward migration authored.
+> - ✅ **Phase 0 secrets** — `.env` files annotated with ROTATE notes; values left as-is per team decision (see `SECRETS_REMEDIATION.md`).
+> - ⏳ **Carry-over follow-ups (need network / a dev machine):**
+>   1. `pnpm install` to refresh `pnpm-lock.yaml` (still lists `@ethersproject/shims`) — required before CI/EAS builds with `--frozen-lockfile`.
+>   2. Run `tsc` + `turbo lint` across the monorepo as the final completeness gate (couldn't run here — no `node_modules`).
+>   3. Decide dev `db push` vs prod `migrate deploy` sync before applying the new migration.
+> - ⏭️ **Next:** Phase 0 devnet spikes (Token-2022 transfer-fee + rebate · Meteora DBC · Streamflow/Jupiter Lock).
 **Source of truth for file:line detail:** [`research/06-evm-removal-surface.md`](./research/06-evm-removal-surface.md) (Phase 1) and the master [`README.md`](./README.md).
 
 ## Decisions locked (from product)
