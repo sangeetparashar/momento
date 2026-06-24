@@ -21,3 +21,21 @@ export { useSwap } from './useSwap';
 export { useCoachMark } from './useCoachMark';
 export { useCreatorLeaderboard } from './useCreatorLeaderboard';
 export { useWalletTransactions } from './useWalletTransactions';
+
+// ── Phase 3B: token economy ──
+export { useClientSignSubmit } from './useClientSignSubmit';
+export type {
+  SignStatus,
+  SignSubmitArgs,
+  UseClientSignSubmit,
+} from './useClientSignSubmit';
+export { useTokenDetail } from './useTokenDetail';
+export { useTokenTrades } from './useTokenTrades';
+export { useTokenFees } from './useTokenFees';
+export { useCreatorFees } from './useCreatorFees';
+export { useTokenTradeQuote } from './useTokenTradeQuote';
+export { useSubmitTrade } from './useSubmitTrade';
+export { useLaunchToken } from './useLaunchToken';
+export { useVestingList } from './useVestingList';
+export { useWithdrawVesting } from './useWithdrawVesting';
+export { useCreateVesting } from './useCreateVesting';

@@ -12,7 +12,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar } from '@/components/primitives';
-import { TickerBanner, ComingSoonModal } from '@/components/features';
+import { TickerBanner } from '@/components/features';
 import { useCreatorLeaderboard } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -31,8 +31,6 @@ export default function MarketScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<MarketTab>('TRENDING');
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
-  const [showComingSoon, setShowComingSoon] = useState(false);
-  const [selectedCreator, setSelectedCreator] = useState<MarketCreator | null>(null);
 
   const handleRefresh = useCallback(() => {
     leaderboard.refetch();
@@ -108,10 +106,20 @@ export default function MarketScreen() {
     setExpandedRow((prev) => (prev === id ? null : id));
   }, []);
 
-  const handleBuyPress = useCallback((creator: MarketCreator) => {
-    setSelectedCreator(creator);
-    setShowComingSoon(true);
-  }, []);
+  const handleBuyPress = useCallback(
+    (creator: MarketCreator) => {
+      // Prefer a direct token deep-link when the mint is available (backend may
+      // add `tokenMint` to the leaderboard row per CONTRACTS-P3B §f.1); else
+      // fall back to the creator profile, whose TOKEN tab hosts buy/sell.
+      const mint = (creator as { tokenMint?: string }).tokenMint;
+      if (mint) {
+        router.push(`/token/${mint}`);
+      } else {
+        router.push(`/creator/${creator.id}`);
+      }
+    },
+    [router],
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -250,19 +258,6 @@ export default function MarketScreen() {
 
         <View style={styles.bottomSpacer} />
       </ScrollView>
-
-      <ComingSoonModal
-        visible={showComingSoon}
-        onClose={() => { setShowComingSoon(false); setSelectedCreator(null); }}
-        title="Trading Coming Soon!"
-        message="Token trading will be available in the next update."
-        creator={selectedCreator ? {
-          id: selectedCreator.id,
-          displayName: selectedCreator.displayName || selectedCreator.username,
-          avatarUrl: selectedCreator.avatarUrl,
-          role: 'CREATOR',
-        } : undefined}
-      />
     </SafeAreaView>
   );
 }

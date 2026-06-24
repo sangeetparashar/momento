@@ -132,6 +132,10 @@ export interface User {
   isAdminApproved: boolean;
   isAdmin: boolean;
   tokenSymbol?: string;
+  /** Mint address of the creator's launched token, if any (Phase 3B). */
+  tokenMint?: string;
+  /** DB id of the creator's launched token, if any (Phase 3B). */
+  tokenId?: string;
   socialLinks?: SocialLinks;
   locationLat?: number;
   locationLng?: number;
@@ -329,6 +333,10 @@ export interface PublicCreator {
   avatarUrl?: string;
   bannerUrl?: string;
   tokenSymbol?: string;
+  /** Mint address of the creator's launched token, if any (Phase 3B). */
+  tokenMint?: string;
+  /** DB id of the creator's launched token, if any (Phase 3B). */
+  tokenId?: string;
   socialLinks?: SocialLinks;
   followerCount: number;
   followingCount?: number;

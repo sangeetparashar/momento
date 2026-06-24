@@ -12,6 +12,18 @@ export const ENV = {
   /** Solana RPC endpoint URL */
   SOLANA_RPC_URL: process.env.EXPO_PUBLIC_SOLANA_RPC_URL ?? 'https://api.devnet.solana.com',
 
+  /**
+   * Helius RPC endpoint URL used for signing/sending transactions.
+   * Matches the value consumed by useSwap. Falls back to mainnet-beta.
+   */
+  HELIUS_RPC_URL: process.env.EXPO_PUBLIC_HELIUS_RPC_URL ?? 'https://api.mainnet-beta.solana.com',
+
+  /**
+   * Gates the best-effort fee/trade feed hooks (trades, fees, creator fees).
+   * These read routes are not yet in the binding backend contract; default OFF.
+   */
+  FEES_FEED_ENABLED: (process.env.EXPO_PUBLIC_FEES_FEED_ENABLED ?? 'false') === 'true',
+
   /** Solana network: 'devnet' | 'mainnet-beta' */
   SOLANA_NETWORK: (process.env.EXPO_PUBLIC_SOLANA_NETWORK ?? 'devnet') as 'devnet' | 'mainnet-beta',
 

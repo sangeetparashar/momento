@@ -15,13 +15,19 @@ import { useInfiniteQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
 // PagerView removed — using simple tab switching to avoid native module dependency
 import { Text, Avatar, MediaImage } from '@/components/primitives';
-import { PillTabs, StatsCard, BuySellPills, PerformanceChart } from '@/components/composites';
-import { ComingSoonModal, CreatorProfileSkeleton } from '@/components/features';
-import { useCreatorProfile } from '@/hooks';
+import {
+  PillTabs,
+  BuySellPills,
+  PerformanceChart,
+  TokenStatRow,
+  FundraiseProgress,
+} from '@/components/composites';
+import { CreatorProfileSkeleton } from '@/components/features';
+import { useCreatorProfile, useTokenDetail } from '@/hooks';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { apiService } from '@/services/api';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
-import { TYPOGRAPHY } from '@/styles/typography';
+import { TYPOGRAPHY, FONT_FAMILY_DISPLAY_BOLD } from '@/styles/typography';
 import { formatNumber, formatTimeAgo } from '@/utils/formatters';
 import { SOCIAL_PLATFORMS } from '@momento/shared';
 
@@ -57,26 +63,13 @@ export default function CreatorScreen() {
   const HERO_HEIGHT = useMemo(() => SCREEN_HEIGHT * 0.55, [SCREEN_HEIGHT]);
   const { profile, isLoading, isFollowing, toggleFollow } = useCreatorProfile(id);
   const { user: currentUser } = useUserProfile();
-  const [showComingSoon, setShowComingSoon] = useState(false);
   const [activeTab, setActiveTab] = useState<ProfileTab>('PROFILE');
   const [chartTimeRange, setChartTimeRange] = useState('1Y');
   const isOwnProfile = !!currentUser?.id && !!profile?.id && currentUser.id === profile.id;
 
-  // Sample chart data until real token price API exists
-  const chartData = useMemo(() => [
-    { x: 0, y: 20 }, { x: 1, y: 18 }, { x: 2, y: 25 },
-    { x: 3, y: 30 }, { x: 4, y: 28 }, { x: 5, y: 35 },
-    { x: 6, y: 50 }, { x: 7, y: 45 }, { x: 8, y: 55 },
-    { x: 9, y: 60 }, { x: 10, y: 58 }, { x: 11, y: 70 },
-  ], []);
-
-  // Placeholder token stats
-  const tokenData = useMemo(() => ({
-    price: '0.004',
-    change24h: '17%',
-    changePositive: true,
-    marketCap: '10.6K',
-  }), []);
+  // Real token detail (when the creator has launched a token).
+  const tokenMint = profile?.tokenMint;
+  const { data: token, isLoading: tokenLoading } = useTokenDetail(tokenMint);
 
   useEffect(() => {
     if (isOwnProfile) {
@@ -302,69 +295,111 @@ export default function CreatorScreen() {
   );
 
   // ─── TOKEN TAB ───
-  const renderTokenTab = () => (
-    <ScrollView
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={styles.tokenContent}
-      nestedScrollEnabled
-    >
-      {/* Token symbol hero */}
-      <Text style={styles.tokenHero}>
-        ${profile?.tokenSymbol || '???'}
-      </Text>
+  const isTradeable = token?.status === 'ACTIVE' || !!token?.graduatedAt;
 
-      {/* BUY / SELL pills */}
-      <BuySellPills
-        onBuy={() => setShowComingSoon(true)}
-        onSell={() => setShowComingSoon(true)}
-        style={{ marginTop: SPACING.xl }}
-      />
+  const goToTrade = useCallback(
+    (side: 'buy' | 'sell') => {
+      if (tokenMint) router.push(`/token/${tokenMint}/trade?side=${side}`);
+    },
+    [router, tokenMint],
+  );
 
-      {/* Stats row — 3 across */}
-      <View style={styles.tokenStatsRow}>
-        <StatsCard
-          label="PRICE"
-          value={tokenData.price}
-          variant="inline"
-        />
-        <StatsCard
-          label="24H CHANGE"
-          value={tokenData.change24h}
-          variant="inline"
-          valueColor={tokenData.changePositive ? 'positive' : 'negative'}
-        />
-        <StatsCard
-          label="MARKET CAP"
-          value={tokenData.marketCap}
-          variant="inline"
-        />
-      </View>
+  const renderTokenTab = () => {
+    // No launched token for this creator yet.
+    if (!tokenMint) {
+      return (
+        <ScrollView contentContainerStyle={styles.tokenContent} nestedScrollEnabled>
+          <Text style={styles.tokenHero}>${profile?.tokenSymbol || '???'}</Text>
+          <View style={styles.emptyState}>
+            <Ionicons name="cube-outline" size={48} color={COLORS.textTertiary} />
+            <Text style={styles.emptyText}>NO TOKEN YET</Text>
+          </View>
+        </ScrollView>
+      );
+    }
 
-      {/* Divider */}
-      <View style={styles.tokenDivider} />
+    if (tokenLoading && !token) {
+      return (
+        <View style={styles.emptyState}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      );
+    }
 
-      {/* Performance chart */}
-      <PerformanceChart
-        title="TOKEN PERFORMANCE"
-        data={chartData}
-        timeRange={chartTimeRange}
-        onTimeRangeChange={setChartTimeRange}
-        style={{ width: '100%' }}
-      />
-
-      {/* Follow CTA */}
-      {!isOwnProfile && (
-        <Pressable
-          onPress={toggleFollow}
-          style={[styles.tokenFollowButton, isFollowing && styles.tokenFollowingButton]}
-        >
-          <Text style={[styles.tokenFollowText, isFollowing && styles.tokenFollowingText]}>
-            {isFollowing ? 'FOLLOWING' : 'FOLLOW'}
+    return (
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.tokenContent}
+        nestedScrollEnabled
+      >
+        {/* Token symbol hero + view-full-screen affordance */}
+        <Pressable onPress={() => router.push(`/token/${tokenMint}`)}>
+          <Text style={styles.tokenHero}>
+            ${token?.symbol || profile?.tokenSymbol || '???'}
           </Text>
         </Pressable>
-      )}
-    </ScrollView>
-  );
+
+        {/* BUY / SELL pills */}
+        <BuySellPills
+          onBuy={() => goToTrade('buy')}
+          onSell={() => goToTrade('sell')}
+          disabled={!isTradeable}
+          buyLabel={isTradeable ? 'BUY' : 'NOT TRADEABLE'}
+          style={{ marginTop: SPACING.xl }}
+        />
+
+        {/* Stats row — PRICE / MARKET CAP (24H change added when available) */}
+        <View style={styles.tokenStatsRow}>
+          <TokenStatRow
+            priceUsd={token?.priceUsd ?? 0}
+            marketCapUsd={token?.marketCapUsd ?? 0}
+          />
+        </View>
+
+        {/* Fundraise progress (active raise) or graduated badge */}
+        {token?.fundraise ? (
+          <FundraiseProgress
+            raisedBaseUnits={token.fundraise.raisedBaseUnits}
+            thresholdBaseUnits={token.fundraise.thresholdBaseUnits}
+            progressPct={token.fundraise.progressPct}
+            quoteMint={token.fundraise.quoteMint}
+            status={token.fundraise.status as any}
+            graduatedAt={token.graduatedAt}
+            style={{ marginTop: SPACING.xl }}
+          />
+        ) : token?.graduatedAt ? (
+          <View style={[styles.graduatedBadge, { marginTop: SPACING.xl }]}>
+            <Ionicons name="checkmark-circle" size={16} color={COLORS.primary} />
+            <Text variant="label" style={styles.graduatedText}>GRADUATED</Text>
+          </View>
+        ) : null}
+
+        {/* Divider */}
+        <View style={styles.tokenDivider} />
+
+        {/* Price history — real points only; no fabricated data. */}
+        <PerformanceChart
+          title="PRICE HISTORY"
+          data={[]}
+          timeRange={chartTimeRange}
+          onTimeRangeChange={setChartTimeRange}
+          style={{ width: '100%' }}
+        />
+
+        {/* Follow CTA */}
+        {!isOwnProfile && (
+          <Pressable
+            onPress={toggleFollow}
+            style={[styles.tokenFollowButton, isFollowing && styles.tokenFollowingButton]}
+          >
+            <Text style={[styles.tokenFollowText, isFollowing && styles.tokenFollowingText]}>
+              {isFollowing ? 'FOLLOWING' : 'FOLLOW'}
+            </Text>
+          </Pressable>
+        )}
+      </ScrollView>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -395,13 +430,6 @@ export default function CreatorScreen() {
           {activeTab === 'TOKEN' && renderTokenTab()}
         </View>
       )}
-
-      <ComingSoonModal
-        visible={showComingSoon}
-        onClose={() => setShowComingSoon(false)}
-        title="Trading Coming Soon!"
-        message="Token trading will be available in the next update."
-      />
     </SafeAreaView>
   );
 }
@@ -590,10 +618,11 @@ const styles = StyleSheet.create({
     paddingBottom: SPACING.xl,
   },
   tokenHero: {
-    ...TYPOGRAPHY.monoLarge,
+    ...TYPOGRAPHY.h2,
+    fontFamily: FONT_FAMILY_DISPLAY_BOLD,
     fontSize: 32,
     color: COLORS.textPrimary,
-    fontWeight: '700',
+    textTransform: 'uppercase',
     letterSpacing: 1,
   },
   tokenStatsRow: {
@@ -607,6 +636,20 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: COLORS.border,
     marginVertical: SPACING.xl,
+  },
+  graduatedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: SPACING.xs,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
+    backgroundColor: COLORS.primaryMuted,
+    borderRadius: RADII.full,
+  },
+  graduatedText: {
+    color: COLORS.primary,
+    letterSpacing: 1.5,
   },
   // ─── Old token styles (kept, no longer referenced) ───
   tokenButtons: {

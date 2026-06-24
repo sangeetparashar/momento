@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Text, Avatar, MediaImage } from '@/components/primitives';
 import { PillTabs, StatsCard, TokenSwapWidget } from '@/components/composites';
 import { ComingSoonModal } from '@/components/features/ComingSoonModal';
+import { LaunchTokenCta } from '@/components/features/LaunchTokenCta';
 import { useKyc } from '@/hooks';
 import { COLORS, SPACING, RADII } from '@/styles/theme';
 import { TYPOGRAPHY } from '@/styles/typography';
@@ -32,6 +33,12 @@ interface ProfileDashboardProps {
   postsLoading?: boolean;
   onLoadMorePosts?: () => void;
   hasMorePosts?: boolean;
+  /** True when the creator has already launched a token. */
+  hasLaunchedToken?: boolean;
+  /** Symbol of the creator's launched token (for the MANAGE row). */
+  tokenSymbol?: string;
+  /** Mint of the creator's launched token (deep-links into /token/[mint]). */
+  tokenMint?: string;
 }
 
 /**
@@ -52,6 +59,9 @@ export function ProfileDashboard({
   postsLoading = false,
   onLoadMorePosts,
   hasMorePosts = false,
+  hasLaunchedToken = false,
+  tokenSymbol,
+  tokenMint,
 }: ProfileDashboardProps) {
   const router = useRouter();
   const [showComingSoon, setShowComingSoon] = useState(false);
@@ -190,6 +200,40 @@ export function ProfileDashboard({
             style={{ flex: 1 }}
           />
         </View>
+
+        {/* Creator token entry: launch CTA (no token) or MANAGE row (has token) */}
+        {isCreator && (
+          <View style={styles.tokenEntrySection}>
+            {hasLaunchedToken && tokenMint ? (
+              <Pressable
+                style={styles.manageRow}
+                onPress={() => router.push(`/token/${tokenMint}`)}
+                accessibilityRole="button"
+              >
+                <Ionicons name="cube-outline" size={18} color={COLORS.primary} />
+                <Text variant="label" style={styles.manageRowText}>
+                  {`MANAGE $${tokenSymbol ?? 'TOKEN'}`}
+                </Text>
+                <Ionicons name="chevron-forward" size={16} color={COLORS.textTertiary} />
+              </Pressable>
+            ) : (
+              <LaunchTokenCta onPress={() => router.push('/launch')} />
+            )}
+          </View>
+        )}
+
+        {/* VESTING entry — available to all users (recipients + senders) */}
+        <Pressable
+          style={styles.entryRow}
+          onPress={() => router.push('/vesting')}
+          accessibilityRole="button"
+        >
+          <Ionicons name="time-outline" size={18} color={COLORS.textPrimary} />
+          <Text variant="label" style={styles.entryRowText}>
+            VESTING
+          </Text>
+          <Ionicons name="chevron-forward" size={16} color={COLORS.textTertiary} />
+        </Pressable>
 
         {/* Become a Creator CTA — only for non-creators */}
         {!isCreator && kycStatus !== KycStatus.VERIFIED && (
@@ -385,6 +429,46 @@ const styles = StyleSheet.create({
     gap: SPACING.md,
     marginBottom: SPACING.xl,
     paddingHorizontal: SPACING.lg,
+  },
+
+  // ─── Token / Vesting entry rows (Phase 3B) ───
+  tokenEntrySection: {
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+  },
+  manageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADII.md,
+    borderWidth: 1,
+    borderColor: COLORS.primary + '30',
+  },
+  manageRowText: {
+    flex: 1,
+    color: COLORS.textPrimary,
+    letterSpacing: 1.5,
+  },
+  entryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginHorizontal: SPACING.lg,
+    marginBottom: SPACING.xl,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADII.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  entryRowText: {
+    flex: 1,
+    color: COLORS.textPrimary,
+    letterSpacing: 1.5,
   },
 
   // ─── POSTS TAB (feed-style — matches creator/[id].tsx POSTS tab) ───

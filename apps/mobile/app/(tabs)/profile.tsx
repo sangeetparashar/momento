@@ -410,6 +410,9 @@ export default function ProfileScreen() {
               }
             }}
             hasMorePosts={!!postsQuery.hasNextPage}
+            hasLaunchedToken={!!user?.tokenMint}
+            tokenSymbol={user?.tokenSymbol}
+            tokenMint={user?.tokenMint}
           />
         )}
 
