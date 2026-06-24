@@ -57,7 +57,7 @@ import { DynamicBondingCurveClient } from '@meteora-ag/dynamic-bonding-curve-sdk
 import { CpAmm, getTokenProgram } from '@meteora-ag/cp-amm-sdk';
 
 import prisma from './prisma';
-import { grossUpTokenRebate } from './fees';
+import { grossUpTokenRebate, computeRebate, rebateToUsdc } from './fees';
 import {
   submit,
   serverSigner,
@@ -105,6 +105,38 @@ function tokenProgramId(t: CreatorToken): PublicKey {
   return t.tokenProgram === 'TOKEN_CLASSIC'
     ? new PublicKey(MOMENTO_FEE.TOKEN_CLASSIC_PROGRAM_ID)
     : new PublicKey(MOMENTO_FEE.TOKEN_2022_PROGRAM_ID);
+}
+
+const CLASSIC_PROGRAM = new PublicKey(MOMENTO_FEE.TOKEN_CLASSIC_PROGRAM_ID);
+const TOKEN_2022_PROGRAM = new PublicKey(MOMENTO_FEE.TOKEN_2022_PROGRAM_ID);
+
+/**
+ * Resolve the SPL token PROGRAM that owns `mint` so we derive the correct ATA for
+ * the balance-delta read (SDK P0-2 / correctness P1-5). A wrong program id yields
+ * a wrong ATA → `claimedAmountFromMeta` reads 0 → the claimed fee is silently
+ * under-recorded. USDC is classic SPL and is the safe, known default (the rebate-
+ * quote mint is USDC by spec); for any other mint we resolve the on-chain owner
+ * program (Token-2022 vs classic) via getAccountInfo.
+ *
+ * TODO(verify-devnet): the getAccountInfo owner read is offline-unverifiable; the
+ * USDC fast-path is the only path exercised while quoteMint==USDC(classic).
+ */
+async function resolveMintProgramId(mint: string): Promise<PublicKey> {
+  // Known fee-exempt classic mint — skip the RPC round-trip on the common path.
+  if (mint === MOMENTO_FEE.USDC_MINT) return CLASSIC_PROGRAM;
+  try {
+    const info = await getConnection().getAccountInfo(new PublicKey(mint), COMMITMENT);
+    if (info?.owner) {
+      if (info.owner.equals(TOKEN_2022_PROGRAM)) return TOKEN_2022_PROGRAM;
+      if (info.owner.equals(CLASSIC_PROGRAM)) return CLASSIC_PROGRAM;
+      // Any other owner is not an SPL mint we can derive an ATA for; fall back to
+      // classic (safe default — never crashes the claim, only the amount probe).
+      return CLASSIC_PROGRAM;
+    }
+  } catch {
+    /* fall through to classic default */
+  }
+  return CLASSIC_PROGRAM;
 }
 
 /** Read a required env wallet lazily; throw CONFIG_MISSING (mapped to 500) when absent. */
@@ -184,6 +216,12 @@ interface RecordTradingFeeArgs {
   feeConfig: TokenFeeConfig;
   /** PLATFORM (partner) | CREATOR — WHO claims (and which leg this CLAIMED row sweeps). */
   recipient: 'PLATFORM' | 'CREATOR';
+  /**
+   * Accrual leg type. DBC trading-fee claims (§3b) record PARTNER/CREATOR_TRADING_FEE;
+   * post-graduation DAMM v2 locked-LP fee claims (§3c) record LOCKED_LP_FEE
+   * (contract P2 / §f.1). When omitted, defaults to the recipient's trading-fee leg.
+   */
+  legType?: 'PARTNER_TRADING_FEE' | 'CREATOR_TRADING_FEE' | 'LOCKED_LP_FEE';
   /** sweep destination wallet recorded on the CLAIMED row. */
   destinationWallet: string;
   /** quote (USDC) mint the fees are denominated in (CollectFeeMode.QuoteToken). */
@@ -212,6 +250,7 @@ async function recordTradingFeeClaim(args: RecordTradingFeeArgs): Promise<number
     tokenId,
     feeConfig,
     recipient,
+    legType: legTypeArg,
     destinationWallet,
     amountMint,
     amountBaseUnits,
@@ -249,9 +288,11 @@ async function recordTradingFeeClaim(args: RecordTradingFeeArgs): Promise<number
   // The amount we received is the 80% LP leg WE actually got for this recipient
   // (Meteora withholds its 20% on its side). We attribute the per-leg accrual:
   // for the PLATFORM (partner) sweep we record PARTNER_TRADING_FEE; for CREATOR
-  // we record CREATOR_TRADING_FEE. The amount IS the leg amount (single
-  // recipient claimed it), so we record it directly rather than re-splitting.
-  const legType = recipient === 'PLATFORM' ? 'PARTNER_TRADING_FEE' : 'CREATOR_TRADING_FEE';
+  // we record CREATOR_TRADING_FEE; for a post-graduation DAMM v2 locked-LP claim
+  // the caller passes LOCKED_LP_FEE (contract P2 / §f.1). The amount IS the leg
+  // amount (single recipient claimed it), so we record it directly without re-split.
+  const legType =
+    legTypeArg ?? (recipient === 'PLATFORM' ? 'PARTNER_TRADING_FEE' : 'CREATOR_TRADING_FEE');
   const internalRef = `${tokenId}:${recipient}:${legType}:${claimSignature}`;
   const now = new Date();
 
@@ -395,16 +436,28 @@ async function recordWithheldWithdraw(args: {
 async function buildWithheldClaim(
   token: CreatorToken,
   feeConfig: TokenFeeConfig,
-): Promise<{ built: BuiltTx; destination: PublicKey } | null> {
+): Promise<{ built: BuiltTx; destination: PublicKey } | { skip: string } | null> {
   if (!token.mintAddress) return null;
   const programId = tokenProgramId(token);
   const mint = new PublicKey(token.mintAddress);
 
   // Destination = Momento fee vault ATA (owned by the withdraw-withheld authority
   // = server wallet). We send withheld tokens here.
+  const signer = serverSigner();
   const feeVaultOwner = feeConfig.withdrawWithheldAuthority
     ? new PublicKey(feeConfig.withdrawWithheldAuthority)
-    : serverSigner().publicKey;
+    : signer.publicKey;
+
+  // SDK P0-1 — CUSTODY GATE (mirror §3b/§3c). The withdraw-withheld instruction
+  // marks `feeVaultOwner` as a REQUIRED SIGNER. We can only fill that slot when it
+  // IS the server wallet. If a token was launched with a non-server
+  // withdrawWithheldAuthority, building the tx anyway produces an unsignable tx
+  // (applySigners → SIGNER_REJECTED) or, worse, lands the harvest half and fails
+  // the withdraw. Skip with a clear reason instead.
+  if (!feeVaultOwner.equals(signer.publicKey)) {
+    return { skip: 'withheld:needs-custody' };
+  }
+
   const destination = getAssociatedTokenAddressSync(mint, feeVaultOwner, true, programId);
 
   // Resolve the source ATAs carrying withheld fees from the recorded
@@ -643,6 +696,8 @@ export async function claimTokenFees(
     const wh = await buildWithheldClaim(token, feeConfig);
     if (!wh) {
       result.skipped.push('withheld:no-fees');
+    } else if ('skip' in wh) {
+      result.skipped.push(wh.skip);
     } else {
       const res = await submit(wh.built, { route: 'sender' });
       result.withdrawWithheldSig = res.signature;
@@ -678,11 +733,15 @@ export async function claimTokenFees(
         const dest = feeConfig.feeClaimer
           ? new PublicKey(feeConfig.feeClaimer)
           : serverSigner().publicKey;
+        // SDK P0-2: derive the quote-mint ATA under the CORRECT token program
+        // (not a hard-coded classic id) so the balance-delta is read from the
+        // real ATA — a wrong program silently records the fee as 0.
+        const quoteProgram = await resolveMintProgramId(quoteMint);
         const destAta = getAssociatedTokenAddressSync(
           new PublicKey(quoteMint),
           dest,
           true,
-          new PublicKey(MOMENTO_FEE.TOKEN_CLASSIC_PROGRAM_ID),
+          quoteProgram,
         );
         const amt = await claimedAmountFromMeta(res.signature, destAta);
         result.recorded += await recordTradingFeeClaim({
@@ -715,11 +774,13 @@ export async function claimTokenFees(
         result.skipped.push('creator:deduped');
       } else {
         const dest = new PublicKey(feeConfig.creatorFeeWallet!);
+        // SDK P0-2: correct quote-mint token program for the balance-delta read.
+        const quoteProgram = await resolveMintProgramId(quoteMint);
         const destAta = getAssociatedTokenAddressSync(
           new PublicKey(quoteMint),
           dest,
           true,
-          new PublicKey(MOMENTO_FEE.TOKEN_CLASSIC_PROGRAM_ID),
+          quoteProgram,
         );
         const amt = await claimedAmountFromMeta(res.signature, destAta);
         result.recorded += await recordTradingFeeClaim({
@@ -755,17 +816,27 @@ export async function claimTokenFees(
             result.skipped.push(`lp-${position.owner.toLowerCase()}:deduped`);
           } else {
             const dest = new PublicKey(position.ownerWallet);
+            // SDK P0-2 / correctness P1-5: a DAMM v2 locked-LP leg can pay fees in
+            // the BASE (Token-2022 creator mint) side as well as the quote (USDC)
+            // side. CollectFeeMode.QuoteToken means USDC in the common path, but
+            // we resolve the program per-mint rather than hard-coding classic so a
+            // Token-2022-denominated leg is not silently read as 0.
+            const quoteProgram = await resolveMintProgramId(quoteMint);
             const destAta = getAssociatedTokenAddressSync(
               new PublicKey(quoteMint),
               dest,
               true,
-              new PublicKey(MOMENTO_FEE.TOKEN_CLASSIC_PROGRAM_ID),
+              quoteProgram,
             );
             const amt = await claimedAmountFromMeta(res.signature, destAta);
             result.recorded += await recordTradingFeeClaim({
               tokenId: token.id,
               feeConfig,
               recipient: position.owner === 'PARTNER' ? 'PLATFORM' : 'CREATOR',
+              // contract P2 / §f.1: DAMM v2 locked-LP fees are LOCKED_LP_FEE, not
+              // *_TRADING_FEE. The lib/fees reader includes LOCKED_LP_FEE in its
+              // filter so dollar accounting is unchanged.
+              legType: 'LOCKED_LP_FEE',
               destinationWallet: position.ownerWallet,
               amountMint: quoteMint,
               amountBaseUnits: amt,
@@ -848,27 +919,95 @@ export async function payRebate(
   if (!trade) return { sent: false, reason: 'trade-not-found' };
   if (trade.source !== 'IN_APP') return { sent: false, reason: 'not-in-app' };
 
-  let rebateBaseUnits: bigint;
+  // ── SEC P0-1 — RE-DERIVE the rebate from the CONFIRMED on-chain fill ───────
+  // NEVER pay from the pre-signature quote estimate (`Trade.rebateBaseUnits` was
+  // written by the recon/build path from the quote). The trade-fix agent now
+  // populates the trade's CONFIRMED fill (real amountOut/amountIn) and marks it
+  // confirmed via `signature` + `blockTime` on submit. If the trade is not
+  // confirmed (no signature OR no blockTime) or the confirmed fill amounts are
+  // missing/zero, we SKIP — a rebate is only owed against a real, landed swap.
+  if (!trade.signature || trade.blockTime == null) {
+    return { sent: false, reason: 'not-confirmed' };
+  }
+
+  // The taxed leg is ALWAYS the creator-token side of the swap (the Token-2022
+  // transfer fee is charged on the token leg). BUY: tokens RECEIVED = amountOut;
+  // SELL: tokens SENT = amountIn. (Mirrors trade.ts buildTrade `taxedBaseGross`.)
+  let taxedBaseGross: bigint;
   try {
-    rebateBaseUnits = BigInt(trade.rebateBaseUnits || '0');
+    taxedBaseGross =
+      trade.side === 'BUY'
+        ? BigInt(trade.amountOutBaseUnits || '0')
+        : BigInt(trade.amountInBaseUnits || '0');
   } catch {
-    rebateBaseUnits = BigInt(0);
+    taxedBaseGross = BigInt(0);
+  }
+  if (taxedBaseGross <= BigInt(0)) {
+    return { sent: false, reason: 'no-confirmed-fill' };
+  }
+
+  // Re-compute the owed rebate from the confirmed fill (NOT the stored estimate).
+  const feeBps =
+    trade.token?.feeConfig?.transferFeeBps ??
+    trade.token?.transferFeeBps ??
+    MOMENTO_FEE.DEFAULT_TRANSFER_FEE_BPS;
+  const targetBps = trade.token?.feeConfig?.rebateTargetBps ?? MOMENTO_FEE.TARGET_IN_APP_BPS;
+  let maxFee: bigint;
+  try {
+    maxFee = trade.token?.transferFeeMaxBaseUnits
+      ? BigInt(trade.token.transferFeeMaxBaseUnits)
+      : BigInt(0);
+  } catch {
+    maxFee = BigInt(0);
+  }
+
+  const { rebateOwedNet } = computeRebate({
+    grossBaseUnits: taxedBaseGross,
+    feeBps,
+    targetBps,
+    maxFeeBaseUnits: maxFee,
+  });
+  if (rebateOwedNet <= BigInt(0)) return { sent: false, reason: 'no-rebate-owed' };
+
+  const rebateMint = trade.rebateMint ?? trade.token?.feeConfig?.rebateMint ?? MOMENTO_FEE.USDC_MINT;
+  const useUsdc = rebateMint === MOMENTO_FEE.USDC_MINT;
+  const decimals = trade.token?.decimals ?? 9;
+
+  // Convert the net token rebate to the SEND amount in the rebate mint, derived
+  // from the CONFIRMED fill — USDC default (fee-exempt, priced at the trade's
+  // snapshot), Token-2022 fallback grossed up so the trader nets `rebateOwedNet`.
+  let rebateBaseUnits: bigint;
+  if (useUsdc) {
+    rebateBaseUnits = rebateToUsdc(rebateOwedNet, trade.priceUsd ?? 0, decimals);
+  } else {
+    rebateBaseUnits = grossUpTokenRebate(rebateOwedNet, feeBps);
   }
   if (rebateBaseUnits <= BigInt(0)) return { sent: false, reason: 'no-rebate-owed' };
-  if (trade.rebatePaid) return { sent: false, reason: 'already-paid' };
-
-  const rebateMint = trade.rebateMint ?? MOMENTO_FEE.USDC_MINT;
-  const useUsdc = rebateMint === MOMENTO_FEE.USDC_MINT;
 
   // ── (1) RESERVE before send (anti-double-pay CAS) ─────────────────────────
-  const reservation = await prisma.trade.updateMany({
-    where: { id: tradeId, rebatePaid: false },
-    data: { rebatePaid: true },
-  });
-  if (reservation.count === 0) {
-    // Another worker/tick already reserved/paid it.
-    return { sent: false, reason: 'deduped' };
+  // SEC P0-2 / correctness P1: the reservation is a CAS on `rebatePaid:false`.
+  // A crashed reservation (rebatePaid:true, rebateSignature:null) is recovered by
+  // runRebateSweep, which retries via the SAME stable idempotency key below — the
+  // durable submit store dedups any real prior send. So a row already reserved but
+  // unsent is NOT a hard stop: we allow this call to proceed when it was the
+  // crash-recovery selector that picked it up (rebatePaid:true & no signature).
+  if (trade.rebatePaid && trade.rebateSignature) {
+    // Genuinely already paid (sig recorded) — nothing to do.
+    return { sent: false, reason: 'already-paid', signature: trade.rebateSignature };
   }
+  if (!trade.rebatePaid) {
+    const reservation = await prisma.trade.updateMany({
+      where: { id: tradeId, rebatePaid: false },
+      data: { rebatePaid: true },
+    });
+    if (reservation.count === 0) {
+      // Another worker/tick already reserved/paid it.
+      return { sent: false, reason: 'deduped' };
+    }
+  }
+  // else: rebatePaid===true && rebateSignature===null → crashed/stranded
+  // reservation. Proceed to (re)send under the stable rebate:<tradeId> key; the
+  // submit store short-circuits to the prior signature if it actually landed.
 
   // From here on, on a definitive (non-TIMEOUT) failure we MUST roll back the
   // reservation so a later tick retries.
@@ -879,19 +1018,15 @@ export async function payRebate(
     const mint = new PublicKey(rebateMint);
 
     // USDC default = classic SPL, fee-exempt, no gross-up. Token fallback =
-    // Token-2022, grossed-up so the trader NETS rebateBaseUnits.
+    // Token-2022 (rebateBaseUnits was already grossed-up above).
     const programId = useUsdc
       ? new PublicKey(MOMENTO_FEE.TOKEN_CLASSIC_PROGRAM_ID)
       : new PublicKey(MOMENTO_FEE.TOKEN_2022_PROGRAM_ID);
 
-    const decimals = useUsdc ? MOMENTO_FEE.USDC_DECIMALS : (trade.token?.decimals ?? 9);
-
-    const sendAmount = useUsdc
-      ? rebateBaseUnits
-      : grossUpTokenRebate(
-          rebateBaseUnits,
-          trade.token?.feeConfig?.transferFeeBps ?? trade.token?.transferFeeBps ?? MOMENTO_FEE.DEFAULT_TRANSFER_FEE_BPS,
-        );
+    const sendDecimals = useUsdc ? MOMENTO_FEE.USDC_DECIMALS : decimals;
+    // `rebateBaseUnits` is the final send amount: for USDC it's the priced net
+    // rebate; for the token fallback it's already grossed-up (computed above).
+    const sendAmount = rebateBaseUnits;
 
     const sourceAta = getAssociatedTokenAddressSync(mint, vaultOwner, true, programId);
     const destAta = getAssociatedTokenAddressSync(mint, trader, true, programId);
@@ -910,7 +1045,7 @@ export async function payRebate(
         destAta,
         vaultOwner, // owner/authority of the rebate vault (server wallet)
         sendAmount,
-        decimals,
+        sendDecimals,
         [],
         programId,
       ),
@@ -923,7 +1058,16 @@ export async function payRebate(
     };
 
     // Default path = USDC over 'rpc' (fee-exempt, no Jito tip needed).
-    const res: SubmitResult = await submit(built, { route: 'rpc' });
+    // SEC P0-2: pass an EXPLICIT, STABLE idempotency key `rebate:<tradeId>` (NOT
+    // the per-message hash). The rebate ix set is rebuilt with a fresh blockhash
+    // each tick, so a message-derived key would differ across rebuilds and could
+    // double-pay; a per-trade key makes the durable submit store dedup a real
+    // prior send and short-circuit to its signature (this is also what makes the
+    // crashed-reservation retry in (5) safe).
+    const res: SubmitResult = await submit(built, {
+      route: 'rpc',
+      idempotencyKey: `rebate:${tradeId}`,
+    });
 
     // ── (3) on confirm: persist signature + flip REBATE FeeEvent ─────────────
     const now = new Date();
@@ -971,33 +1115,70 @@ export async function runRebateSweep(limit?: number): Promise<RebateResult> {
     Math.floor(limit ?? (Number.isFinite(envBatch) && envBatch > 0 ? envBatch : MOMENTO_CLAIM.DEFAULT_REBATE_BATCH)),
   );
 
-  const trades = await prisma.trade.findMany({
+  // (A) Standard set: unpaid IN_APP rebates. `payRebate` re-derives the owed
+  // amount from the CONFIRMED on-chain fill (SEC P0-1) and self-skips unconfirmed
+  // / zero-rebate rows, so the source of truth is no longer the stored estimate —
+  // we therefore do NOT pre-filter on `Trade.rebateBaseUnits` here (that field is
+  // the pre-signature estimate and may be 0 even when a confirmed rebate is owed).
+  const unpaid = await prisma.trade.findMany({
     where: { source: 'IN_APP', rebatePaid: false },
     orderBy: { createdAt: 'asc' },
     take,
-    select: { id: true, rebateBaseUnits: true },
+    select: { id: true },
   });
 
-  const out: RebateResult = { attempted: 0, sent: 0, deduped: 0, failed: 0, signatures: [] };
-  for (const t of trades) {
-    // Skip zero-rebate rows without consuming a reservation.
-    let owed: bigint;
-    try {
-      owed = BigInt(t.rebateBaseUnits || '0');
-    } catch {
-      owed = BigInt(0);
-    }
-    if (owed <= BigInt(0)) continue;
+  // (B) correctness P1 — RECOVER stranded reservations: a crash between RESERVE
+  // and send (or a failed rollback) leaves a row `rebatePaid=true,
+  // rebateSignature=null` that the standard `rebatePaid:false` selector skips
+  // forever. Re-pick those up and retry idempotently via the `rebate:<tradeId>`
+  // key — the durable submit store short-circuits to the prior signature if a send
+  // actually landed, else re-sends. A small stale window avoids racing a
+  // reservation made earlier in THIS same tick.
+  const STALE_MS = 60_000;
+  const staleBefore = new Date(Date.now() - STALE_MS);
+  const stranded = await prisma.trade.findMany({
+    where: {
+      source: 'IN_APP',
+      rebatePaid: true,
+      rebateSignature: null,
+      updatedAt: { lt: staleBefore },
+    },
+    orderBy: { updatedAt: 'asc' },
+    take,
+    select: { id: true },
+  });
 
+  // Merge (dedup ids; unpaid first), bounded by `take`.
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const t of [...unpaid, ...stranded]) {
+    if (seen.has(t.id)) continue;
+    seen.add(t.id);
+    ids.push(t.id);
+    if (ids.length >= take) break;
+  }
+
+  const out: RebateResult = { attempted: 0, sent: 0, deduped: 0, failed: 0, signatures: [] };
+  for (const id of ids) {
     out.attempted++;
     try {
-      const r = await payRebate(t.id);
+      const r = await payRebate(id);
       if (r.sent) {
         out.sent++;
         if (r.signature) out.signatures.push(r.signature);
       } else if (r.reason === 'deduped' || r.reason === 'timeout' || r.reason === 'duplicate') {
         out.deduped++;
         if (r.signature) out.signatures.push(r.signature);
+      } else if (
+        r.reason === 'not-confirmed' ||
+        r.reason === 'no-confirmed-fill' ||
+        r.reason === 'no-rebate-owed' ||
+        r.reason === 'already-paid' ||
+        r.reason === 'not-in-app' ||
+        r.reason === 'trade-not-found'
+      ) {
+        // Benign no-ops (not yet confirmed, nothing owed, already done) — neither
+        // a send nor a failure. Don't inflate `failed`.
       } else {
         out.failed++;
       }
