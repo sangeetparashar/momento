@@ -231,7 +231,21 @@ function jupLockProgram(connection: Connection, payer: PublicKey) {
   return new anchor.Program(idl, provider);
 }
 
-/** Build a Jupiter Lock createVestingEscrowV2 tx (ephemeral base; cancelMode=0). */
+/**
+ * Build a Jupiter Lock createVestingEscrowV2 tx (ephemeral base; cancelMode=0).
+ *
+ * P2 (vesting) — CLASSIC-PROGRAM ASSUMPTION: we target the on-chain Jup-Lock
+ * Anchor program directly via `program.methods.createVestingEscrowV2(...)` (the
+ * web3.js-v1 path), NOT the jup-lock-starter's web3.js-v2 "Kit" generated client.
+ * The token program for the source/escrow ATAs is `tokenProgramId(input)` —
+ * classic by default, Token-2022 only when the route passes `isToken2022`. spike-c
+ * exercised a CLASSIC SPL mint, so the Token-2022 escrow-ATA path
+ * (allowOwnerOffCurve + transferCheckedWithFee handling inside the program) is
+ * UNVERIFIED. The published mainnet/devnet program id is pinned in
+ * JUP_LOCK_PROGRAM_ID (the jup-lock TEST workspace id 2r5Vek… is localnet-only and
+ * must never be used). TODO(verify-devnet): confirm a Token-2022 mint locks
+ * correctly net-of-fee on devnet.
+ */
 export async function buildJupiterLockCreate(
   input: VestingCreateInput,
   payer: PublicKey,
@@ -350,6 +364,17 @@ export async function buildVestingWithdraw(args: {
     // withdraw needs only the invoker signer — NO ephemeral co-signer (research/13 §2).
     // `amount` is already in base units, so construct the BN directly (do NOT use
     // getBN(value, decimals), which would scale by 10^decimals).
+    //
+    // TODO(verify-devnet) [SDK P1-6]: `prepareWithdrawInstructions` is NOT in the
+    // spike-c verified surface. spike-c (L102-104) verified only the high-level
+    // `withdraw({ id, amount }, extParams)` (which BUILDS+SENDS, returning
+    // ITransactionResult) plus `getOne`/`cancel`. We need raw ixs to wrap in a
+    // BuiltTx for the client-relay (recipient embedded-wallet) path, so we use the
+    // lower-level `prepare*` family that the SDK is known to expose alongside
+    // `prepareCreateInstructions` (the verified create-side analogue). Confirm this
+    // method name + the `{ invoker: { publicKey } }` extParams shape against
+    // @streamflow/stream@12.4.0 on devnet before mainnet; if absent, fall back to
+    // the verified `withdraw()` driven by a custom signer.
     const prepared = await (client as any).prepareWithdrawInstructions(
       { id: schedule.streamId, amount: new BN(amount.toString()) },
       { invoker: { publicKey: invoker } },
@@ -363,12 +388,32 @@ export async function buildVestingWithdraw(args: {
     const program = jupLockProgram(getConnection(), invoker);
     const escrow = new PublicKey(schedule.streamId);
     const mint = new PublicKey(schedule.tokenMint);
+    // P2-6 (deferred, offline-unfixable): VestingSchedule has no token-program
+    // column, so withdraw assumes the CLASSIC token program. The mint's real
+    // program IS resolvable from CreatorToken.tokenProgram via schedule.tokenId,
+    // but the proper fix is to persist the program on VestingSchedule at create
+    // (a schema change owned by P3-foundation, not this file). For a Token-2022
+    // creator mint (the launched-token default!) the recipient/escrow ATAs derived
+    // here under the classic program will be WRONG and the claim build/exec fails
+    // safely (no fund loss — the tx reverts). TODO(verify-devnet)/TODO(schema):
+    // add VestingSchedule.tokenProgram and thread it through here + getVestingState.
     const isT22 = false; // schedule does not persist token program; classic-default (§6)
     const tokenProgram = isT22 ? TOKEN_2022_PROGRAM_ID : TOKEN_CLASSIC_PROGRAM_ID;
     const escrowToken = await getAssociatedTokenAddress(mint, escrow, true, tokenProgram);
     const recipientToken = await getAssociatedTokenAddress(mint, invoker, true, tokenProgram);
 
-    // TODO(verify-devnet): confirm the claim ix name/accounts vs the devnet IDL.
+    // TODO(verify-devnet) [SDK P1-5]: BEST-EFFORT — the Jup-Lock claim instruction
+    // is NOT in the spike-c verified surface. spike-c verified ONLY
+    // `createVestingEscrowV2` (create) + `program.account.vestingEscrow.fetch`
+    // (read); it did NOT exercise claim/withdraw. The ix name (`claimV2`), the
+    // arg shape (amount + remainingAccountsInfo `{ slices: [] }`) and the account
+    // list below mirror the jup-ag/jup-lock tests (tests/locker_utils/index.ts)
+    // and the createVestingEscrowV2 account naming, but are UNCONFIRMED. Real
+    // jup-lock claim typically also wires `memoProgram` and the Anchor event-CPI
+    // accounts (`eventAuthority`, `program`) — Anchor >=0.30 auto-resolves the
+    // latter from the IDL, but confirm the full account list + ix name against the
+    // fetched devnet IDL (ref: jup-ag/jup-lock @ sdk/artifacts/locker.json) before
+    // relying on this path on mainnet.
     const ix = await program.methods
       .claimV2(new BN(amount.toString()), { slices: [] })
       .accounts({
@@ -417,6 +462,14 @@ export async function buildVestingCancel(args: {
 
   const client = streamClient();
   // cancel needs only the invoker signer — NO ephemeral co-signer (research/13 §2).
+  //
+  // TODO(verify-devnet) [SDK P1-6]: `prepareCancelInstructions` is NOT in the
+  // spike-c verified surface. spike-c verified only the high-level
+  // `cancel({ id }, extParams)` (which BUILDS+SENDS). As with withdraw, we need raw
+  // ixs to wrap in a BuiltTx for the client-relay path, so we use the lower-level
+  // `prepare*` family (analogue of the verified `prepareCreateInstructions`).
+  // Confirm the method name + `{ invoker: { publicKey } }` extParams shape against
+  // @streamflow/stream@12.4.0 on devnet; fall back to verified `cancel()` if absent.
   const prepared = await (client as any).prepareCancelInstructions(
     { id: schedule.streamId },
     { invoker: { publicKey: invoker } },
