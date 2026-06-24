@@ -183,7 +183,16 @@ async function confirmSignature(
   deadlineMs: number,
 ): Promise<{ confirmed: boolean; slot?: number }> {
   const conn = getConnection();
-  const target = commitment === 'finalized' ? ['finalized'] : ['confirmed', 'finalized'];
+  // Honor the REQUESTED commitment (signing P1-B): a 'processed'-target submit
+  // must accept a 'processed' status as success, otherwise it false-TIMEOUTs
+  // (a processed tx never reaches 'confirmed'/'finalized' within the poll window).
+  // Each level also accepts the stronger ones (processed ⊂ confirmed ⊂ finalized).
+  const target =
+    commitment === 'finalized'
+      ? ['finalized']
+      : commitment === 'confirmed'
+        ? ['confirmed', 'finalized']
+        : ['processed', 'confirmed', 'finalized'];
   while (Date.now() < deadlineMs) {
     let statuses;
     try {
@@ -349,6 +358,15 @@ async function submitSignedTail(
   // under the key, OR deliberately released the reservation. The finally block
   // uses this to guarantee we NEVER leave a bare RESERVED_MARKER on a thrown exit.
   let reservationSettled = false;
+  // True when the tx outcome is DEFINITIVELY a failure (it landed on-chain and
+  // reverted: confirmSignature throws SIMULATION_FAILED with the broadcast sig).
+  // The finally must NOT record a known-failed sig as the dedup result — doing so
+  // bricks stable-key retries (e.g. rebate:<id>) by short-circuiting the next
+  // tick to deduped:true against a FAILED signature (regression R-1). On a
+  // known-failed outcome we RELEASE the reservation so the caller can rebuild and
+  // re-send with a fresh blockhash. We only put() a sig for STATUS-UNKNOWN exits
+  // (TIMEOUT / BLOCKHASH_EXPIRED with a broadcast sig — the tx may still land).
+  let landedFailed = false;
 
   // CRITICAL (idempotency P0): wrap broadcast/confirm in try/finally so the
   // reservation made above is ALWAYS settled on exit. Without this, any
@@ -358,14 +376,20 @@ async function submitSignedTail(
   // the 10-min TTL (reserve→false, get→null, throws DUPLICATE) — a single
   // transient timeout would permanently brick the rebate/claim.
   //
-  // Settlement policy on a non-landing exit:
-  //   - broadcast happened (we hold a `signature`): status is unknown (the tx may
-  //     still land). Persist the unconfirmed sig under the key via put(): a retry
-  //     returns it as deduped and reconciliation can poll it. We must NOT release
-  //     and re-broadcast, which could double-issue a tx that actually landed.
-  //   - never broadcast (`signature` undefined: RPC_ERROR with no sig, or a
-  //     preflight SIMULATION_FAILED before any send): release the reservation via
-  //     del() so an identical retry can reserve + re-broadcast.
+  // Settlement policy on a non-landing exit (R-1 — three outcomes, not two):
+  //   - STATUS-UNKNOWN (broadcast happened, we hold a `signature`, exit is
+  //     TIMEOUT / BLOCKHASH_EXPIRED): the tx may still land. Persist the
+  //     unconfirmed sig under the key via put(): a retry returns it as deduped and
+  //     reconciliation can poll it. We must NOT release + re-broadcast, which could
+  //     double-issue a tx that actually landed.
+  //   - KNOWN-FAILED (the tx landed and reverted: confirmSignature threw
+  //     SIMULATION_FAILED; `landedFailed` set in the catch): RELEASE via del(). The
+  //     failed sig must NOT become the dedup record, or a stable-key caller
+  //     (rebate:<id>, server-signed claim/graduation) would dedup every retry to a
+  //     FAILED signature and mark it "paid" — the original P0-A fix's regression.
+  //     Releasing lets the caller rebuild + re-send with a fresh blockhash.
+  //   - NEVER-BROADCAST (`signature` undefined: RPC_ERROR with no sig): release the
+  //     reservation via del() so an identical retry can reserve + re-broadcast.
   try {
     // App-level resend loop: re-send the SAME signed tx until it confirms or the
     // blockhash expires (lastValidBlockHeight passed). We own retry, not the RPC.
@@ -428,24 +452,38 @@ async function submitSignedTail(
       lastErr ?? new SolanaTxError('RPC_ERROR', 'Failed to broadcast transaction after retries'),
     );
   } catch (err) {
-    // confirmSignature throws SolanaTxError('SIMULATION_FAILED') on an on-chain
-    // revert — that tx DID land (and failed), so the broadcast `signature` (if any)
-    // is recorded by the finally as the dedup record; do NOT release it. Normalize
-    // all other raw errors into the taxonomy here (replaces the inner classify()).
-    throw classify(err);
+    // Normalize into the taxonomy first so we can classify the outcome.
+    const classified = classify(err);
+    // A DEFINITIVE on-chain failure (confirmSignature throws SIMULATION_FAILED on
+    // an on-chain revert): the tx landed and FAILED. We must NOT record its sig as
+    // the dedup result (regression R-1) — flag it so the finally RELEASES the
+    // reservation, letting a stable-key caller rebuild + re-send with a fresh
+    // blockhash instead of dedup'ing forever to a failed signature. TIMEOUT /
+    // BLOCKHASH_EXPIRED remain STATUS-UNKNOWN (the tx may still land) and keep the
+    // record-the-sig behavior in the finally.
+    if (classified.code === 'SIMULATION_FAILED') {
+      landedFailed = true;
+    }
+    throw classified;
   } finally {
     // Always settle the reservation so we never leave a bare marker on a thrown exit.
     if (!reservationSettled) {
       reservationSettled = true;
       try {
-        if (signature) {
-          // Broadcast happened, status unknown/failed — persist the sig so a retry
-          // dedups to it and reconciliation can poll. (A confirmed-and-failed tx
-          // also lands here; recording its sig prevents a message-derived rebuild
-          // from re-issuing it.)
+        if (signature && !landedFailed) {
+          // STATUS-UNKNOWN exit (TIMEOUT / BLOCKHASH_EXPIRED with a broadcast sig):
+          // the tx may still land. Persist the sig so a retry dedups to it and
+          // reconciliation can poll. We must NOT release + re-broadcast, which could
+          // double-issue a tx that actually landed.
           await store.put(idempotencyKey, signature);
         } else {
-          // Never broadcast — release so an identical retry can re-broadcast.
+          // Either never broadcast (no sig), OR a KNOWN-FAILED outcome
+          // (landedFailed: the tx landed and reverted). In both cases RELEASE the
+          // reservation: recording a confirmed-FAILED sig would brick stable-key
+          // retries (regression R-1) by dedup'ing the next attempt to a failed
+          // signature. Releasing lets the caller rebuild + re-send with a fresh
+          // blockhash. (The failed sig is carried on the thrown SolanaTxError for
+          // observability, but is never persisted as the dedup record.)
           await store.del(idempotencyKey);
         }
       } catch {
@@ -467,12 +505,22 @@ export async function submit(built: BuiltTx, opts: SubmitOptions = {}): Promise<
   resolveFeePayer(built);
   const blockhash = await ensureBlockhash(tx);
 
+  // Capture the program-instruction message BEFORE the compute-budget ixs are
+  // prepended (signing P1-C). The live priority fee baked into setComputeUnitPrice
+  // changes per request, so an auto key derived from the POST-budget message would
+  // differ on every retry and never dedup. Deriving from the pre-budget message
+  // (feePayer + blockhash are already set, which compileMessage requires) keeps the
+  // auto key stable across retries of the same logical action. Explicit keys
+  // (opts.idempotencyKey — what every fund-moving stable-key caller passes, e.g.
+  // rebate:<tradeId>) bypass this entirely and are unaffected.
+  const preBudgetMessageB64 = opts.idempotencyKey ? '' : unsignedMessageB64(tx);
+
   const { priorityFeeMicroLamports, jitoTipLamports } = await prependBudget(tx, built, { ...opts, route });
 
-  // Derive idempotency key from the UNSIGNED message (post-budget, pre-signature).
+  // Derive idempotency key from the pre-budget UNSIGNED message (pre-signature).
   const idempotencyKey =
     opts.idempotencyKey ??
-    deriveIdempotencyKey(built.label ?? 'tx', tx.feePayer!.toBase58(), unsignedMessageB64(tx));
+    deriveIdempotencyKey(built.label ?? 'tx', tx.feePayer!.toBase58(), preBudgetMessageB64);
 
   // Apply all signers (ephemerals first, then server/client-relay). applySigners
   // re-attaches ephemeral signatures AFTER the Privy server sign (defensive against
@@ -509,6 +557,10 @@ export async function buildUnsignedForClient(
   // against the true expiry window instead of defaulting to 0 (correctness P1).
   const blockhash = await ensureBlockhash(tx);
 
+  // Capture the program-instruction message BEFORE the budget ixs (signing P1-C):
+  // the live priority fee would otherwise make the auto key unstable across builds.
+  const preBudgetMessageB64 = unsignedMessageB64(tx);
+
   // Capture the priority fee actually baked into the budget ixs so it can be
   // reported by submitClientSigned (telemetry P1) instead of 0. (§b.4 keeps this
   // entry point opts-free, so the Helius estimate / builder CU limit applies.)
@@ -517,7 +569,7 @@ export async function buildUnsignedForClient(
   const key = deriveIdempotencyKey(
     built.label ?? 'tx',
     tx.feePayer!.toBase58(),
-    unsignedMessageB64(tx),
+    preBudgetMessageB64,
   );
 
   // Pre-attach ephemeral signatures (Streamflow metadata / JupLock base) so the

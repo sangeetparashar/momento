@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { computeRebate, rebateToUsdc, grossUpTokenRebate } from '@/lib/fees';
 import { runClaimSweep, runRebateSweep } from '@/lib/fee-claim';
-import { MOMENTO_FEE } from '@momento/shared';
+import { MOMENTO_FEE, getUsdcMint } from '@momento/shared';
 
 /**
  * Whether the intent-recon sweep should run. FALSE for all of Phase 2: the
@@ -135,8 +135,12 @@ export async function GET(request: NextRequest) {
       // Default rebate path = USDC (fee-exempt). Fallback = grossed-up token.
       // We record the computed amount + mint on the Trade so the Phase-4 payout
       // worker is a thin executor. NO on-chain send here.
-      const rebateMint = token?.feeConfig?.rebateMint ?? MOMENTO_FEE.USDC_MINT;
-      const useUsdc = rebateMint === MOMENTO_FEE.USDC_MINT;
+      // Resolve USDC at request time (active cluster) — never the frozen mainnet
+      // literal, else a devnet-USDC rebate mint fails the comparison and mis-routes
+      // down the Token-2022 gross-up path (G-2).
+      const usdcMint = getUsdcMint();
+      const rebateMint = token?.feeConfig?.rebateMint ?? usdcMint;
+      const useUsdc = rebateMint === usdcMint || rebateMint === MOMENTO_FEE.USDC_MINT;
       const decimals = token?.decimals ?? 9;
 
       let rebateBaseUnits: bigint;

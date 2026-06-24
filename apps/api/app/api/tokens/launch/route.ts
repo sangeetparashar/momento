@@ -45,12 +45,20 @@ function statusForCode(code: string): number {
 
 export async function POST(request: NextRequest) {
   try {
-    // 1. Rate limit (write).
-    const rateLimited = await applyRateLimit(request, writeLimiter);
-    if (rateLimited) return rateLimited;
-
-    // 2. Auth: Creator role required (throws a Response on failure).
+    // 1. Auth FIRST (Creator role required; throws a Response on failure) so the
+    //    write cap is keyed to the verified userId, not a spoofable
+    //    x-forwarded-for IP. IP-keyed pre-auth limits let an authed user rotate
+    //    XFF for a fresh bucket per request (defeating the cap on this
+    //    fund-moving, one-token-per-creator route) and let unauth traffic
+    //    pre-burn a NAT's bucket. failClosed: a Redis outage must not silently
+    //    disable the money-path cap. (Matches the 4 trade routes.)
     const user = await requireCreator(request);
+
+    // 2. Rate limit (write), per-user, fail-closed.
+    const rateLimited = await applyRateLimit(request, writeLimiter, user.id, {
+      failClosed: true,
+    });
+    if (rateLimited) return rateLimited;
 
     // 3. Validate body.
     const body = await request.json().catch(() => ({}));

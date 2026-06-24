@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { withdrawVesting } from '@/services/tokenApi';
+import { withdrawVesting, confirmVesting } from '@/services/tokenApi';
 import { useClientSignSubmit, SignStatus } from './useClientSignSubmit';
 
 interface UseWithdrawVesting {
@@ -39,8 +39,26 @@ export function useWithdrawVesting(): UseWithdrawVesting {
       const result = await signer.run({
         transaction,
         mode: 'signAndSend',
-        // No submit endpoint: pass the on-chain signature straight through.
-        submit: async (signature) => ({ signature, status: null }),
+        // No /submit endpoint, but there IS a /confirm: once the provider has
+        // broadcast, POST the landed signature so the backend re-derives the
+        // withdrawn total from chain and transitions the row's status
+        // (→COMPLETED when fully withdrawn). The backend NEVER trusts a
+        // client-supplied amount — it reads the on-chain stream itself. We
+        // return the signature as the canonical status so the sheet still shows
+        // success even if the confirm call is rejected (the row will reconcile
+        // on the next list read).
+        submit: async (signature) => {
+          try {
+            const c = await confirmVesting(vestingId, signature);
+            return { signature, status: c.status };
+          } catch (confirmErr: any) {
+            console.warn(
+              '[useWithdrawVesting] confirm failed (tx landed):',
+              confirmErr?.message,
+            );
+            return { signature, status: null };
+          }
+        },
       });
 
       if (result) {

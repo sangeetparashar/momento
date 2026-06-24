@@ -126,13 +126,21 @@ export const launchTokenSchema = z.object({
 
 // trade (P3-trade consumes — POST /api/tokens/[mint]/{buy,sell} + /submit, §d.3/§d.4)
 export const tradeOrderSchema = z.object({
-  amountInBase: z.string().regex(/^[1-9]\d*$/),
+  // Base units (NOT whole tokens). Upper-bounded by digit length (same pattern as
+  // `totalSupply`) so an absurd amount is rejected at the edge before it reaches any
+  // BigInt math / on-chain quote. 30 digits dwarfs any realistic base-unit amount
+  // (u64 max is 20 digits; supply×10^decimals stays far below this).
+  amountInBase: z.string().regex(/^[1-9]\d*$/).refine((s) => s.length <= 30, 'amountInBase too large'),
   inputMint: z.enum(['USDC']).optional(),
   slippageBps: z.number().int().min(1).max(5000).default(50),
 });
+// A serialized Solana transaction is bounded by the 1232-byte packet limit; its
+// base64 encoding is ~4/3 of that. Cap the field generously (8 KiB) so absurd
+// payloads are rejected early, before any base64 decode / deserialize.
+const MAX_TX_BASE64_LEN = 8192;
 export const tradeSubmitSchema = z.object({
   intentId: z.string().uuid(),
-  transaction: z.string().min(1),
+  transaction: z.string().min(1).max(MAX_TX_BASE64_LEN),
   idempotencyKey: z.string().min(1),
 });
 

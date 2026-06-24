@@ -131,7 +131,8 @@ const TOKEN_2022_PROGRAM = new PublicKey(MOMENTO_FEE.TOKEN_2022_PROGRAM_ID);
  */
 async function resolveMintProgramId(mint: string): Promise<PublicKey> {
   // Known fee-exempt classic mint — skip the RPC round-trip on the common path.
-  if (mint === MOMENTO_FEE.USDC_MINT) return CLASSIC_PROGRAM;
+  // Resolve USDC at request time (active cluster) so devnet USDC also fast-paths.
+  if (isUsdcMint(mint)) return CLASSIC_PROGRAM;
   try {
     const info = await getConnection().getAccountInfo(new PublicKey(mint), COMMITMENT);
     if (info?.owner) {
@@ -919,7 +920,7 @@ export async function claimTokenFees(
   }
 
   const feeConfig = token.feeConfig;
-  const quoteMint = token.quoteMint ?? feeConfig.rebateMint ?? MOMENTO_FEE.USDC_MINT;
+  const quoteMint = token.quoteMint ?? feeConfig.rebateMint ?? getUsdcMint();
 
   // P1 — USD snapshotting. Trading-fee/LP claims are denominated in the quote mint
   // (USDC, sized at 1); the Token-2022 withheld pool is in the creator-token mint,

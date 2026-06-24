@@ -20,10 +20,15 @@ import { getVestingState } from '@/lib/vesting';
 
 export async function GET(request: NextRequest) {
   try {
-    const rateLimitResponse = await applyRateLimit(request, readLimiter);
-    if (rateLimitResponse) return rateLimitResponse;
-
+    // G-1 (authz P1-A): auth-first per-user fail-closed limiting. IP/XFF keying lets
+    // a caller rotate X-Forwarded-For for a fresh bucket per request and lets unauth
+    // traffic pre-burn a NAT's bucket. failClosed: a Redis outage must not silently
+    // disable the cap.
     const user = await requireAuth(request);
+    const rateLimitResponse = await applyRateLimit(request, readLimiter, user.id, {
+      failClosed: true,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
 
     const url = new URL(request.url);
     const roleParam = url.searchParams.get('role');
@@ -64,7 +69,7 @@ export async function GET(request: NextRequest) {
         durationSeconds: true,
         cliffSeconds: true,
         status: true,
-        token: { select: { symbol: true } },
+        token: { select: { symbol: true, decimals: true } },
       },
     });
 
@@ -87,6 +92,10 @@ export async function GET(request: NextRequest) {
           vestingId: s.id,
           mint: s.tokenMint,
           symbol: s.token?.symbol ?? null,
+          // G-4: surface per-row decimals so the mobile withdraw sheet scales
+          // base units correctly instead of defaulting to 9 (mis-scaling 6-8
+          // decimal tokens). CreatorToken.decimals is the authoritative mint scale.
+          decimals: s.token?.decimals ?? null,
           role,
           totalBase,
           withdrawnBase,

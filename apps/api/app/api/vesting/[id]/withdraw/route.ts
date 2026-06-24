@@ -29,10 +29,15 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const rateLimitResponse = await applyRateLimit(request, writeLimiter);
-    if (rateLimitResponse) return rateLimitResponse;
-
+    // G-1 (authz P1-A): auth-first per-user fail-closed limiting. IP/XFF keying lets
+    // a caller rotate X-Forwarded-For for a fresh bucket per request and lets unauth
+    // traffic pre-burn a NAT's bucket on this fund-moving write path.
+    // failClosed: a Redis outage must not silently disable the cap.
     const user = await requireAuth(request);
+    const rateLimitResponse = await applyRateLimit(request, writeLimiter, user.id, {
+      failClosed: true,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
 
     const { id } = await params;
     if (!isValidUuid(id)) {

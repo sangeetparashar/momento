@@ -44,6 +44,15 @@ export const listVesting = (p?: { role?: 'recipient' | 'sender'; mint?: string }
 export const withdrawVesting = (id: string) =>
   apiService.post<P3.VestingWithdrawResponse>(`/vesting/${id}/withdraw`, {});
 
+/**
+ * Confirm a self-submitted vesting tx (create CLIENT path / withdraw). The client
+ * signs-and-sends itself, then posts the landed signature here so the backend
+ * re-derives funded/withdrawn from chain and transitions the row's status
+ * (PENDING→ACTIVE on a confirmed create; →COMPLETED when fully withdrawn).
+ */
+export const confirmVesting = (id: string, signature: string) =>
+  apiService.post<P3.VestingConfirmResponse>(`/vesting/${id}/confirm`, { signature });
+
 // ── gated §2.1 feeds (not in binding §d; hooks gate on ENV.FEES_FEED_ENABLED) ──
 
 export const getTokenTrades = (

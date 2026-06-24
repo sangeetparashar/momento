@@ -170,6 +170,15 @@ export interface VestingWithdrawResponse {
   claimableBase: string;
 }
 
+/** POST /vesting/[id]/confirm response — backend re-derives state from chain. */
+export interface VestingConfirmResponse {
+  vestingId: string;
+  status: string;
+  releasedBase: string;
+  totalBase: string;
+  claimableBase: string;
+}
+
 // ── §2.1 best-effort feeds (gated by ENV.FEES_FEED_ENABLED) ──
 
 export interface TradeFeedItem {

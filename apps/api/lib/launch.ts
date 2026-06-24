@@ -59,7 +59,7 @@ import {
   ActivationType,
 } from '@meteora-ag/dynamic-bonding-curve-sdk';
 
-import { MOMENTO_FEE, MOMENTO_LAUNCH } from '@momento/shared';
+import { MOMENTO_FEE, MOMENTO_LAUNCH, getUsdcMint } from '@momento/shared';
 import prisma from './prisma';
 import {
   submit,
@@ -572,6 +572,13 @@ export async function launchCreatorToken(input: LaunchTokenInput): Promise<Launc
   const knobs = resolveKnobs(input);
   const chain = 'solana';
 
+  // Resolve the cluster-scoped USDC mint at REQUEST time (G-2): on devnet this
+  // is the devnet USDC mint, NOT the frozen mainnet MOMENTO_FEE.USDC_MINT. Used
+  // for the persisted CreatorToken.quoteMint / TokenFeeConfig.rebateMint /
+  // TokenFundraise.quoteMint AND the DBC createConfig/createPool quote mint, so
+  // every quote vault references a mint that exists on the active cluster.
+  const usdcMint = getUsdcMint();
+
   // ── Step 2: persist PENDING anchor (idempotent on @@unique([userId, chain])) ──
   // If a row already exists for this creator, RESUME from it (re-entrant launch);
   // otherwise create the PENDING anchor + fee config + fundraise in ONE tx.
@@ -604,7 +611,7 @@ export async function launchCreatorToken(input: LaunchTokenInput): Promise<Launc
           transferFeeMaxBaseUnits: knobs.transferFeeMaxBaseUnits,
           transferFeeAuthority: treasury,
           withdrawWithheldAuthority: treasury,
-          quoteMint: MOMENTO_FEE.USDC_MINT,
+          quoteMint: usdcMint,
           feeConfig: {
             create: {
               transferFeeBps: knobs.transferFeeBps,
@@ -615,13 +622,13 @@ export async function launchCreatorToken(input: LaunchTokenInput): Promise<Launc
               feeClaimer: feeClaimerAddressOrNull(),
               creatorFeeWallet: input.creatorWallet,
               withdrawWithheldAuthority: treasury,
-              rebateMint: MOMENTO_FEE.USDC_MINT,
+              rebateMint: usdcMint,
             },
           },
           fundraise: {
             create: {
               status: 'DRAFT',
-              quoteMint: MOMENTO_FEE.USDC_MINT,
+              quoteMint: usdcMint,
               thresholdBaseUnits: knobs.thresholdBaseUnits,
               minContributionBaseUnits: input.fundraise.minContributionBaseUnits ?? null,
               maxContributionBaseUnits: input.fundraise.maxContributionBaseUnits ?? null,
@@ -668,7 +675,7 @@ export async function launchCreatorToken(input: LaunchTokenInput): Promise<Launc
     input,
     configKeypair,
     baseMintKeypair,
-    quoteMint: new PublicKey(MOMENTO_FEE.USDC_MINT),
+    quoteMint: new PublicKey(usdcMint),
     feeClaimer: feeClaimerPubkey(),
     metadataUri: await resolveMetadataUri(input),
   };

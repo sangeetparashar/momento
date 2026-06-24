@@ -54,7 +54,7 @@ import {
 } from '@/lib/solana';
 import { computeRebate, calcFee, rebateToUsdc } from '@/lib/fees';
 import prisma from '@/lib/prisma';
-import { MOMENTO_FEE, MOMENTO_TRADE, PoolType, TradeSide } from '@momento/shared';
+import { MOMENTO_FEE, MOMENTO_TRADE, PoolType, TradeSide, getUsdcMint } from '@momento/shared';
 
 // ════════════════════════════════════════════════════════════════════════════
 //  Errors
@@ -269,9 +269,11 @@ export async function resolveTradeVenue(mint: string): Promise<ResolvedToken> {
   });
   if (!token) throw new TradeError('TOKEN_NOT_FOUND', 'Token not found');
 
+  // Cluster-scoped USDC mint, resolved at request time (devnet vs mainnet).
+  const usdcMint = getUsdcMint();
   const decimals = token.decimals ?? MOMENTO_FEE.USDC_DECIMALS;
   const tokenProgram = (token.tokenProgram ?? 'TOKEN_2022') as 'TOKEN_2022' | 'TOKEN_CLASSIC';
-  const quoteMint = token.quoteMint ?? token.fundraise?.quoteMint ?? MOMENTO_FEE.USDC_MINT;
+  const quoteMint = token.quoteMint ?? token.fundraise?.quoteMint ?? usdcMint;
 
   const transferFeeBps =
     token.feeConfig?.transferFeeBps ??
@@ -280,7 +282,7 @@ export async function resolveTradeVenue(mint: string): Promise<ResolvedToken> {
   const transferFeeMaxBaseUnits = toBigInt(token.transferFeeMaxBaseUnits);
   const rebateTargetBps = token.feeConfig?.rebateTargetBps ?? MOMENTO_FEE.TARGET_IN_APP_BPS;
   // Rebate is ALWAYS the fee-exempt mint (USDC), NEVER the creator token.
-  const rebateMint = token.feeConfig?.rebateMint ?? MOMENTO_FEE.USDC_MINT;
+  const rebateMint = token.feeConfig?.rebateMint ?? usdcMint;
 
   // ── DAMM v2 (post-graduation) ──
   const graduated =
@@ -1152,8 +1154,10 @@ export async function getTokenDetail(mint: string): Promise<TokenDetail | null> 
   });
   if (!token) return null;
 
+  // Cluster-scoped USDC mint, resolved at request time (devnet vs mainnet).
+  const usdcMint = getUsdcMint();
   const decimals = token.decimals ?? MOMENTO_FEE.USDC_DECIMALS;
-  const quoteMint = token.quoteMint ?? token.fundraise?.quoteMint ?? MOMENTO_FEE.USDC_MINT;
+  const quoteMint = token.quoteMint ?? token.fundraise?.quoteMint ?? usdcMint;
 
   // Venue: GRADUATED ⇒ DAMM v2; else (ACTIVE/other) ⇒ DBC curve. Detail is a
   // read model (no throw) — it just reports the current venue.
@@ -1183,7 +1187,7 @@ export async function getTokenDetail(mint: string): Promise<TokenDetail | null> 
     creatorBps: Math.round(lpShareBps * (creatorTradingFeeBps / 10_000)),
     momentoBps: Math.round(lpShareBps * (partnerTradingFeeBps / 10_000)),
     rebateTargetBps: token.feeConfig?.rebateTargetBps ?? MOMENTO_FEE.TARGET_IN_APP_BPS,
-    rebateMint: token.feeConfig?.rebateMint ?? MOMENTO_FEE.USDC_MINT,
+    rebateMint: token.feeConfig?.rebateMint ?? usdcMint,
   };
 
   // USD price + market cap (display). totalSupply is a whole-token base-unit
