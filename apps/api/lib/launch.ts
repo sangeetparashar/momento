@@ -84,7 +84,12 @@ export interface LaunchTokenInput {
   symbol: string;
   description?: string;
   imageUrl?: string;
-  totalSupply: string; // base-unit string; default "1000000000"
+  // WHOLE-token supply (NOT base units). Default "1000000000" = 1B whole tokens
+  // (matches spike-b TOTAL_TOKEN_SUPPLY and the launchTokenSchema default). The
+  // DBC builder takes whole tokens + scales by decimals; we convert to base units
+  // explicitly for persistence. See `resolveKnobs` for the single interpretation
+  // and overflow guard (correctness P1-1).
+  totalSupply: string; // whole-token string; default "1000000000"
   decimals?: number; // 6..9; default 9
   transferFeeBps?: number; // 300..500; default MOMENTO_FEE.DEFAULT_TRANSFER_FEE_BPS
   transferFeeMaxBaseUnits?: string;
@@ -128,8 +133,13 @@ export interface LaunchContext {
 
 interface ResolvedKnobs {
   decimals: number;
-  totalSupply: string; // base-unit string
+  // Single interpretation (correctness P1-1): the request `totalSupply` is WHOLE
+  // tokens. `totalSupplyWhole` feeds the SDK builder (which scales by decimals);
+  // `totalSupplyBaseUnits` is the base-unit string we persist + use for the
+  // transfer-fee max default. The two never disagree because both derive from the
+  // same whole-token value.
   totalSupplyWhole: number; // whole tokens for the SDK builder (it scales by decimals)
+  totalSupplyBaseUnits: string; // whole * 10^decimals, persisted on CreatorToken.totalSupply
   transferFeeBps: number;
   transferFeeMaxBaseUnits: string;
   creatorTradingFeeBps: number;
@@ -180,22 +190,35 @@ function toTokenDecimalEnum(decimals: number): number {
 /** Resolve every knob + default exactly as D-launch §3 step 1. */
 function resolveKnobs(input: LaunchTokenInput): ResolvedKnobs {
   const decimals = input.decimals ?? MOMENTO_LAUNCH.DEFAULT_DECIMALS;
-  const totalSupply = input.totalSupply || MOMENTO_LAUNCH.DEFAULT_TOTAL_SUPPLY;
+  const totalSupplyRaw = input.totalSupply || MOMENTO_LAUNCH.DEFAULT_TOTAL_SUPPLY;
 
-  // The SDK builder takes WHOLE tokens and scales by tokenBaseDecimal internally
-  // (spike-b TOTAL_TOKEN_SUPPLY = 1_000_000_000 whole). Our `totalSupply` is a
-  // base-unit string (schema regex /^[1-9]\d*$/, schema default "1000000000").
-  // We treat the schema default as whole tokens (matches spike-b), and convert.
-  const totalSupplyBig = BigInt(totalSupply);
-  const totalSupplyWhole = Number(totalSupplyBig);
+  // ── correctness P1-1: ONE consistent interpretation of totalSupply ──────────
+  // `totalSupply` is WHOLE tokens (schema regex /^[1-9]\d*$/, default "1000000000"
+  // = 1B whole, matching spike-b TOTAL_TOKEN_SUPPLY which is whole). The DBC
+  // builder takes whole tokens and scales by tokenBaseDecimal internally, so we
+  // pass `totalSupplyWhole` there; we derive the base-unit string ONCE for
+  // persistence + the transfer-fee max default. All bigint to avoid Number()
+  // overflow on a large supply.
+  const totalSupplyWholeBig = BigInt(totalSupplyRaw);
+
+  // The SDK builder's totalTokenSupply is a JS number; reject a whole-token supply
+  // that cannot be represented exactly (would silently lose precision / Infinity).
+  if (totalSupplyWholeBig > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new SolanaTxError(
+      'SIMULATION_FAILED',
+      `totalSupply ${totalSupplyRaw} (whole tokens) exceeds Number.MAX_SAFE_INTEGER; ` +
+        `pass a whole-token supply (NOT base units).`,
+    );
+  }
+  const totalSupplyWhole = Number(totalSupplyWholeBig);
+  const totalSupplyBaseUnits = (totalSupplyWholeBig * TEN ** BigInt(decimals)).toString();
 
   const transferFeeBps = input.transferFeeBps ?? MOMENTO_FEE.DEFAULT_TRANSFER_FEE_BPS;
 
   // maxFee: default to a NON-BINDING cap so the bps rate governs (spike-a sets
-  // MAX_FEE deliberately high). Default = totalSupply base units (whole supply
-  // worth — never binds for any single transfer). D-launch §3 step 1.
-  const transferFeeMaxBaseUnits =
-    input.transferFeeMaxBaseUnits ?? (totalSupplyBig * TEN ** BigInt(decimals)).toString();
+  // MAX_FEE deliberately high). Default = full supply in base units (never binds
+  // for any single transfer). D-launch §3 step 1.
+  const transferFeeMaxBaseUnits = input.transferFeeMaxBaseUnits ?? totalSupplyBaseUnits;
 
   const creatorTradingFeeBps = input.creatorTradingFeeBps ?? MOMENTO_FEE.DEFAULT_CREATOR_TRADING_FEE_BPS;
   const partnerTradingFeeBps = input.partnerTradingFeeBps ?? MOMENTO_FEE.DEFAULT_PARTNER_TRADING_FEE_BPS;
@@ -206,8 +229,8 @@ function resolveKnobs(input: LaunchTokenInput): ResolvedKnobs {
 
   return {
     decimals,
-    totalSupply,
     totalSupplyWhole,
+    totalSupplyBaseUnits,
     transferFeeBps,
     transferFeeMaxBaseUnits,
     creatorTradingFeeBps,
@@ -287,10 +310,20 @@ function buildTokenTransferFeeConfig(knobs: ResolvedKnobs, authorities: {
   transferFeeConfigAuthority: PublicKey;
   withdrawWithheldAuthority: PublicKey;
 }): Record<string, unknown> {
-  const maxFee = new BN(knobs.transferFeeMaxBaseUnits);
+  const maximumFee = new BN(knobs.transferFeeMaxBaseUnits);
+  const maxFee = maximumFee; // alias (same BN) — see hedge note below
+  // SDK P1-1: align the transfer-fee MAX field name to spike-a's VERIFIED
+  // spl-token arg `maximumFee` (createInitializeTransferFeeConfigInstruction(...,
+  // transferFeeBasisPoints, maximumFee, programId), spike-a L50-52). We emit
+  // `maximumFee` as the primary MAX key on BOTH shapes and keep `maxFee` as an
+  // extra alias on the nested shape (the spike-b .d.ts did NOT enumerate these
+  // fields, so the SDK's own field name is still unconfirmed offline — hence the
+  // BLOCKER TODO below). The verified spl-token name is `maximumFee`, so it is the
+  // best candidate if the DBC SDK mirrors the on-chain field.
   const transferFeeConfig = {
     transferFeeBasisPoints: knobs.transferFeeBps,
-    maxFee, // BN (base units), matches spike-a maximumFee
+    maximumFee, // BN (base units) — spike-a VERIFIED spl-token arg name
+    maxFee, // alias hedge (some SDK shapes use maxFee) — harmless if ignored
     transferFeeConfigAuthority: authorities.transferFeeConfigAuthority,
     withdrawWithheldAuthority: authorities.withdrawWithheldAuthority,
   };
@@ -299,7 +332,7 @@ function buildTokenTransferFeeConfig(knobs: ResolvedKnobs, authorities: {
     transferFeeConfig,
     // Flat-field shape (fallback guess) — harmless if the SDK ignores it:
     transferFeeBasisPoints: knobs.transferFeeBps,
-    transferFeeMaxFee: maxFee,
+    maximumFee, // spike-a VERIFIED name (was the invented `transferFeeMaxFee`)
     transferFeeConfigAuthority: authorities.transferFeeConfigAuthority,
     withdrawWithheldAuthority: authorities.withdrawWithheldAuthority,
   };
@@ -458,6 +491,14 @@ function migrationFeeOptionFromBps(bps: number): number {
     default:
       // Default tier (1% = FixedBps100) for any unmapped value. Graduation reads
       // TokenFundraise.migrationFeeBps to pick the DAMM-v2 migration-fee address.
+      // LOCKSTEP (P2-5/SDK P1-8): the bps baked into the DBC config HERE and the
+      // bps persisted on TokenFundraise.migrationFeeBps MUST resolve to the SAME
+      // MigrationFeeOption tier — graduation.ts:migrationFeeOptionFor uses the
+      // identical {25,30,100,200,400,600}→tier table. Launch only ever bakes
+      // MOMENTO_LAUNCH.DEFAULT_MIGRATION_FEE_BPS (100), so they agree today; if a
+      // future request knob lets migrationFeeBps vary, constrain it to the tier set
+      // at the schema so this default branch can never silently pick a DIFFERENT
+      // tier than the one persisted/realized at graduation.
       return MigrationFeeOption.FixedBps100;
   }
 }
@@ -551,7 +592,11 @@ export async function launchCreatorToken(input: LaunchTokenInput): Promise<Launc
           description: input.description ?? null,
           imageUrl: input.imageUrl ?? null,
           decimals: knobs.decimals,
-          totalSupply: knobs.totalSupply,
+          // Persist BASE units (whole * 10^decimals) so CreatorToken.totalSupply
+          // is on the same scale as circulatingSupply (base units, CONTRACTS §f /
+          // §d.2) and trade's market-cap math. The request supply is whole tokens;
+          // we convert once in resolveKnobs (correctness P1-1).
+          totalSupply: knobs.totalSupplyBaseUnits,
           status: 'PENDING',
           poolType: 'METEORA_DBC',
           tokenProgram: 'TOKEN_2022',

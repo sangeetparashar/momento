@@ -271,6 +271,20 @@ export async function graduateToken(tokenId: string): Promise<GraduationResult> 
     // landed in a prior tick — re-run persistence ONLY (recovery), never migrate.
     if (fundraise.finalizeSignature) {
       const recovered = await recoverFromChain(tokenId, token);
+      // (SEC P1-2 / fix #4) Do NOT finalize unless the LP lock is VERIFIED for both
+      // legs. An unverified or unlocked leg keeps the row FINALIZING (lease expires
+      // → next tick retries); we never synthesize a locked/COMPLETED state.
+      if (!isLockSatisfied(recovered)) {
+        return {
+          ...base,
+          outcome: 'retried',
+          error: lockBreadcrumb('recover', recovered),
+          migrateSignature: fundraise.finalizeSignature,
+          dammV2Pool: recovered.dammV2Pool ?? undefined,
+          partnerPositionNftMint: recovered.partnerNftMint ?? undefined,
+          creatorPositionNftMint: recovered.creatorNftMint ?? undefined,
+        };
+      }
       await finalize(tokenId, fundraise.finalizeSignature, recovered.dammV2Pool);
       return {
         ...base,
@@ -284,6 +298,24 @@ export async function graduateToken(tokenId: string): Promise<GraduationResult> 
 
     // (§4.3) Migrate + realize + lock + persist both LpPositions.
     const done = await migrateAndPersist(tokenId, token, fundraise);
+
+    // (SEC P1-2 / fix #4) Gate finalize on a REAL migrate signature AND a VERIFIED
+    // lock for both legs. The already-migrated recovery branch can return a null
+    // signature (no sig of our own) — that alone keeps the row FINALIZING. We never
+    // mark COMPLETED/GRADUATED on a fabricated signature or an unverified lock.
+    if (!done.migrateSignature || !isLockSatisfied(done)) {
+      return {
+        ...base,
+        outcome: 'retried',
+        error: !done.migrateSignature
+          ? 'no migrate signature resolved (already-migrated recovery); kept FINALIZING'
+          : lockBreadcrumb('migrate', done),
+        migrateSignature: done.migrateSignature ?? undefined,
+        dammV2Pool: done.dammV2Pool ?? undefined,
+        partnerPositionNftMint: done.partnerNftMint ?? undefined,
+        creatorPositionNftMint: done.creatorNftMint ?? undefined,
+      };
+    }
 
     // (§4.2.6) Finalize: COMPLETED + finalizeSignature + GRADUATED + DAMM v2 pool.
     await finalize(tokenId, done.migrateSignature, done.dammV2Pool);
@@ -329,10 +361,16 @@ async function claimLease(fundraiseId: string): Promise<boolean> {
 // ── On-chain migration + LP realization (reuse spike-b verbatim) (§4.3) ──────
 
 interface MigrateOutcome {
-  migrateSignature: string;
+  migrateSignature: string | null;
   dammV2Pool: string | null;
   partnerNftMint: string | null;
   creatorNftMint: string | null;
+  // Per-leg verified lock state + whether the verification itself succeeded.
+  // `finalize` is gated on `lockVerified && partnerLocked && creatorLocked`
+  // (SEC P1-2 / fix #4): an unverified or unlocked leg keeps the row FINALIZING.
+  partnerLocked: boolean;
+  creatorLocked: boolean;
+  lockVerified: boolean;
 }
 
 /**
@@ -384,16 +422,21 @@ async function migrateAndPersist(
     // (§4.4) "already migrated" → the managed keeper beat us. Recover from chain.
     if (isAlreadyMigrated(err)) {
       const recovered = await recoverFromChain(tokenId, token);
-      // We have no migrate signature of our own; use the existing finalizeSignature
-      // if present, else a deterministic marker so finalize() can proceed. The
-      // existing-pool path records positions from on-chain state.
+      // We have NO migrate signature of our own. Use the existing finalizeSignature
+      // if present, else NULL — never a synthetic `external-migrate:` placeholder
+      // in the @unique column (correctness/SEC P1-6/P1-4). finalize() is gated on a
+      // REAL finalizeSignature + verified lock, so a null sig here keeps the row
+      // FINALIZING for the next tick rather than finalizing on a fabricated value.
       const existing = await prisma.tokenFundraise.findUnique({ where: { tokenId } });
-      const sig = existing?.finalizeSignature ?? `external-migrate:${tokenId}`;
+      const sig = existing?.finalizeSignature ?? null;
       return {
         migrateSignature: sig,
         dammV2Pool: recovered.dammV2Pool,
         partnerNftMint: recovered.partnerNftMint,
         creatorNftMint: recovered.creatorNftMint,
+        partnerLocked: recovered.partnerLocked,
+        creatorLocked: recovered.creatorLocked,
+        lockVerified: recovered.lockVerified,
       };
     }
     throw err;
@@ -452,6 +495,13 @@ async function migrateAndPersist(
   const partnerNftMint = partnerNft.publicKey.toBase58();
   const creatorNftMint = creatorNft.publicKey.toBase58();
 
+  // SEC P1-2 / fix #4: VERIFY the on-chain lock per leg; persist the honest state.
+  // Do NOT blindly mark locked:true. `finalize` (the caller via graduateToken)
+  // refuses to finalize unless BOTH legs verify locked, so an unverified lock
+  // leaves the row FINALIZING for the next tick rather than synthesizing a locked
+  // state.
+  const lockState = await verifyLockState(cpAmm, dammV2Pool, payer.publicKey, creatorWallet);
+
   await persistLpPositions({
     tokenId,
     poolAddress: dammPoolStr,
@@ -460,6 +510,8 @@ async function migrateAndPersist(
     partnerNftMint,
     creatorNftMint,
     migrateSignature,
+    partnerLocked: lockState.partnerLocked,
+    creatorLocked: lockState.creatorLocked,
   });
 
   return {
@@ -467,6 +519,9 @@ async function migrateAndPersist(
     dammV2Pool: dammV2Pool ? dammV2Pool.toBase58() : null,
     partnerNftMint,
     creatorNftMint,
+    partnerLocked: lockState.partnerLocked,
+    creatorLocked: lockState.creatorLocked,
+    lockVerified: lockState.verified,
   };
 }
 
@@ -510,9 +565,17 @@ function isAlreadyMigrated(err: unknown): boolean {
 }
 
 /**
- * Lock any LP leg that the migrate did not already perma-lock (spike-b STEP 5).
- * Idempotent: `isPermanentLockedPosition` check first, so a re-tick that finds
- * the positions already locked does nothing (D-graduation §5 — "retry lock ix").
+ * Best-effort: attempt to lock any LP leg that the migrate did not already
+ * perma-lock (spike-b STEP 5). Idempotent: `isPermanentLockedPosition` check
+ * first, so a re-tick that finds the positions already locked does nothing
+ * (D-graduation §5 — "retry lock ix").
+ *
+ * NOTE (SEC P1-2 / fix #4): this is the ATTEMPT step only. The authoritative
+ * finalize GATE is `verifyLockState` + `isLockSatisfied` in graduateToken — if a
+ * leg cannot be confirmed locked here (e.g. the explicit lock ix is still a
+ * TODO, or a creator leg the keeper cannot sign), the row is NOT finalized; it
+ * stays FINALIZING and retries. So a no-op here can never produce a COMPLETED
+ * token with an unlocked LP.
  *
  * TODO(verify-devnet): the exact permanentLockPosition arg shape
  * ({ owner, position, positionNftAccount, pool, unlockedLiquidity }) and the
@@ -561,6 +624,103 @@ async function lockIfNeeded(
 }
 
 /**
+ * Read whether a single owner's LP leg in `pool` is permanently locked
+ * (SEC P1-2 / fix #4 building block). Returns:
+ *   { locked, read } — `read=true` only when the position reader actually returned
+ *   a state we could classify; on any reader error `read=false` (the lock is
+ *   UNVERIFIED, not "unlocked"). The caller must NOT finalize on `read=false`.
+ *
+ * TODO(verify-devnet): `getUserPositionByPool` element shape + the
+ * `isPermanentLockedPosition(positionState)` classifier (spike-b STEP 5 / §10.2).
+ */
+async function isLegLocked(
+  cpAmm: any,
+  pool: PublicKey,
+  owner: PublicKey,
+): Promise<{ locked: boolean; read: boolean }> {
+  try {
+    const positions = await cpAmm.getUserPositionByPool(pool, owner);
+    if (!positions || positions.length === 0) {
+      // No position for this owner: nothing to lock for this leg. Treat as a
+      // successful read (verified) reporting "not locked" — the caller decides
+      // whether an absent leg is acceptable for finalize.
+      return { locked: false, read: true };
+    }
+    // Locked iff EVERY position the owner holds in this pool is perma-locked.
+    const allLocked = positions.every((p: any) => cpAmm.isPermanentLockedPosition(p.positionState));
+    return { locked: allLocked, read: true };
+  } catch {
+    return { locked: false, read: false }; // UNVERIFIED — keep FINALIZING
+  }
+}
+
+/**
+ * Verify the on-chain lock state of BOTH LP legs (SEC P1-2 / fix #4). `verified`
+ * is true only when we successfully READ both legs (a missing pool or a reader
+ * error leaves `verified=false`, so the caller keeps the row FINALIZING rather
+ * than synthesizing a locked state). The creator leg is treated as verified-locked
+ * when the creator wallet is unknown (no leg to check) so the common server-only
+ * path is not blocked by a missing creator wallet — but a present creator wallet
+ * whose leg cannot be read leaves `verified=false`.
+ */
+async function verifyLockState(
+  cpAmm: any,
+  pool: PublicKey | null,
+  partnerOwner: PublicKey,
+  creatorWallet: string,
+): Promise<{ partnerLocked: boolean; creatorLocked: boolean; verified: boolean }> {
+  if (!pool) return { partnerLocked: false, creatorLocked: false, verified: false };
+
+  const partner = await isLegLocked(cpAmm, pool, partnerOwner);
+
+  let creator: { locked: boolean; read: boolean };
+  if (creatorWallet) {
+    try {
+      creator = await isLegLocked(cpAmm, pool, new PublicKey(creatorWallet));
+    } catch {
+      creator = { locked: false, read: false }; // bad wallet string → unverified
+    }
+  } else {
+    // No creator wallet to check (no creator leg) — verified, not locked-relevant.
+    creator = { locked: true, read: true };
+  }
+
+  return {
+    partnerLocked: partner.locked,
+    creatorLocked: creator.locked,
+    verified: partner.read && creator.read,
+  };
+}
+
+/**
+ * The finalize gate (SEC P1-2 / fix #4): the LP lock is satisfied ONLY when we
+ * actually verified both legs AND both verified perma-locked. An unverified read
+ * (readers down) or a leg that read as unlocked both return false → the caller
+ * keeps the row FINALIZING and retries on the next tick.
+ */
+function isLockSatisfied(s: {
+  partnerLocked: boolean;
+  creatorLocked: boolean;
+  lockVerified: boolean;
+}): boolean {
+  return s.lockVerified && s.partnerLocked && s.creatorLocked;
+}
+
+/** Human-readable breadcrumb explaining WHY finalize was deferred (ops/monitoring). */
+function lockBreadcrumb(
+  phase: 'migrate' | 'recover',
+  s: { partnerLocked: boolean; creatorLocked: boolean; lockVerified: boolean },
+): string {
+  if (!s.lockVerified) {
+    return `LP lock UNVERIFIED after ${phase} (position readers unavailable); kept FINALIZING for retry`;
+  }
+  const legs: string[] = [];
+  if (!s.partnerLocked) legs.push('partner');
+  if (!s.creatorLocked) legs.push('creator');
+  return `LP leg(s) NOT perma-locked after ${phase}: ${legs.join('+')}; kept FINALIZING (do not finalize unlocked LP)`;
+}
+
+/**
  * Upsert BOTH LpPosition rows (PARTNER + CREATOR). Idempotent via
  * @@unique([tokenId, owner]) and the @unique positionNftMint — a re-run upserts
  * the same two rows (D-graduation §4.3).
@@ -573,15 +733,30 @@ async function lockIfNeeded(
  * authoritative migrate signature for BOTH legs lives on
  * TokenFundraise.finalizeSignature (also @unique). This preserves idempotency and
  * the one-tx-creates-both semantics without violating the DB constraint.
+ *
+ * NULL-not-placeholder (correctness/SEC P1-6/P1-4): `positionNftMint` and
+ * `createSignature` are BOTH @unique AND nullable. When the real on-chain value
+ * is unknown (recovery with unavailable readers, or no migrate signature of our
+ * own), we leave the column NULL — NEVER a synthetic `recovered-*` /
+ * `external-migrate:*` string. Two NULLs do not collide on a unique index;
+ * placeholder strings would pollute the audit trail and could collide / block the
+ * real value from ever being recorded. On update we only WRITE a field when a real
+ * value is provided, so a later tick that resolves the true mint/sig backfills it
+ * without clobbering a previously-resolved real value with null.
+ *
+ * `locked` is passed through (NOT hard-coded true) so an unverified-lock leg is
+ * persisted honestly as locked:false (SEC P1-2 / fix #4).
  */
 async function persistLpPositions(args: {
   tokenId: string;
   poolAddress: string;
   partnerWallet: string;
   creatorWallet: string;
-  partnerNftMint: string;
-  creatorNftMint: string;
-  migrateSignature: string;
+  partnerNftMint: string | null;
+  creatorNftMint: string | null;
+  migrateSignature: string | null;
+  partnerLocked: boolean;
+  creatorLocked: boolean;
 }): Promise<void> {
   const {
     tokenId,
@@ -591,10 +766,19 @@ async function persistLpPositions(args: {
     partnerNftMint,
     creatorNftMint,
     migrateSignature,
+    partnerLocked,
+    creatorLocked,
   } = args;
 
-  // PARTNER row carries createSignature (canonical, @unique-safe). CREATOR row
-  // omits it (shares the migrate via TokenFundraise.finalizeSignature).
+  // Only include a @unique column in the write when we have a REAL value; a null
+  // is left as-is on update (don't overwrite a previously-resolved value with null,
+  // don't write a placeholder into a @unique column).
+  const partnerNftField = partnerNftMint ? { positionNftMint: partnerNftMint } : {};
+  const creatorNftField = creatorNftMint ? { positionNftMint: creatorNftMint } : {};
+  // PARTNER row carries createSignature (canonical, @unique-safe) ONLY when the
+  // migrate signature is a real signature (not null / not a placeholder).
+  const createSigField = migrateSignature ? { createSignature: migrateSignature } : {};
+
   await prisma.lpPosition.upsert({
     where: { tokenId_owner: { tokenId, owner: 'PARTNER' } },
     create: {
@@ -603,16 +787,17 @@ async function persistLpPositions(args: {
       owner: 'PARTNER',
       ownerWallet: partnerWallet,
       poolAddress,
-      positionNftMint: partnerNftMint,
-      locked: true,
-      lockedUntil: null, // perma-locked
-      createSignature: migrateSignature,
+      locked: partnerLocked,
+      lockedUntil: null, // perma-locked (when locked)
+      ...partnerNftField,
+      ...createSigField,
     },
     update: {
       ownerWallet: partnerWallet,
       poolAddress,
-      positionNftMint: partnerNftMint,
-      locked: true,
+      locked: partnerLocked,
+      ...partnerNftField,
+      ...createSigField,
     },
   });
 
@@ -624,16 +809,16 @@ async function persistLpPositions(args: {
       owner: 'CREATOR',
       ownerWallet: creatorWallet,
       poolAddress,
-      positionNftMint: creatorNftMint,
-      locked: true,
-      lockedUntil: null, // perma-locked
+      locked: creatorLocked,
+      lockedUntil: null, // perma-locked (when locked)
+      ...creatorNftField,
       // createSignature intentionally omitted — see DEVIATION above (@unique).
     },
     update: {
       ownerWallet: creatorWallet,
       poolAddress,
-      positionNftMint: creatorNftMint,
-      locked: true,
+      locked: creatorLocked,
+      ...creatorNftField,
     },
   });
 }
@@ -682,11 +867,20 @@ async function recoverFromChain(
   dammV2Pool: string | null;
   partnerNftMint: string | null;
   creatorNftMint: string | null;
+  partnerLocked: boolean;
+  creatorLocked: boolean;
+  lockVerified: boolean;
 }> {
   void token;
   let dammV2Pool: string | null = null;
   let partnerNftMint: string | null = null;
   let creatorNftMint: string | null = null;
+  let partnerLocked = false;
+  let creatorLocked = false;
+  // `lockVerified` flips true only when we actually READ the lock state for both
+  // legs. If the readers are unavailable we leave it false so the caller
+  // (graduateToken/finalize) does NOT finalize on an unverified lock (SEC P1-2).
+  let lockVerified = false;
 
   try {
     const connection = getConnection();
@@ -719,28 +913,47 @@ async function recoverFromChain(
         }
       }
 
+      // Recovery reads positions from chain; VERIFY per-leg lock state so a
+      // recovered leg is not blindly marked locked (SEC P1-2 / fix #4). We treat
+      // the lock as verified only if BOTH reads succeeded.
+      const lock = await verifyLockState(
+        cpAmm,
+        poolPk,
+        payer.publicKey,
+        creatorWallet,
+      );
+      partnerLocked = lock.partnerLocked;
+      creatorLocked = lock.creatorLocked;
+      lockVerified = lock.verified;
+
       // Persist what we resolved. Re-uses the upsert (idempotent on
       // @@unique([tokenId, owner])). Existing rows from a partial prior attempt
-      // are preserved/updated; a missing mint leaves that field as-is on update.
+      // are preserved/updated; an unknown mint/sig is passed as NULL (NOT a
+      // placeholder) so it never pollutes / collides on the @unique columns
+      // (correctness/SEC P1-6/P1-4). A later tick that resolves the real values
+      // backfills them. We only WRITE the real finalizeSignature; a missing one
+      // stays null (no `external-migrate:` placeholder).
       const existing = await prisma.tokenFundraise.findUnique({ where: { tokenId } });
-      const sig = existing?.finalizeSignature ?? `external-migrate:${tokenId}`;
+      const sig = existing?.finalizeSignature ?? null;
       await persistLpPositions({
         tokenId,
         poolAddress: dammV2Pool ?? '',
         partnerWallet,
         creatorWallet,
-        partnerNftMint: partnerNftMint ?? `recovered-partner:${tokenId}`,
-        creatorNftMint: creatorNftMint ?? `recovered-creator:${tokenId}`,
-        migrateSignature: sig,
+        partnerNftMint, // real mint or null (no placeholder)
+        creatorNftMint, // real mint or null (no placeholder)
+        migrateSignature: sig, // real finalizeSignature or null
+        partnerLocked,
+        creatorLocked,
       });
     }
   } catch {
-    // Best-effort recovery: if the SDK/readers are unavailable, finalize still
-    // proceeds from the recorded finalizeSignature (the on-chain truth that the
-    // migrate landed). The fee-claim cron reconciles positions later.
+    // Best-effort recovery: if the SDK/readers are unavailable, the resolved
+    // identifiers stay null and lockVerified stays false. The caller keeps the row
+    // FINALIZING (no finalize on unverified/synthetic state) for the next tick.
   }
 
-  return { dammV2Pool, partnerNftMint, creatorNftMint };
+  return { dammV2Pool, partnerNftMint, creatorNftMint, partnerLocked, creatorLocked, lockVerified };
 }
 
 /** Pull a position NFT mint from a getUserPositionByPool element (best-effort). */
@@ -883,6 +1096,15 @@ export async function runGraduationSweep(opts?: { limit?: number }): Promise<{
     if (result.outcome === 'failed') {
       // eslint-disable-next-line no-console
       console.error('graduation: token failed', {
+        tokenId: result.tokenId,
+        error: result.error,
+      });
+    } else if (result.outcome === 'retried' && result.error) {
+      // A 'retried' with an error is a DEFERRED finalize (unverified/unlocked LP or
+      // no resolved migrate signature — SEC P1-2 / fix #4). Surface it so a token
+      // stuck deferring past N ticks alerts (it must NOT silently finalize unlocked).
+      // eslint-disable-next-line no-console
+      console.warn('graduation: finalize deferred', {
         tokenId: result.tokenId,
         error: result.error,
       });
