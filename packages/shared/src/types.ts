@@ -27,6 +27,75 @@ export enum TokenStatus {
 export enum PoolType {
   BONDING_CURVE = 'BONDING_CURVE',
   RAYDIUM = 'RAYDIUM',
+  METEORA_DBC = 'METEORA_DBC',
+  METEORA_DAMM_V2 = 'METEORA_DAMM_V2',
+}
+
+// ── Phase 2 token-economy enums (mirror prisma/schema.prisma §a.1) ──
+export enum TokenProgram {
+  TOKEN_CLASSIC = 'TOKEN_CLASSIC',
+  TOKEN_2022 = 'TOKEN_2022',
+}
+
+export enum FundraiseStatus {
+  DRAFT = 'DRAFT',
+  ACTIVE = 'ACTIVE',
+  THRESHOLD_MET = 'THRESHOLD_MET',
+  FINALIZING = 'FINALIZING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED',
+}
+
+export enum FeeSource {
+  IN_APP = 'IN_APP',
+  EXTERNAL = 'EXTERNAL',
+}
+
+export enum TradeSide {
+  BUY = 'BUY',
+  SELL = 'SELL',
+}
+
+export enum FeeEventType {
+  TRANSFER_FEE_WITHHELD = 'TRANSFER_FEE_WITHHELD',
+  PARTNER_TRADING_FEE = 'PARTNER_TRADING_FEE',
+  CREATOR_TRADING_FEE = 'CREATOR_TRADING_FEE',
+  LOCKED_LP_FEE = 'LOCKED_LP_FEE',
+  SURPLUS = 'SURPLUS',
+  REBATE = 'REBATE',
+  CLAIMED = 'CLAIMED',
+}
+
+export enum FeeRecipient {
+  PLATFORM = 'PLATFORM',
+  CREATOR = 'CREATOR',
+  PROTOCOL = 'PROTOCOL',
+  TRADER = 'TRADER',
+}
+
+export enum LpProvider {
+  METEORA_DAMM_V2 = 'METEORA_DAMM_V2',
+  METEORA_DAMM_V1 = 'METEORA_DAMM_V1',
+  METEORA_DLMM = 'METEORA_DLMM',
+}
+
+export enum LpOwner {
+  PARTNER = 'PARTNER',
+  CREATOR = 'CREATOR',
+}
+
+export enum VestingProvider {
+  STREAMFLOW = 'STREAMFLOW',
+  JUP_LOCK = 'JUP_LOCK',
+}
+
+export enum VestingStatus {
+  PENDING = 'PENDING',
+  ACTIVE = 'ACTIVE',
+  PAUSED = 'PAUSED',
+  COMPLETED = 'COMPLETED',
+  CANCELED = 'CANCELED',
 }
 
 export enum PostType {
@@ -96,6 +165,158 @@ export interface CreatorToken {
   deployTxSignature?: string;
   deployedAt?: string;
   graduatedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Phase 2 token-economy interfaces (mirror prisma/schema.prisma §a.4–a.10) ──
+// Money / on-chain amounts are base-unit strings for precision; USD/display = number.
+
+export interface TokenFeeConfig {
+  id: string;
+  tokenId: string;
+  transferFeeBps: number;
+  rebateTargetBps: number;
+  creatorTradingFeeBps: number;
+  partnerTradingFeeBps: number;
+  protocolFeeBps: number;
+  feeClaimer?: string;
+  creatorFeeWallet?: string;
+  rebateWallet?: string;
+  withdrawWithheldAuthority?: string;
+  rebateMint?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Trade {
+  id: string;
+  tokenId: string;
+  userId?: string;
+  traderWallet: string;
+  side: TradeSide;
+  source: FeeSource;
+  venue: PoolType;
+  intentId?: string;
+  signature?: string;
+  amountInBaseUnits: string;
+  amountInMint: string;
+  amountOutBaseUnits: string;
+  amountOutMint: string;
+  priceUsd?: number;
+  priceTs?: string;
+  transferFeeBaseUnits: string;
+  feeBps?: number;
+  rebateBaseUnits: string;
+  rebateMint?: string;
+  rebatePaid: boolean;
+  rebateSignature?: string;
+  poolAddress?: string;
+  blockTime?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FeeEvent {
+  id: string;
+  tokenId: string;
+  tradeId?: string;
+  type: FeeEventType;
+  source: FeeSource;
+  recipient: FeeRecipient;
+  recipientWallet?: string;
+  grossBaseUnits: string;
+  feeBaseUnits: string;
+  netBaseUnits: string;
+  amountMint: string;
+  amountUsd?: number;
+  feeBps?: number;
+  signature?: string;
+  internalRef?: string;
+  claimed: boolean;
+  claimedAt?: string;
+  claimSignature?: string;
+  blockTime?: string;
+  createdAt: string;
+}
+
+export interface TokenFundraise {
+  id: string;
+  tokenId: string;
+  status: FundraiseStatus;
+  quoteMint: string;
+  thresholdBaseUnits: string;
+  raisedBaseUnits: string;
+  contributorCount: number;
+  minContributionBaseUnits?: string;
+  maxContributionBaseUnits?: string;
+  partnerLpBps?: number;
+  creatorLpBps?: number;
+  partnerLockedLpBps?: number;
+  creatorLockedLpBps?: number;
+  migrationFeeBps?: number;
+  leftoverReceiver?: string;
+  startsAt?: string;
+  endsAt?: string;
+  finalizedAt?: string;
+  finalizeSignature?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FundraiseContribution {
+  id: string;
+  fundraiseId: string;
+  tokenId: string;
+  userId?: string;
+  walletAddress: string;
+  amountBaseUnits: string;
+  quoteMint: string;
+  signature: string;
+  refunded: boolean;
+  refundSignature?: string;
+  blockTime?: string;
+  createdAt: string;
+}
+
+export interface LpPosition {
+  id: string;
+  tokenId: string;
+  provider: LpProvider;
+  owner: LpOwner;
+  ownerWallet: string;
+  poolAddress: string;
+  positionAddress?: string;
+  positionNftMint?: string;
+  lpMint?: string;
+  baseReserveBaseUnits?: string;
+  quoteReserveBaseUnits?: string;
+  liquidity?: string;
+  locked: boolean;
+  lockedUntil?: string;
+  createSignature?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VestingSchedule {
+  id: string;
+  tokenId: string;
+  beneficiaryUserId?: string;
+  beneficiaryWallet: string;
+  provider: VestingProvider;
+  streamId?: string;
+  totalBaseUnits: string;
+  releasedBaseUnits: string;
+  tokenMint: string;
+  cliffSeconds: number;
+  durationSeconds: number;
+  startAt: string;
+  cliffAt?: string;
+  endAt?: string;
+  status: VestingStatus;
+  createSignature?: string;
+  cancelSignature?: string;
   createdAt: string;
   updatedAt: string;
 }

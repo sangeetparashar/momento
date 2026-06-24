@@ -61,6 +61,11 @@ model User {
   savedPosts SavedPost[]
   creatorTokens CreatorToken[]
 
+  // ── Phase 2 token-economy back-relations ──
+  trades                 Trade[]
+  fundraiseContributions FundraiseContribution[]
+  vestingSchedules       VestingSchedule[]
+
   @@index([role])
   @@index([locationLat, locationLng])
   @@map("users")
@@ -191,6 +196,74 @@ enum TokenStatus {
 enum PoolType {
   BONDING_CURVE
   RAYDIUM
+  METEORA_DBC
+  METEORA_DAMM_V2
+}
+
+enum TokenProgram {
+  TOKEN_CLASSIC // legacy classic SPL (Tokenkeg…)
+  TOKEN_2022 // Token-2022 (TokenzQd…) — all new launches
+}
+
+enum FundraiseStatus {
+  DRAFT
+  ACTIVE
+  THRESHOLD_MET
+  FINALIZING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum FeeSource {
+  IN_APP
+  EXTERNAL
+}
+
+enum TradeSide {
+  BUY
+  SELL
+}
+
+enum FeeEventType {
+  TRANSFER_FEE_WITHHELD
+  PARTNER_TRADING_FEE
+  CREATOR_TRADING_FEE
+  LOCKED_LP_FEE
+  SURPLUS
+  REBATE
+  CLAIMED
+}
+
+enum FeeRecipient {
+  PLATFORM
+  CREATOR
+  PROTOCOL
+  TRADER
+}
+
+enum LpProvider {
+  METEORA_DAMM_V2
+  METEORA_DAMM_V1
+  METEORA_DLMM
+}
+
+enum LpOwner {
+  PARTNER
+  CREATOR
+}
+
+enum VestingProvider {
+  STREAMFLOW
+  JUP_LOCK
+}
+
+enum VestingStatus {
+  PENDING
+  ACTIVE
+  PAUSED
+  COMPLETED
+  CANCELED
 }
 
 model CreatorToken {
@@ -215,11 +288,31 @@ model CreatorToken {
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
+  // ── Phase 2 token-economy fields ──
+  tokenProgram              TokenProgram @default(TOKEN_2022)
+  transferFeeBps            Int?
+  transferFeeMaxBaseUnits   String?
+  transferFeeAuthority      String?
+  withdrawWithheldAuthority String?
+  quoteMint                 String?
+  dbcConfigKey              String?
+  dbcPoolAddress            String?
+
   creator User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // ── Phase 2 token-economy relations ──
+  feeConfig     TokenFeeConfig?
+  fundraise     TokenFundraise?
+  lpPositions   LpPosition[] // plural: partner + creator positions
+  trades        Trade[]
+  feeEvents     FeeEvent[]
+  vestings      VestingSchedule[]
+  contributions FundraiseContribution[]
 
   @@unique([userId, chain])
   @@index([chain, status])
   @@index([symbol])
+  @@index([status])
   @@map("creator_tokens")
 }
 
@@ -270,4 +363,243 @@ model PromotionLog {
   @@index([actorId])
   @@index([createdAt])
   @@map("promotion_logs")
+}
+
+// =============================================================================
+// Phase 2 — Token economy (Solana token-2022, fees, fundraise, LP, vesting)
+// See docs/solana-migration/design/phase2/CONTRACTS.md §a.
+// =============================================================================
+
+model TokenFeeConfig {
+  id      String @id @default(uuid())
+  tokenId String @unique
+
+  transferFeeBps  Int // 300–500
+  rebateTargetBps Int @default(100) // in-app effective target (~1%)
+
+  creatorTradingFeeBps Int @default(5000) // share of the 80%
+  partnerTradingFeeBps Int @default(5000) // share of the 80% (sum = 10000)
+  protocolFeeBps       Int @default(2000) // Meteora fixed 20% (recorded, not configurable)
+
+  feeClaimer                String? // Momento partner wallet (DBC feeClaimer)
+  creatorFeeWallet          String?
+  rebateWallet              String?
+  withdrawWithheldAuthority String?
+  rebateMint                String? // USDC by default — NEVER the creator token
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  token CreatorToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+
+  @@map("token_fee_configs")
+}
+
+model Trade {
+  id           String  @id @default(uuid())
+  tokenId      String
+  userId       String? // SetNull on user delete
+  traderWallet String // on-chain payer
+
+  side   TradeSide
+  source FeeSource // IN_APP | EXTERNAL — drives rebate eligibility
+  venue  PoolType // METEORA_DBC | METEORA_DAMM_V2 | …
+
+  intentId  String? @unique // set when WE build the tx (IN_APP), pre-signature
+  signature String? @unique // ON-CHAIN IDEMPOTENCY KEY (null until confirmed)
+
+  amountInBaseUnits  String
+  amountInMint       String
+  amountOutBaseUnits String
+  amountOutMint      String
+  priceUsd           Float? // display only
+  priceTs            DateTime? // snapshot time for rebate true-up
+
+  transferFeeBaseUnits String  @default("0")
+  feeBps               Int?
+  rebateBaseUnits      String  @default("0")
+  rebateMint           String?
+  rebatePaid           Boolean @default(false)
+  rebateSignature      String?
+
+  poolAddress String?
+  blockTime   DateTime? // null until confirmed
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  token     CreatorToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  feeEvents FeeEvent[]
+
+  @@index([tokenId, blockTime])
+  @@index([userId, blockTime])
+  @@index([tokenId, side])
+  @@index([traderWallet])
+  @@index([source, rebatePaid])
+  @@map("trades")
+}
+
+model FeeEvent {
+  id      String  @id @default(uuid())
+  tokenId String
+  tradeId String?
+
+  type            FeeEventType
+  source          FeeSource
+  recipient       FeeRecipient
+  recipientWallet String?
+
+  grossBaseUnits String  @default("0")
+  feeBaseUnits   String  @default("0")
+  netBaseUnits   String  @default("0")
+  amountMint     String
+  amountUsd      Float?
+  feeBps         Int?
+
+  signature      String?   @unique // on-chain rows
+  internalRef    String?   @unique // off-chain computed rows: `${tradeId}:${recipient}:${type}`
+  claimed        Boolean   @default(false)
+  claimedAt      DateTime?
+  claimSignature String?
+
+  blockTime DateTime?
+  createdAt DateTime  @default(now())
+
+  token CreatorToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  trade Trade?       @relation(fields: [tradeId], references: [id], onDelete: SetNull)
+
+  @@index([tokenId, createdAt])
+  @@index([tokenId, type])
+  @@index([recipient, claimed])
+  @@index([type, createdAt])
+  @@index([tradeId])
+  @@map("fee_events")
+}
+
+model TokenFundraise {
+  id      String          @id @default(uuid())
+  tokenId String          @unique
+  status  FundraiseStatus @default(DRAFT)
+
+  quoteMint                String // USDC by default
+  thresholdBaseUnits       String // migration_quote_threshold (USDC base units)
+  raisedBaseUnits          String @default("0")
+  contributorCount         Int    @default(0)
+  minContributionBaseUnits String?
+  maxContributionBaseUnits String?
+
+  partnerLpBps       Int?
+  creatorLpBps       Int?
+  partnerLockedLpBps Int?
+  creatorLockedLpBps Int?
+  migrationFeeBps    Int?
+  leftoverReceiver   String?
+
+  startsAt          DateTime?
+  endsAt            DateTime?
+  finalizedAt       DateTime?
+  finalizeSignature String?   @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  token         CreatorToken            @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  contributions FundraiseContribution[]
+
+  @@index([status])
+  @@map("token_fundraises")
+}
+
+model FundraiseContribution {
+  id            String  @id @default(uuid())
+  fundraiseId   String
+  tokenId       String // denormalized
+  userId        String? // SetNull on user delete
+  walletAddress String
+
+  amountBaseUnits String
+  quoteMint       String
+  signature       String @unique // ON-CHAIN IDEMPOTENCY KEY
+
+  refunded        Boolean   @default(false)
+  refundSignature String?   @unique
+  blockTime       DateTime?
+  createdAt       DateTime  @default(now())
+
+  fundraise TokenFundraise @relation(fields: [fundraiseId], references: [id], onDelete: Cascade)
+  token     CreatorToken   @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  user      User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([fundraiseId, createdAt])
+  @@index([tokenId, createdAt])
+  @@index([userId])
+  @@index([walletAddress])
+  @@map("fundraise_contributions")
+}
+
+model LpPosition {
+  id      String @id @default(uuid())
+  tokenId String
+
+  provider    LpProvider @default(METEORA_DAMM_V2)
+  owner       LpOwner // PARTNER | CREATOR
+  ownerWallet String
+
+  poolAddress     String
+  positionAddress String?
+  positionNftMint String? @unique
+  lpMint          String?
+
+  baseReserveBaseUnits  String?
+  quoteReserveBaseUnits String?
+  liquidity             String?
+
+  locked          Boolean   @default(true)
+  lockedUntil     DateTime?
+  createSignature String?   @unique
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  token CreatorToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+
+  @@unique([tokenId, owner])
+  @@index([tokenId])
+  @@index([owner])
+  @@index([poolAddress])
+  @@map("lp_positions")
+}
+
+model VestingSchedule {
+  id                String  @id @default(uuid())
+  tokenId           String
+  beneficiaryUserId String? // SetNull on user delete
+  beneficiaryWallet String
+
+  provider VestingProvider
+  streamId String?         @unique // Streamflow / Jup-Lock PDA
+
+  totalBaseUnits    String
+  releasedBaseUnits String @default("0")
+  tokenMint         String
+
+  cliffSeconds    Int       @default(0)
+  durationSeconds Int
+  startAt         DateTime
+  cliffAt         DateTime?
+  endAt           DateTime?
+
+  status          VestingStatus @default(PENDING)
+  createSignature String?       @unique
+  cancelSignature String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  token CreatorToken @relation(fields: [tokenId], references: [id], onDelete: Cascade)
+  user  User?        @relation(fields: [beneficiaryUserId], references: [id], onDelete: SetNull)
+
+  @@index([tokenId])
+  @@index([beneficiaryUserId])
+  @@index([beneficiaryWallet])
+  @@index([status])
+  @@map("vesting_schedules")
 }
