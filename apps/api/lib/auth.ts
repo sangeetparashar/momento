@@ -38,7 +38,8 @@ async function verifyToken(request: NextRequest) {
     const claims = await getPrivy().verifyAuthToken(token);
     return claims;
   } catch (error: any) {
-    console.error('Auth token verification failed:', error?.message || error, 'Token preview:', token.substring(0, 20) + '...');
+    // Do not log any portion of the token (it is a credential).
+    console.error('Auth token verification failed:', error?.message || error);
     return null;
   }
 }
