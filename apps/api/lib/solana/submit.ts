@@ -345,26 +345,47 @@ async function submitSignedTail(
   let attempts = 0;
   let lastErr: unknown;
   let signature: string | undefined;
+  // True once we have recorded a (landed or unconfirmed-but-broadcast) signature
+  // under the key, OR deliberately released the reservation. The finally block
+  // uses this to guarantee we NEVER leave a bare RESERVED_MARKER on a thrown exit.
+  let reservationSettled = false;
 
-  // App-level resend loop: re-send the SAME signed tx until it confirms or the
-  // blockhash expires (lastValidBlockHeight passed). We own retry, not the RPC.
-  while (attempts <= maxRetries) {
-    attempts++;
-    try {
-      signature = await broadcastOnce(rawTx, route, opts.swqosOnly);
-    } catch (err) {
-      lastErr = err;
-      // Transport hiccup — retry if we still have budget + valid blockhash.
-    }
-
-    if (signature) {
-      // Confirm within the remaining blockhash window (~ up to ~90s on mainnet).
-      // We poll status; if not confirmed before the next loop, we re-broadcast.
-      const pollDeadline = Date.now() + RETRY_POLL_INTERVAL_MS * 4;
+  // CRITICAL (idempotency P0): wrap broadcast/confirm in try/finally so the
+  // reservation made above is ALWAYS settled on exit. Without this, any
+  // non-success exit (SIMULATION_FAILED / BLOCKHASH_EXPIRED / TIMEOUT / RPC_ERROR)
+  // would leave the key as RESERVED_MARKER with no landed sig: a stable-key caller
+  // (rebate:<tradeId>, server-signed claim/graduation) could NEVER retry within
+  // the 10-min TTL (reserve→false, get→null, throws DUPLICATE) — a single
+  // transient timeout would permanently brick the rebate/claim.
+  //
+  // Settlement policy on a non-landing exit:
+  //   - broadcast happened (we hold a `signature`): status is unknown (the tx may
+  //     still land). Persist the unconfirmed sig under the key via put(): a retry
+  //     returns it as deduped and reconciliation can poll it. We must NOT release
+  //     and re-broadcast, which could double-issue a tx that actually landed.
+  //   - never broadcast (`signature` undefined: RPC_ERROR with no sig, or a
+  //     preflight SIMULATION_FAILED before any send): release the reservation via
+  //     del() so an identical retry can reserve + re-broadcast.
+  try {
+    // App-level resend loop: re-send the SAME signed tx until it confirms or the
+    // blockhash expires (lastValidBlockHeight passed). We own retry, not the RPC.
+    while (attempts <= maxRetries) {
+      attempts++;
       try {
+        signature = await broadcastOnce(rawTx, route, opts.swqosOnly);
+      } catch (err) {
+        lastErr = err;
+        // Transport hiccup — retry if we still have budget + valid blockhash.
+      }
+
+      if (signature) {
+        // Confirm within the remaining blockhash window (~ up to ~90s on mainnet).
+        // We poll status; if not confirmed before the next loop, we re-broadcast.
+        const pollDeadline = Date.now() + RETRY_POLL_INTERVAL_MS * 4;
         const { confirmed, slot } = await confirmSignature(signature, commitment, pollDeadline);
         if (confirmed) {
           await store.put(idempotencyKey, signature);
+          reservationSettled = true;
           return {
             signature,
             slot,
@@ -376,37 +397,63 @@ async function submitSignedTail(
             deduped: false,
           };
         }
-      } catch (err) {
-        // On-chain failure (SIMULATION_FAILED) is terminal — don't resend.
-        throw classify(err);
       }
-    }
 
-    // Has the blockhash expired? If so, the caller must rebuild + retry.
-    try {
-      const currentHeight = await conn.getBlockHeight('confirmed');
-      if (tx.lastValidBlockHeight != null && currentHeight > tx.lastValidBlockHeight) {
+      // Has the blockhash expired? If so, the caller must rebuild + retry.
+      const currentHeight = await conn.getBlockHeight('confirmed').catch(() => null);
+      if (
+        currentHeight != null &&
+        tx.lastValidBlockHeight != null &&
+        currentHeight > tx.lastValidBlockHeight
+      ) {
         throw new SolanaTxError(
           'BLOCKHASH_EXPIRED',
           `Blockhash expired before landing (height ${currentHeight} > ${tx.lastValidBlockHeight})`,
           { signature },
         );
       }
-    } catch (err) {
-      if (err instanceof SolanaTxError && err.code === 'BLOCKHASH_EXPIRED') throw err;
-      // height check transport error — ignore, loop will continue.
+
+      if (attempts <= maxRetries) await sleep(RETRY_POLL_INTERVAL_MS);
     }
 
-    if (attempts <= maxRetries) await sleep(RETRY_POLL_INTERVAL_MS);
+    // Exhausted retries. If we have a signature, status is unknown (TIMEOUT, not a
+    // failure — the tx may still land; idempotency guards re-issue). Else RPC error.
+    void blockhash;
+    if (signature) {
+      throw new SolanaTxError('TIMEOUT', 'Confirmation window elapsed; transaction status unknown', {
+        signature,
+      });
+    }
+    throw classify(
+      lastErr ?? new SolanaTxError('RPC_ERROR', 'Failed to broadcast transaction after retries'),
+    );
+  } catch (err) {
+    // confirmSignature throws SolanaTxError('SIMULATION_FAILED') on an on-chain
+    // revert — that tx DID land (and failed), so the broadcast `signature` (if any)
+    // is recorded by the finally as the dedup record; do NOT release it. Normalize
+    // all other raw errors into the taxonomy here (replaces the inner classify()).
+    throw classify(err);
+  } finally {
+    // Always settle the reservation so we never leave a bare marker on a thrown exit.
+    if (!reservationSettled) {
+      reservationSettled = true;
+      try {
+        if (signature) {
+          // Broadcast happened, status unknown/failed — persist the sig so a retry
+          // dedups to it and reconciliation can poll. (A confirmed-and-failed tx
+          // also lands here; recording its sig prevents a message-derived rebuild
+          // from re-issuing it.)
+          await store.put(idempotencyKey, signature);
+        } else {
+          // Never broadcast — release so an identical retry can re-broadcast.
+          await store.del(idempotencyKey);
+        }
+      } catch {
+        // Best-effort: a store hiccup here at worst leaves the prior behavior
+        // (marker until TTL); never mask the original error with a cleanup throw.
+      }
+    }
   }
-
-  // Exhausted retries. If we have a signature, status is unknown (TIMEOUT, not a
-  // failure — the tx may still land; idempotency guards re-issue). Else RPC error.
-  void blockhash;
-  if (signature) {
-    throw new SolanaTxError('TIMEOUT', 'Confirmation window elapsed; transaction status unknown', { signature });
-  }
-  throw classify(lastErr ?? new SolanaTxError('RPC_ERROR', 'Failed to broadcast transaction after retries'));
 }
 
 /**

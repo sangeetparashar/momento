@@ -345,10 +345,21 @@ export async function buildVestingWithdraw(args: {
   schedule: VestingSchedule;
   invoker: PublicKey; // = recipient wallet
   amountBase?: string; // default: full claimable now
+  /**
+   * Token program of the vested mint. VestingSchedule does NOT yet persist a
+   * token-program column (durable fix: a schema-shared additive migration), so
+   * the route resolves it from CreatorToken.tokenProgram (via schedule.tokenId)
+   * and threads it here. The launched-token DEFAULT is Token-2022, so failing to
+   * pass this derives the recipient/escrow ATAs under the CLASSIC program → wrong
+   * ATA/program id → claim build/exec reverts (functional withdraw-DoS, no fund
+   * loss). When omitted we fall back to classic for backwards-compat, but the
+   * route ALWAYS passes the resolved value.
+   */
+  isToken2022?: boolean;
 }): Promise<{ built: BuiltTx; claimableBase: string }> {
   const { schedule, invoker } = args;
 
-  const state = await getVestingState(schedule);
+  const state = await getVestingState(schedule, { isToken2022: args.isToken2022 });
   const claimable = BigInt(state.claimableBase);
   const requested = args.amountBase != null ? BigInt(args.amountBase) : claimable;
   const amount = requested < claimable ? requested : claimable;
@@ -388,16 +399,16 @@ export async function buildVestingWithdraw(args: {
     const program = jupLockProgram(getConnection(), invoker);
     const escrow = new PublicKey(schedule.streamId);
     const mint = new PublicKey(schedule.tokenMint);
-    // P2-6 (deferred, offline-unfixable): VestingSchedule has no token-program
-    // column, so withdraw assumes the CLASSIC token program. The mint's real
-    // program IS resolvable from CreatorToken.tokenProgram via schedule.tokenId,
-    // but the proper fix is to persist the program on VestingSchedule at create
-    // (a schema change owned by P3-foundation, not this file). For a Token-2022
-    // creator mint (the launched-token default!) the recipient/escrow ATAs derived
-    // here under the classic program will be WRONG and the claim build/exec fails
-    // safely (no fund loss — the tx reverts). TODO(verify-devnet)/TODO(schema):
-    // add VestingSchedule.tokenProgram and thread it through here + getVestingState.
-    const isT22 = false; // schedule does not persist token program; classic-default (§6)
+    // P1 (vesting hardening): VestingSchedule still has no token-program column —
+    // the DURABLE fix is a schema-shared additive migration (VestingSchedule.
+    // tokenProgram) persisted at create. INTERIM (this pass): the withdraw route
+    // resolves CreatorToken.tokenProgram via schedule.tokenId and threads it here
+    // as `args.isToken2022`. The launched-token DEFAULT is Token-2022, so deriving
+    // the recipient/escrow ATAs under the classic program (the old hardcoded
+    // `isT22 = false`) is WRONG for the default mint and makes the claim build/exec
+    // revert (functional withdraw-DoS, no fund loss). We honor the threaded program
+    // and fall back to classic only when the caller omits it.
+    const isT22 = args.isToken2022 === true;
     const tokenProgram = isT22 ? TOKEN_2022_PROGRAM_ID : TOKEN_CLASSIC_PROGRAM_ID;
     const escrowToken = await getAssociatedTokenAddress(mint, escrow, true, tokenProgram);
     const recipientToken = await getAssociatedTokenAddress(mint, invoker, true, tokenProgram);
@@ -487,13 +498,27 @@ export async function buildVestingCancel(args: {
 
 // ── State (getOne / escrow fetch; D-vesting §2.1/§2.2) ────────────────────────
 
-/** Read live on-chain state (claimable / withdrawn / status) for list + withdraw. */
-export async function getVestingState(schedule: VestingSchedule): Promise<{
+/**
+ * Read live on-chain state (claimable / withdrawn / status) for list + withdraw.
+ *
+ * `opts.isToken2022` mirrors the token program threaded into buildVestingWithdraw
+ * (resolved from CreatorToken.tokenProgram via schedule.tokenId, since
+ * VestingSchedule has no token-program column yet). The current read paths
+ * (Streamflow getOne / Jup-Lock escrow-account fetch) do not derive ATAs, so the
+ * flag is not strictly required here today, but it is accepted so callers can
+ * thread a single consistent program identity and so any future ATA-derived read
+ * (e.g. balance reconciliation) stays correct for the Token-2022 default.
+ */
+export async function getVestingState(
+  schedule: VestingSchedule,
+  opts?: { isToken2022?: boolean },
+): Promise<{
   totalBase: string;
   withdrawnBase: string;
   claimableBase: string;
   status: VestingStatus;
 }> {
+  void opts; // reserved for ATA-derived reads; see doc comment above
   if (!schedule.streamId) {
     // Not yet on-chain (PENDING client path) — report DB totals.
     return {
@@ -574,7 +599,18 @@ function jupLockUnlocked(acct: any, now: number): bigint {
   }
 }
 
-/** Map on-chain totals to a VestingStatus, respecting terminal DB states. */
+/**
+ * Map on-chain totals to a VestingStatus, PREFERRING on-chain truth.
+ *
+ * P1 (vesting hardening, stranded-state): the client-path create flow leaves the
+ * DB row PENDING until a confirm hook flips it (see /api/vesting/[id]/confirm).
+ * If we reach this function it means the stream/escrow account was successfully
+ * fetched on-chain (getVestingState only calls deriveStatus AFTER getOne /
+ * vestingEscrow.fetch resolves) — i.e. the schedule IS funded on-chain. A DB
+ * status of PENDING in that situation is stale, so we treat funded-on-chain as
+ * authoritative and report ACTIVE (or COMPLETED if fully withdrawn). Terminal
+ * states (CANCELED) and a genuine on-chain cancel still win.
+ */
 function deriveStatus(
   schedule: VestingSchedule,
   total: bigint,
@@ -582,7 +618,8 @@ function deriveStatus(
   canceledAt: unknown,
 ): VestingStatus {
   if (schedule.status === 'CANCELED' || (canceledAt && Number(canceledAt) > 0)) return 'CANCELED';
-  if (schedule.status === 'PENDING') return 'PENDING';
   if (total > BigInt(0) && withdrawn >= total) return 'COMPLETED';
+  // Funded on-chain (we got here via a successful account fetch) ⇒ ACTIVE, even if
+  // the DB row is still PENDING (confirm hook not yet applied). On-chain truth wins.
   return 'ACTIVE';
 }

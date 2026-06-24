@@ -25,10 +25,16 @@ export async function POST(
   { params }: { params: Promise<{ mint: string }> },
 ) {
   try {
-    const rateLimitResponse = await applyRateLimit(request, swapLimiter);
-    if (rateLimitResponse) return rateLimitResponse;
-
+    // Auth FIRST so the swap cap is keyed to the verified userId, not a
+    // spoofable x-forwarded-for IP. IP-keyed pre-auth limits let an authed user
+    // rotate XFF for a fresh bucket per request (defeating the 5/min cap →
+    // rebate / raise farming) and let unauth traffic pre-burn a NAT's bucket.
+    // failClosed: a Redis outage must not silently disable the money-path cap.
     const user = await requireAuth(request);
+    const rateLimitResponse = await applyRateLimit(request, swapLimiter, user.id, {
+      failClosed: true,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
 
     const { mint } = await params;
     if (!isValidMint(mint)) {

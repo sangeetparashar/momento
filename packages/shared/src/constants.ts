@@ -24,9 +24,35 @@ export const CHAIN_CONFIG = {
 
 export type ChainConfig = typeof CHAIN_CONFIG;
 
+// ── USDC mint, network-aware (see wallet/send/route.ts:22-24) ──
+// Devnet has no mainnet (Circle) USDC, so the quote/rebate mint MUST follow the
+// cluster. Consumers (launch/trade/fee-claim) read this at REQUEST time via
+// getUsdcMint() — never the frozen MOMENTO_FEE.USDC_MINT literal (which is
+// mainnet-only and kept for back-compat / mainnet default).
+export const USDC_MINT_MAINNET = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+export const USDC_MINT_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+
+/**
+ * Resolve the USDC mint for the active cluster, at call time.
+ *
+ * Precedence: explicit `USDC_MINT` env override → mainnet mint when
+ * `SOLANA_NETWORK === 'mainnet-beta'` → devnet mint otherwise.
+ *
+ * IMPORT-SAFE: reads env lazily on each call (no module-top env read), so it
+ * picks up the cluster in the request context rather than at import time.
+ */
+export function getUsdcMint(): string {
+  const override = process.env.USDC_MINT?.trim();
+  if (override) return override;
+  return process.env.SOLANA_NETWORK === 'mainnet-beta' ? USDC_MINT_MAINNET : USDC_MINT_DEVNET;
+}
+
 // ── Phase 2 token-economy fee defaults (see CONTRACTS.md §d.2) ──
 export const MOMENTO_FEE = {
-  USDC_MINT: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+  // DEPRECATED for cluster-scoped use: this is the MAINNET literal. Use
+  // getUsdcMint() at request time for the quote/rebate mint. Kept only as the
+  // mainnet default + back-compat reference.
+  USDC_MINT: USDC_MINT_MAINNET,
   USDC_DECIMALS: 6,
   TOKEN_2022_PROGRAM_ID: 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb',
   TOKEN_CLASSIC_PROGRAM_ID: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',

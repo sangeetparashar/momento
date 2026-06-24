@@ -31,6 +31,14 @@ export interface IdempotencyStore {
   put(key: string, signature: string): Promise<void>;
   /** atomic; true if this call newly reserved the key (caller may broadcast). */
   reserve(key: string): Promise<boolean>;
+  /**
+   * Release a key. Used to undo a reservation when broadcast never happened
+   * (RPC_ERROR with no signature / preflight SIMULATION_FAILED) so an identical
+   * retry within the TTL can reserve + re-broadcast instead of bricking on the
+   * dangling RESERVED_MARKER. MUST only be called by the holder of the
+   * reservation that has NOT recorded a landed signature.
+   */
+  del(key: string): Promise<void>;
 }
 
 interface Entry {
@@ -94,6 +102,10 @@ export class InMemoryIdempotencyStore implements IdempotencyStore {
     this.map.set(key, { signature: null, expiresAt: now + this.ttlMs });
     return true;
   }
+
+  async del(key: string): Promise<void> {
+    this.map.delete(key);
+  }
 }
 
 /**
@@ -149,6 +161,10 @@ export class RedisIdempotencyStore implements IdempotencyStore {
       ex: this.ttlS,
     });
     return res === 'OK';
+  }
+
+  async del(key: string): Promise<void> {
+    await this.redis().del(this.k(key));
   }
 }
 

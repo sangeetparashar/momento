@@ -19,10 +19,14 @@ export async function POST(
   { params }: { params: Promise<{ mint: string }> },
 ) {
   try {
-    const rateLimitResponse = await applyRateLimit(request, swapLimiter);
-    if (rateLimitResponse) return rateLimitResponse;
-
+    // Auth FIRST so the swap cap is keyed to the verified userId, not a
+    // spoofable x-forwarded-for IP (defeats XFF-rotation bypass + cross-tenant
+    // NAT DoS). failClosed: a Redis outage must not disable the money-path cap.
     const user = await requireAuth(request);
+    const rateLimitResponse = await applyRateLimit(request, swapLimiter, user.id, {
+      failClosed: true,
+    });
+    if (rateLimitResponse) return rateLimitResponse;
 
     const { mint } = await params;
     if (!isValidMint(mint)) {

@@ -76,6 +76,12 @@ export default function LaunchReviewScreen() {
   function mapLaunchError(err: any): string {
     const status = err?.status as number | undefined;
     const raw = err?.message as string | undefined;
+    if (status === 202) {
+      // Broadcast-but-unconfirmed (TIMEOUT / BLOCKHASH_EXPIRED). The launch may
+      // still land on-chain; the backend dedups a re-broadcast, so RETRY is safe
+      // but the outcome is not yet known. Do NOT claim the token is live.
+      return 'Your launch was submitted but is still confirming on-chain. It may already have landed — wait a moment, then check your profile before retrying.';
+    }
     if (status === 409) {
       return 'You already have a token. Each creator can launch only one token.';
     }

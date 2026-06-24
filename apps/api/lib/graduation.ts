@@ -386,7 +386,7 @@ interface MigrateOutcome {
  */
 async function migrateAndPersist(
   tokenId: string,
-  token: { dbcPoolAddress: string | null },
+  token: { dbcPoolAddress: string | null; mintAddress: string | null },
   fundraise: { migrationFeeBps: number | null },
 ): Promise<MigrateOutcome> {
   // Env/network access stays inside the function (Connection-bound SDK clients).
@@ -476,9 +476,12 @@ async function migrateAndPersist(
     data: { finalizeSignature: migrateSignature },
   });
 
-  // Resolve the new DAMM v2 pool (spike-b resolveDammV2Pool via
-  // getPositionsByUser). TODO(verify-devnet): position→pool field name.
-  const dammV2Pool = await resolveDammV2Pool(cpAmm, payer.publicKey);
+  // Resolve the DAMM v2 pool DETERMINISTICALLY for THIS token (P0 fix): the
+  // server wallet is partner/feeClaimer for EVERY graduated token, so scanning
+  // its positions and taking [0] returns an ARBITRARY (oldest) pool after the
+  // first graduation. We resolve by this token's baseMint and cross-check the
+  // resolved pool's mints == token.mintAddress before lock-verify/persist/finalize.
+  const dammV2Pool = await resolveDammV2Pool(cpAmm, payer.publicKey, token.mintAddress);
 
   // Lock per the split. The migrate per the config's
   // *PermanentLockedLiquidityPercentage typically perma-locks at the program
@@ -862,7 +865,7 @@ async function resolveOwnerWallets(
  */
 async function recoverFromChain(
   tokenId: string,
-  token: { dbcPoolAddress: string | null },
+  token: { dbcPoolAddress: string | null; mintAddress: string | null },
 ): Promise<{
   dammV2Pool: string | null;
   partnerNftMint: string | null;
@@ -889,7 +892,9 @@ async function recoverFromChain(
     const { partnerWallet, creatorWallet } = await resolveOwnerWallets(tokenId);
     const payer = serverSigner();
 
-    const poolPk = await resolveDammV2Pool(cpAmm, payer.publicKey);
+    // P0 fix: resolve + cross-check the pool for THIS token's baseMint, never
+    // positions[0] of the shared server wallet (see resolveDammV2Pool).
+    const poolPk = await resolveDammV2Pool(cpAmm, payer.publicKey, token.mintAddress);
     dammV2Pool = poolPk ? poolPk.toBase58() : null;
 
     if (poolPk) {
@@ -971,20 +976,127 @@ function positionNftMintOf(
 }
 
 /**
- * Best-effort resolve the graduated DAMM v2 pool the server wallet just got a
- * position in (spike-b resolveDammV2Pool via getPositionsByUser).
- * TODO(verify-devnet): position→pool field name.
+ * Resolve the graduated DAMM v2 pool for THIS token (P0 fix).
+ *
+ * THE BUG (pre-fix): this returned `getPositionsByUser(serverWallet)[0]?.…pool`
+ * with NO baseMint filter. The server wallet is partner/feeClaimer for EVERY
+ * graduated token, so after the FIRST graduation it holds many positions and `[0]`
+ * is an arbitrary (oldest) pool — every subsequent graduation verified the lock on
+ * the wrong pool, wrote the wrong poolAddress onto BOTH LpPosition rows, and
+ * finalized the token pointing at another token's pool (then lib/fee-claim.ts
+ * claimed against the wrong pool). The spike masked it (fresh per-run partner
+ * keypair → exactly one position).
+ *
+ * THE FIX: resolve deterministically for `baseMint`:
+ *   1. Prefer a base-mint reader if the cp-amm SDK exposes one
+ *      (getPoolByBaseMint / getPoolsByBaseMint — names are SDK-minor-sensitive,
+ *      so we probe defensively and fall through on absence).
+ *   2. Otherwise scan the server wallet's positions and pick the position whose
+ *      POOL'S mints (tokenAMint/tokenBMint) include this token's baseMint — never
+ *      `[0]`.
+ * Then, regardless of how the pool was found, CROSS-CHECK the resolved pool's mints
+ * against `baseMint` (poolMatchesBaseMint). On any mismatch / unverifiable pool we
+ * return null — the caller treats a null pool as unverified lock and keeps the row
+ * FINALIZING (it never finalizes on a mismatched/arbitrary pool).
+ *
+ * TODO(verify-devnet): exact base-mint reader name + position→pool field on the
+ * installed cp-amm SDK (probed defensively here; offline node_modules absent).
  */
-async function resolveDammV2Pool(cpAmm: any, owner: PublicKey): Promise<PublicKey | null> {
+async function resolveDammV2Pool(
+  cpAmm: any,
+  owner: PublicKey,
+  baseMint: string | null,
+): Promise<PublicKey | null> {
+  // Without this token's baseMint we CANNOT disambiguate the shared wallet's
+  // many positions — fail closed (null → keep FINALIZING) rather than guess [0].
+  if (!baseMint) return null;
+
+  let basePk: PublicKey;
+  try {
+    basePk = new PublicKey(baseMint);
+  } catch {
+    return null; // unparseable base mint → cannot cross-check → fail closed
+  }
+
+  // (1) Deterministic base-mint reader, if the SDK exposes one. Probe defensively
+  // (name varies by SDK minor); any throw / absence falls through to the scan.
+  for (const fn of ['getPoolByBaseMint', 'getPoolsByBaseMint', 'getPoolByTokenMint']) {
+    if (typeof cpAmm?.[fn] !== 'function') continue;
+    try {
+      const res = await cpAmm[fn](basePk);
+      const candidate = poolPkFromReaderResult(res);
+      if (candidate && (await poolMatchesBaseMint(cpAmm, candidate, basePk))) {
+        return candidate;
+      }
+    } catch {
+      /* reader unavailable / wrong arg shape — fall through to position scan */
+    }
+  }
+
+  // (2) Position scan, FILTERED by base mint (never [0]).
   try {
     const positions = await cpAmm.getPositionsByUser(owner);
     if (positions?.length) {
-      const pool = positions[0]?.positionState?.pool;
-      return pool ?? null;
+      for (const p of positions) {
+        const pool: PublicKey | undefined | null = p?.positionState?.pool;
+        if (!pool) continue;
+        if (await poolMatchesBaseMint(cpAmm, pool, basePk)) {
+          return pool;
+        }
+      }
     }
   } catch {
-    /* ignore */
+    /* reader unavailable */
   }
+
+  // No pool for THIS token's base mint could be resolved + cross-checked.
+  return null;
+}
+
+/** Extract a PublicKey from a base-mint reader result (account / pool / array). */
+function poolPkFromReaderResult(res: any): PublicKey | null {
+  if (!res) return null;
+  const first = Array.isArray(res) ? res[0] : res;
+  if (!first) return null;
+  // Common shapes: ProgramAccount<{...}> ({ publicKey }), a PoolState carrying its
+  // own address, or a bare PublicKey.
+  const candidate =
+    first.publicKey ?? first.pool ?? first.address ?? first.poolAddress ?? first;
+  if (!candidate) return null;
+  if (candidate instanceof PublicKey) return candidate;
+  if (typeof candidate?.toBase58 === 'function') return candidate as PublicKey;
+  return null;
+}
+
+/**
+ * Cross-check: does `pool`'s on-chain state reference `baseMint` as one of its two
+ * mints? Fetches the pool state (spike-b: fetchPoolState → tokenAMint/tokenBMint).
+ * Fails CLOSED (returns false) on any reader error — an unverifiable pool must not
+ * be accepted, so the caller keeps the row FINALIZING rather than finalize on a
+ * pool we could not confirm belongs to this token.
+ */
+async function poolMatchesBaseMint(
+  cpAmm: any,
+  pool: PublicKey,
+  baseMint: PublicKey,
+): Promise<boolean> {
+  try {
+    const state: any = await cpAmm.fetchPoolState(pool);
+    if (!state) return false;
+    const want = baseMint.toBase58();
+    const a = mintBase58(state.tokenAMint);
+    const b = mintBase58(state.tokenBMint);
+    return a === want || b === want;
+  } catch {
+    return false; // unverifiable → fail closed
+  }
+}
+
+/** Normalize a pool-state mint field (PublicKey or base58 string) to base58. */
+function mintBase58(m: any): string | null {
+  if (!m) return null;
+  if (typeof m === 'string') return m;
+  if (typeof m?.toBase58 === 'function') return m.toBase58();
   return null;
 }
 

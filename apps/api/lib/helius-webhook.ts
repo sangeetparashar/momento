@@ -228,6 +228,14 @@ interface VerifiedMint {
   side: 'BUY' | 'SELL';
   /** Best-effort trader wallet (largest debited owner) from meta. */
   trader: string;
+  /**
+   * Signed per-owner base-unit deltas on THIS mint (owner → delta). Carried so
+   * the ingest path — which alone knows the token mint + its paired quote mint —
+   * can derive a coherent trader and a reliable BUY/SELL side from the SAME
+   * owner's opposite-signed deltas across the two mints (a swap's net cancels to
+   * 0 over all owners, so `side` above is unreliable for swaps; see P1 fix).
+   */
+  ownerDeltas: Map<string, bigint>;
 }
 
 interface VerifiedTx {
@@ -303,6 +311,7 @@ async function verifyOnChain(signature: string): Promise<VerifiedTx | null> {
     net: bigint;
     maxDebit: bigint;
     trader: string;
+    ownerDeltas: Map<string, bigint>;
   }
   const acc = new Map<string, MintAcc>();
   for (const { mint, owner, delta } of deltas.values()) {
@@ -311,6 +320,7 @@ async function verifyOnChain(signature: string): Promise<VerifiedTx | null> {
       net: BigInt(0),
       maxDebit: BigInt(0),
       trader: '',
+      ownerDeltas: new Map<string, bigint>(),
     };
     // Gross = sum of credited (positive) deltas = transferred magnitude.
     if (delta > BigInt(0)) c.grossBaseUnits += delta;
@@ -323,17 +333,24 @@ async function verifyOnChain(signature: string): Promise<VerifiedTx | null> {
         c.trader = owner;
       }
     }
+    // Retain the signed per-owner delta so the ingest path can cross-reference
+    // the SAME owner across the token mint and its quote mint.
+    if (owner) c.ownerDeltas.set(owner, (c.ownerDeltas.get(owner) ?? BigInt(0)) + delta);
     acc.set(mint, c);
   }
 
   // Side from the net supply-side delta (best-effort; pool identity is not
   // distinguishable from meta alone). Mark BUY when ambiguous (display-only).
+  // NOTE: for a swap the net over all owners cancels to ~0, so this `side` is
+  // unreliable for trade classification — the ingest path re-derives a reliable
+  // side from the trader's opposite-signed deltas across mint + quote mint.
   const byMint = new Map<string, VerifiedMint>();
   for (const [mint, c] of acc) {
     byMint.set(mint, {
       grossBaseUnits: c.grossBaseUnits,
       side: c.net > BigInt(0) ? 'BUY' : c.net < BigInt(0) ? 'SELL' : 'BUY',
       trader: c.trader,
+      ownerDeltas: c.ownerDeltas,
     });
   }
 
@@ -341,6 +358,52 @@ async function verifyOnChain(signature: string): Promise<VerifiedTx | null> {
     typeof tx.blockTime === 'number' && Number.isFinite(tx.blockTime) ? tx.blockTime : null;
 
   return { blockTime, byMint };
+}
+
+/**
+ * Derive a RELIABLE trade side + trader for one creator-token mint from the
+ * confirmed on-chain owner deltas (P1 fix). `vm.side` (net over ALL owners) is
+ * unusable for a swap because the supply-side credit/debit cancels to ~0 → it
+ * defaults to BUY, mislabelling SELLs and mis-counting the raise.
+ *
+ * The correct signal is a SINGLE owner whose token-mint delta and quote-mint
+ * delta have OPPOSITE signs:
+ *   - token Δ > 0 AND quote Δ < 0  ⇒ BUY  (trader spent quote, gained token)
+ *   - token Δ < 0 AND quote Δ > 0  ⇒ SELL (trader sold token, received quote)
+ * `quoteDelta` is the trader's SIGNED quote-mint delta; a confirmed curve BUY
+ * MUST have quoteDelta < 0 (quote actually flowed OUT of the trader) before any
+ * raise increment. When no paired quote leg is visible (quoteVm absent) we fall
+ * back to the token-mint trader heuristic and the net-derived side — usable for
+ * the fee leg, but the caller must NOT count such an event toward the raise.
+ */
+function deriveTradeSide(
+  vm: VerifiedMint,
+  quoteVm: VerifiedMint | undefined,
+): { side: 'BUY' | 'SELL'; trader: string; quoteDelta: bigint } {
+  if (quoteVm) {
+    // Find an owner present on BOTH mints with opposite-signed deltas. Prefer the
+    // owner with the largest absolute token-mint delta (the actual counterparty,
+    // not the pool — the pool nets the other way on both legs).
+    let best: { trader: string; side: 'BUY' | 'SELL'; quoteDelta: bigint; mag: bigint } | null =
+      null;
+    for (const [owner, tokenDelta] of vm.ownerDeltas) {
+      if (!owner || tokenDelta === BigInt(0)) continue;
+      const quoteDelta = quoteVm.ownerDeltas.get(owner) ?? BigInt(0);
+      if (quoteDelta === BigInt(0)) continue;
+      // opposite signs only
+      const buy = tokenDelta > BigInt(0) && quoteDelta < BigInt(0);
+      const sell = tokenDelta < BigInt(0) && quoteDelta > BigInt(0);
+      if (!buy && !sell) continue;
+      const mag = tokenDelta > BigInt(0) ? tokenDelta : -tokenDelta;
+      if (!best || mag > best.mag) {
+        best = { trader: owner, side: buy ? 'BUY' : 'SELL', quoteDelta, mag };
+      }
+    }
+    if (best) return { side: best.side, trader: best.trader, quoteDelta: best.quoteDelta };
+  }
+  // Fallback: no resolvable paired counterparty. Use the token-mint heuristics;
+  // quoteDelta unknown (0) ⇒ caller will not count toward the raise.
+  return { side: vm.side, trader: vm.trader || '', quoteDelta: BigInt(0) };
 }
 
 /**
@@ -468,6 +531,32 @@ export async function ingestHeliusEvents(
           const grossBaseUnits = vm.grossBaseUnits;
           const withheld = calcFee(grossBaseUnits, feeBps, maxFee);
 
+          // (P1) Derive a RELIABLE trader + BUY/SELL side from the confirmed
+          // owner deltas across the token mint and its paired quote mint — NOT
+          // from `vm.side` (which cancels to BUY for any swap). `payer` is lifted
+          // to the per-mint block scope so EVERY branch below (and the raise
+          // counter) references the SAME in-scope value (P0: the old
+          // block-scoped `payer` threw a ReferenceError in the counter block on
+          // any matched/cross-token leg).
+          const quoteVm = token.quoteMint ? verified.byMint.get(token.quoteMint) : undefined;
+          const derived = deriveTradeSide(vm, quoteVm);
+          const payer = derived.trader;
+          // A confirmed curve BUY against the quote mint requires the trader's
+          // quote delta to be NEGATIVE (quote actually left the trader). Only
+          // such legs may advance the raise counter.
+          const isCurveBuy = derived.side === 'BUY' && derived.quoteDelta < BigInt(0);
+
+          // DBC-phase tokens persist curve trades under venue METEORA_DBC so the
+          // graduation recompute filter (graduation.ts: venue=METEORA_DBC, side=
+          // BUY, amountInMint=quoteMint) can see external curve buys. Non-DBC
+          // tokens keep their pool type (DAMM v2 post-graduation).
+          const isDbcPhase =
+            token.poolType === 'METEORA_DBC' ||
+            (!!token.dbcPoolAddress && token.status !== 'GRADUATED');
+          const venue: 'METEORA_DBC' | 'METEORA_DAMM_V2' | 'BONDING_CURVE' | 'RAYDIUM' = isDbcPhase
+            ? 'METEORA_DBC'
+            : token.poolType ?? 'METEORA_DAMM_V2';
+
           let tradeId: string | null = null;
           let source: 'IN_APP' | 'EXTERNAL';
 
@@ -480,21 +569,31 @@ export async function ingestHeliusEvents(
             });
           } else if (!existingTrade) {
             source = 'EXTERNAL';
-            const payer = vm.trader || '';
+            // Persist the row so the graduation recompute (computeConfirmedRaise)
+            // can count external curve buys: for a confirmed curve BUY against
+            // the quote mint, record the QUOTE leg (amountInMint=quoteMint,
+            // amountInBaseUnits=<confirmed quote base units>); otherwise record
+            // the token-mint leg. The quote base units are the magnitude of the
+            // trader's signed quote delta.
+            const quoteBaseUnits =
+              derived.quoteDelta < BigInt(0) ? -derived.quoteDelta : derived.quoteDelta;
+            const writeQuoteLeg = isCurveBuy && !!token.quoteMint && quoteBaseUnits > BigInt(0);
             const created = await db.trade.upsert({
               where: { signature: ev.signature },
               update: { blockTime: blockTime ?? undefined },
               create: {
                 tokenId: token.id,
                 traderWallet: payer,
-                side: vm.side,
+                side: derived.side,
                 source: 'EXTERNAL',
-                venue: token.poolType ?? 'METEORA_DAMM_V2',
+                venue,
                 signature: ev.signature,
-                amountInBaseUnits: grossBaseUnits.toString(),
-                amountInMint: mint,
-                amountOutBaseUnits: '0',
-                amountOutMint: token.quoteMint ?? '',
+                amountInBaseUnits: writeQuoteLeg
+                  ? quoteBaseUnits.toString()
+                  : grossBaseUnits.toString(),
+                amountInMint: writeQuoteLeg ? token.quoteMint! : mint,
+                amountOutBaseUnits: writeQuoteLeg ? grossBaseUnits.toString() : '0',
+                amountOutMint: writeQuoteLeg ? mint : token.quoteMint ?? '',
                 transferFeeBaseUnits: withheld.toString(),
                 feeBps: feeBps || null,
                 poolAddress: token.dbcPoolAddress ?? token.poolAddress ?? null,
@@ -536,63 +635,61 @@ export async function ingestHeliusEvents(
           });
 
           // (7b) GRADUATION raised tracking (D-graduation §3.2). On the FIRST
-          // confirmation of a curve BUY (USDC-in) for a watched fundraise mint,
+          // confirmation of a curve BUY (quote-in) for a watched fundraise mint,
           // bump the cached `raisedBaseUnits` / `contributorCount` counters by the
-          // CONFIRMED quote (USDC) base units this tx moved. ADDITIVE + idempotent:
+          // CONFIRMED quote base units this tx moved. ADDITIVE + idempotent:
           //   - Gated on `legInsert.count === 1` (the per-(sig,mint) unique key
           //     above): a deduped re-delivery skips the insert ⇒ no double increment.
-          //   - Read-then-write inside THIS `$transaction`: `raisedBaseUnits` is a
-          //     base-unit STRING (Prisma `increment` is numeric-only / 2^53-lossy),
-          //     so we add as `bigint` and write the string back. The status filter
-          //     makes it a no-op when there is no fundraise row or it is already
-          //     terminal — never throws, never breaks ingestion for a no-fundraise
-          //     token. `contributorCount` increments only on a wallet's FIRST BUY
-          //     (deduped below) so repeat buyers aren't over-counted.
-          //   - Authoritative USDC amount comes from `verified.byMint` for the
-          //     token's quote mint (on-chain meta), never a payload float; skipped
-          //     if the quote leg is not visible on-chain (keeper recomputes anyway,
-          //     §3.1 — this counter is a cached display value, not the decision).
-          if (legInsert.count === 1 && vm.side === 'BUY' && token.quoteMint) {
-            const quoteVm = verified.byMint.get(token.quoteMint);
-            const raisedQuote = quoteVm?.grossBaseUnits ?? BigInt(0);
+          //   - Gated on `isCurveBuy` (P1): the trader's quote delta is strictly
+          //     NEGATIVE (quote actually left the trader). A SELL — which `vm.side`
+          //     mislabels as BUY (net cancels) — has quoteDelta >= 0 and is NOT
+          //     counted, so the raise is never bumped in the wrong direction.
+          //   - ATOMIC at the DB level (P1): a single conditional `$executeRaw`
+          //     adds the delta to the `text` column via a `::numeric` cast inside
+          //     the UPDATE (Prisma `increment` is unusable on a String column and
+          //     a read-then-write loses concurrent increments under READ
+          //     COMMITTED). The status filter makes it a no-op when there is no
+          //     fundraise row or it is already terminal — never throws.
+          //   - Authoritative quote amount = the magnitude of the trader's signed
+          //     quote delta (on-chain meta), never a payload float.
+          //   - This is a CACHED display value; the authoritative raise + distinct
+          //     contributor count are recomputed in graduation.getRaisedProgress.
+          if (legInsert.count === 1 && isCurveBuy && token.quoteMint) {
+            const raisedQuote = -derived.quoteDelta; // quoteDelta < 0 ⇒ positive
             if (raisedQuote > BigInt(0)) {
-              const fundraise = await db.tokenFundraise.findFirst({
-                where: {
-                  tokenId: token.id,
-                  status: { in: ['DRAFT', 'ACTIVE', 'THRESHOLD_MET'] },
-                },
-                select: { id: true, raisedBaseUnits: true },
-              });
-              if (fundraise) {
-                let prevRaised: bigint;
-                try {
-                  prevRaised = BigInt(fundraise.raisedBaseUnits);
-                } catch {
-                  prevRaised = BigInt(0);
-                }
-                // Only count a wallet ONCE: increment contributorCount solely on
-                // this wallet's FIRST BUY for the token (any prior BUY trade row
-                // from the same wallet — IN_APP or EXTERNAL — means already
-                // counted). This is still a cached approximation; the authoritative
-                // distinct-wallet count is recomputed in graduation.getRaisedProgress.
-                const priorFromWallet = await db.trade.count({
-                  where: {
-                    tokenId: token.id,
-                    traderWallet: payer,
-                    side: 'BUY',
-                    signature: { not: ev.signature },
-                  },
-                });
-                const isNewContributor = priorFromWallet === 0;
-                await db.tokenFundraise.update({
-                  where: { id: fundraise.id },
-                  data: {
-                    raisedBaseUnits: (prevRaised + raisedQuote).toString(),
-                    ...(isNewContributor
-                      ? { contributorCount: { increment: 1 } }
-                      : {}),
-                  },
-                });
+              const deltaStr = raisedQuote.toString();
+              // Atomic conditional increment of the cached raise (single UPDATE,
+              // no lost-update window). Returns affected-row count; 0 ⇒ no active
+              // fundraise (benign no-op).
+              await db.$executeRaw`
+                UPDATE "token_fundraises"
+                SET "raisedBaseUnits" =
+                  (("raisedBaseUnits"::numeric) + ${deltaStr}::numeric)::text
+                WHERE "tokenId" = ${token.id}
+                  AND "status" IN ('DRAFT', 'ACTIVE', 'THRESHOLD_MET')
+              `;
+              // contributorCount: increment ONLY when no PRIOR counted BUY exists
+              // for this (token, wallet) — evaluated inside the SAME single UPDATE
+              // via a correlated NOT EXISTS, so there is no separate read-then-
+              // write gap. The current row was already inserted above, so it is
+              // excluded by `signature <> current`. Residual: two concurrent
+              // first-buys from the same wallet in separate txns cannot see each
+              // other's uncommitted row → possible +1 over-count; the keeper's
+              // distinct-wallet recompute is authoritative.
+              if (payer) {
+                await db.$executeRaw`
+                  UPDATE "token_fundraises" f
+                  SET "contributorCount" = f."contributorCount" + 1
+                  WHERE f."tokenId" = ${token.id}
+                    AND f."status" IN ('DRAFT', 'ACTIVE', 'THRESHOLD_MET')
+                    AND NOT EXISTS (
+                      SELECT 1 FROM "trades" t
+                      WHERE t."tokenId" = ${token.id}
+                        AND t."traderWallet" = ${payer}
+                        AND t."side" = 'BUY'::"TradeSide"
+                        AND t."signature" <> ${ev.signature}
+                    )
+                `;
               }
             }
           }

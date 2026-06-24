@@ -67,7 +67,7 @@ import {
   type BuiltTx,
   type SubmitResult,
 } from './solana';
-import { MOMENTO_FEE, MOMENTO_CLAIM } from '@momento/shared';
+import { MOMENTO_FEE, MOMENTO_CLAIM, getUsdcMint } from '@momento/shared';
 import type { CreatorToken, TokenFeeConfig, LpPosition } from '@prisma/client';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -91,6 +91,14 @@ export interface RebateResult {
   sent: number;
   deduped: number;
   failed: number;
+  /**
+   * Owed-but-not-sent rows surfaced for follow-up (NOT benign no-ops, NOT send
+   * failures): a genuine rebate that could not be sized for lack of a usable price
+   * (`rebate-deferred-no-price`) or because the wallet hit its lifetime USDC cap
+   * (`rebate-wallet-cap-reached`). These rows stay rebatePaid:false and are
+   * re-attempted on a later tick. P1 — they must NOT vanish silently.
+   */
+  deferred: number;
   signatures: string[];
 }
 
@@ -208,6 +216,196 @@ async function claimedAmountFromMeta(
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+//  USD snapshotting + pool/fill-implied pricing (P1 — fee-claim hardening)
+// ════════════════════════════════════════════════════════════════════════════
+//
+// Why this exists:
+//   • Every claimed/accrual FeeEvent was written with amountUsd=null, so the read
+//     model (fees.ts getTokenFeeSummary / getCreatorFeeSummary, which sum
+//     `ev.amountUsd ?? 0`) reported $0 for ALL fee figures once the on-chain claim
+//     engine became the source of fee events. We now snapshot amountUsd at write.
+//   • The rebate USD send size was driven by `trade.priceUsd` — a DAS oracle an
+//     attacker can move on a thin pool, with no sanity band and no cap. We size
+//     instead from a POOL/FILL-IMPLIED price (the confirmed swap's own USDC↔token
+//     legs — the venue quote that already touched the pool), clamp it to a
+//     deviation band vs the DAS reference, and cap the send per-trade/per-wallet.
+
+/** Is `mint` the active-cluster USDC (or the frozen mainnet literal)? USDC≈$1. */
+function isUsdcMint(mint: string | null | undefined): boolean {
+  if (!mint) return false;
+  return mint === MOMENTO_FEE.USDC_MINT || mint === getUsdcMint();
+}
+
+/**
+ * USD value of a base-unit amount in `mint`. USDC is priced at exactly 1 (fee- and
+ * oracle-exempt); any other mint uses the supplied whole-token USD price (0 ⇒ no
+ * snapshot available → return null so the caller can record "unknown" rather than
+ * a misleading $0). Kept in the float domain only for the final display value.
+ */
+function amountToUsd(
+  amountBaseUnits: bigint,
+  mint: string,
+  mintDecimals: number,
+  tokenPriceUsd: number,
+): number | null {
+  if (amountBaseUnits <= BigInt(0)) return 0;
+  if (isUsdcMint(mint)) {
+    return Number(amountBaseUnits) / 10 ** MOMENTO_FEE.USDC_DECIMALS;
+  }
+  if (!(tokenPriceUsd > 0) || !Number.isFinite(tokenPriceUsd)) return null;
+  const dec = Number.isFinite(mintDecimals) && mintDecimals >= 0 ? Math.floor(mintDecimals) : 0;
+  return (Number(amountBaseUnits) / 10 ** dec) * tokenPriceUsd;
+}
+
+/**
+ * Pool/fill-implied USD price (per WHOLE token) for a creator token, derived from
+ * its own recently-CONFIRMED on-chain swaps — NOT a standalone DAS oracle. Each
+ * confirmed Trade carries both legs (creator-token side + USDC quote side); the
+ * implied price is `usdcWhole / tokenWhole`, the price the venue actually filled
+ * at. We take the MEDIAN over the most-recent confirmed fills so a single
+ * thin-pool print cannot dominate. Returns 0 when no confirmed USDC-quoted fill
+ * exists (caller then refuses to size a rebate / records USD as unknown).
+ */
+async function fillImpliedTokenPriceUsd(tokenId: string, mint: string | null): Promise<number> {
+  if (!mint) return 0;
+  let rows: Array<{
+    amountInBaseUnits: string;
+    amountInMint: string;
+    amountOutBaseUnits: string;
+    amountOutMint: string;
+  }>;
+  try {
+    rows = await prisma.trade.findMany({
+      where: { tokenId, blockTime: { not: null } },
+      orderBy: { blockTime: 'desc' },
+      take: 25,
+      select: {
+        amountInBaseUnits: true,
+        amountInMint: true,
+        amountOutBaseUnits: true,
+        amountOutMint: true,
+      },
+    });
+  } catch {
+    return 0;
+  }
+
+  const ratios: number[] = [];
+  for (const r of rows) {
+    // Identify which leg is the creator-token mint and which is USDC.
+    let tokenBase: bigint;
+    let usdcBase: bigint;
+    try {
+      if (r.amountInMint === mint && isUsdcMint(r.amountOutMint)) {
+        tokenBase = BigInt(r.amountInBaseUnits || '0');
+        usdcBase = BigInt(r.amountOutBaseUnits || '0');
+      } else if (r.amountOutMint === mint && isUsdcMint(r.amountInMint)) {
+        tokenBase = BigInt(r.amountOutBaseUnits || '0');
+        usdcBase = BigInt(r.amountInBaseUnits || '0');
+      } else {
+        continue; // not a token↔USDC fill we can price from
+      }
+    } catch {
+      continue;
+    }
+    if (tokenBase <= BigInt(0) || usdcBase <= BigInt(0)) continue;
+    // Raw base-unit ratio (usdcBase / tokenBase); decimals are applied once by the
+    // caller (poolImpliedTokenPriceUsd) using the token's decimals.
+    ratios.push(Number(usdcBase) / Number(tokenBase));
+  }
+  if (ratios.length === 0) return 0;
+  ratios.sort((a, b) => a - b);
+  return ratios[Math.floor(ratios.length / 2)]; // median base-unit ratio
+}
+
+/**
+ * Whole-token USD price from the median base-unit fill ratio (usdcBase/tokenBase):
+ *   priceUsd = ratio * 10^tokenDecimals / 10^USDC_DECIMALS
+ */
+async function poolImpliedTokenPriceUsd(
+  tokenId: string,
+  mint: string | null,
+  tokenDecimals: number,
+): Promise<number> {
+  const ratio = await fillImpliedTokenPriceUsd(tokenId, mint);
+  if (!(ratio > 0)) return 0;
+  const dec = Number.isFinite(tokenDecimals) && tokenDecimals >= 0 ? Math.floor(tokenDecimals) : 0;
+  const price = (ratio * 10 ** dec) / 10 ** MOMENTO_FEE.USDC_DECIMALS;
+  return Number.isFinite(price) && price > 0 ? price : 0;
+}
+
+// ── Rebate sizing safety rails (P1) ──────────────────────────────────────────
+// Pool-implied price is the PRIMARY source; the DAS snapshot (trade.priceUsd) is
+// only a reference. When both exist we clamp the pool price into a deviation band
+// around the reference, then cap the resulting USDC send per-trade and per-wallet.
+
+/** Read a positive numeric env override, else the default. */
+function envNum(name: string, dflt: number): number {
+  const v = Number(process.env[name]);
+  return Number.isFinite(v) && v > 0 ? v : dflt;
+}
+
+// Max ratio between pool-implied and reference price before we treat the quote as
+// manipulated and refuse to size off it (e.g. 3 ⇒ within 3x / 0.33x of reference).
+const REBATE_PRICE_BAND_RATIO = () => envNum('REBATE_PRICE_BAND_RATIO', 3);
+// Hard ceilings on a single rebate (USDC, whole units) and per-wallet lifetime
+// rebate (USDC, whole units). Defaults are conservative; overridable by env.
+const REBATE_MAX_PER_TRADE_USDC = () => envNum('REBATE_MAX_PER_TRADE_USDC', 50);
+const REBATE_MAX_PER_WALLET_USDC = () => envNum('REBATE_MAX_PER_WALLET_USDC', 500);
+
+interface RebatePrice {
+  /** chosen whole-token USD price to size the send from (0 ⇒ none usable). */
+  priceUsd: number;
+  /** how the price was chosen (surfaced in reasons / logs). */
+  basis: 'pool' | 'pool-clamped' | 'reference' | 'none';
+}
+
+/**
+ * Choose the USD price used to size a rebate. PRIMARY = pool/fill-implied; the DAS
+ * `referenceUsd` is only used to (a) clamp an out-of-band pool price into the band,
+ * or (b) act as a last-resort source when no pool fill is priceable. We NEVER size
+ * purely off the DAS oracle when a pool price is available, and we never return a
+ * price of 0 when one is genuinely derivable — a missing price surfaces distinctly
+ * (basis:'none') rather than silently zeroing a real obligation.
+ */
+function chooseRebatePrice(poolUsd: number, referenceUsd: number): RebatePrice {
+  const hasPool = poolUsd > 0 && Number.isFinite(poolUsd);
+  const hasRef = referenceUsd > 0 && Number.isFinite(referenceUsd);
+  if (hasPool && hasRef) {
+    const band = REBATE_PRICE_BAND_RATIO();
+    const hi = referenceUsd * band;
+    const lo = referenceUsd / band;
+    if (poolUsd > hi) return { priceUsd: hi, basis: 'pool-clamped' };
+    if (poolUsd < lo) return { priceUsd: lo, basis: 'pool-clamped' };
+    return { priceUsd: poolUsd, basis: 'pool' };
+  }
+  if (hasPool) return { priceUsd: poolUsd, basis: 'pool' };
+  if (hasRef) return { priceUsd: referenceUsd, basis: 'reference' };
+  return { priceUsd: 0, basis: 'none' };
+}
+
+/**
+ * Apply the per-trade + per-wallet USDC ceilings to a proposed rebate (base units,
+ * 6-dp USDC). Returns the (possibly reduced) amount to send. `priorWalletUsdc` is
+ * the wallet's already-paid rebate total in USDC base units.
+ */
+function capRebateUsdc(proposedBase: bigint, priorWalletUsdc: bigint): bigint {
+  const usdcScale = BigInt(10) ** BigInt(MOMENTO_FEE.USDC_DECIMALS);
+  const perTradeCap = BigInt(Math.floor(REBATE_MAX_PER_TRADE_USDC() * Number(usdcScale)));
+  const perWalletCap = BigInt(Math.floor(REBATE_MAX_PER_WALLET_USDC() * Number(usdcScale)));
+
+  let amt = proposedBase;
+  if (perTradeCap > BigInt(0) && amt > perTradeCap) amt = perTradeCap;
+
+  if (perWalletCap > BigInt(0)) {
+    const remaining = perWalletCap - priorWalletUsdc;
+    if (remaining <= BigInt(0)) return BigInt(0); // wallet already at/over its cap
+    if (amt > remaining) amt = remaining;
+  }
+  return amt > BigInt(0) ? amt : BigInt(0);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 //  Recording (atomic, idempotent — per claim tx) — D-fee-claim §3d
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -228,6 +426,10 @@ interface RecordTradingFeeArgs {
   amountMint: string;
   /** authoritative claimed amount (base units) from confirmed tx meta. */
   amountBaseUnits: bigint;
+  /** decimals of `amountMint` (for the USD snapshot). */
+  amountMintDecimals: number;
+  /** whole-token USD price of `amountMint` (USDC sized at 1 regardless). */
+  amountMintPriceUsd: number;
   /** the claim tx signature (unique idempotency anchor). */
   claimSignature: string;
   blockTime: number | null;
@@ -254,9 +456,16 @@ async function recordTradingFeeClaim(args: RecordTradingFeeArgs): Promise<number
     destinationWallet,
     amountMint,
     amountBaseUnits,
+    amountMintDecimals,
+    amountMintPriceUsd,
     claimSignature,
     blockTime,
   } = args;
+
+  // USD snapshot at write (P1): the read model sums `amountUsd ?? 0`, so a null
+  // here permanently reports the fee as $0. USDC legs are exact (≈1); a non-USDC
+  // leg with no usable price records null (unknown), never a misleading 0.
+  const amountUsd = amountToUsd(amountBaseUnits, amountMint, amountMintDecimals, amountMintPriceUsd);
 
   if (amountBaseUnits <= BigInt(0)) {
     // Nothing landed — still write the CLAIMED audit anchor so a retick is a
@@ -273,6 +482,7 @@ async function recordTradingFeeClaim(args: RecordTradingFeeArgs): Promise<number
           feeBaseUnits: '0',
           netBaseUnits: '0',
           amountMint,
+          amountUsd: 0,
           signature: claimSignature,
           claimed: true,
           claimedAt: new Date(),
@@ -312,6 +522,7 @@ async function recordTradingFeeClaim(args: RecordTradingFeeArgs): Promise<number
           feeBaseUnits: amountBaseUnits.toString(),
           netBaseUnits: amountBaseUnits.toString(),
           amountMint,
+          amountUsd,
           feeBps: recipient === 'PLATFORM' ? feeConfig.partnerTradingFeeBps : feeConfig.creatorTradingFeeBps,
           internalRef,
           // This accrual is realized AND swept in the same claim → mark claimed.
@@ -337,6 +548,7 @@ async function recordTradingFeeClaim(args: RecordTradingFeeArgs): Promise<number
           feeBaseUnits: amountBaseUnits.toString(),
           netBaseUnits: amountBaseUnits.toString(),
           amountMint,
+          amountUsd,
           signature: claimSignature,
           claimed: true,
           claimedAt: now,
@@ -375,11 +587,28 @@ async function recordWithheldWithdraw(args: {
   destinationWallet: string;
   mint: string;
   amountBaseUnits: bigint;
+  /** decimals of the creator-token mint (for the USD snapshot). */
+  mintDecimals: number;
+  /** pool/fill-implied whole-token USD price (0 ⇒ record USD as unknown). */
+  mintPriceUsd: number;
   withdrawSignature: string;
   blockTime: number | null;
 }): Promise<number> {
-  const { tokenId, destinationWallet, mint, amountBaseUnits, withdrawSignature, blockTime } = args;
+  const {
+    tokenId,
+    destinationWallet,
+    mint,
+    amountBaseUnits,
+    mintDecimals,
+    mintPriceUsd,
+    withdrawSignature,
+    blockTime,
+  } = args;
   const now = new Date();
+  // USD snapshot (P1). The withheld pool is denominated in the creator-token mint,
+  // so we price it from the pool/fill-implied USD price; an unavailable price
+  // records null (unknown) rather than a misleading $0.
+  const amountUsd = amountToUsd(amountBaseUnits, mint, mintDecimals, mintPriceUsd);
 
   return prisma.$transaction(async (txc) => {
     const inserted = await txc.feeEvent.createMany({
@@ -394,6 +623,7 @@ async function recordWithheldWithdraw(args: {
           feeBaseUnits: amountBaseUnits.toString(),
           netBaseUnits: amountBaseUnits.toString(),
           amountMint: mint, // withheld pool is denominated in the creator-token mint
+          amountUsd,
           signature: withdrawSignature,
           claimed: true,
           claimedAt: now,
@@ -691,6 +921,14 @@ export async function claimTokenFees(
   const feeConfig = token.feeConfig;
   const quoteMint = token.quoteMint ?? feeConfig.rebateMint ?? MOMENTO_FEE.USDC_MINT;
 
+  // P1 — USD snapshotting. Trading-fee/LP claims are denominated in the quote mint
+  // (USDC, sized at 1); the Token-2022 withheld pool is in the creator-token mint,
+  // which we price from the pool/fill-implied USD price (median of recent confirmed
+  // token↔USDC fills — the venue price, not a standalone DAS oracle). Computed once.
+  const tokenDecimals = token.decimals ?? 9;
+  const quoteDecimals = isUsdcMint(quoteMint) ? MOMENTO_FEE.USDC_DECIMALS : tokenDecimals;
+  const tokenPriceUsd = await poolImpliedTokenPriceUsd(token.id, token.mintAddress, tokenDecimals);
+
   // ── 3a. Token-2022 withheld → fee vault ───────────────────────────────────
   try {
     const wh = await buildWithheldClaim(token, feeConfig);
@@ -710,6 +948,8 @@ export async function claimTokenFees(
           destinationWallet: wh.destination.toBase58(),
           mint: token.mintAddress!,
           amountBaseUnits: amt,
+          mintDecimals: tokenDecimals,
+          mintPriceUsd: tokenPriceUsd,
           withdrawSignature: res.signature,
           blockTime: null,
         });
@@ -751,6 +991,8 @@ export async function claimTokenFees(
           destinationWallet: dest.toBase58(),
           amountMint: quoteMint,
           amountBaseUnits: amt,
+          amountMintDecimals: quoteDecimals,
+          amountMintPriceUsd: isUsdcMint(quoteMint) ? 1 : tokenPriceUsd,
           claimSignature: res.signature,
           blockTime: null,
         });
@@ -790,6 +1032,8 @@ export async function claimTokenFees(
           destinationWallet: dest.toBase58(),
           amountMint: quoteMint,
           amountBaseUnits: amt,
+          amountMintDecimals: quoteDecimals,
+          amountMintPriceUsd: isUsdcMint(quoteMint) ? 1 : tokenPriceUsd,
           claimSignature: res.signature,
           blockTime: null,
         });
@@ -840,6 +1084,8 @@ export async function claimTokenFees(
               destinationWallet: position.ownerWallet,
               amountMint: quoteMint,
               amountBaseUnits: amt,
+              amountMintDecimals: quoteDecimals,
+              amountMintPriceUsd: isUsdcMint(quoteMint) ? 1 : tokenPriceUsd,
               claimSignature: res.signature,
               blockTime: null,
             });
@@ -969,20 +1215,81 @@ export async function payRebate(
   });
   if (rebateOwedNet <= BigInt(0)) return { sent: false, reason: 'no-rebate-owed' };
 
-  const rebateMint = trade.rebateMint ?? trade.token?.feeConfig?.rebateMint ?? MOMENTO_FEE.USDC_MINT;
-  const useUsdc = rebateMint === MOMENTO_FEE.USDC_MINT;
+  const rebateMint = trade.rebateMint ?? trade.token?.feeConfig?.rebateMint ?? getUsdcMint();
+  // Cluster-aware USDC check (the frozen MOMENTO_FEE.USDC_MINT is mainnet-only; on
+  // devnet the rebate mint is the devnet USDC). A wrong answer here would route a
+  // USDC send down the Token-2022 gross-up path.
+  const useUsdc = isUsdcMint(rebateMint);
   const decimals = trade.token?.decimals ?? 9;
 
   // Convert the net token rebate to the SEND amount in the rebate mint, derived
-  // from the CONFIRMED fill — USDC default (fee-exempt, priced at the trade's
-  // snapshot), Token-2022 fallback grossed up so the trader nets `rebateOwedNet`.
+  // from the CONFIRMED fill. The Token-2022 fallback is grossed up so the trader
+  // nets `rebateOwedNet` and needs no USD price. The USDC path needs a token→USDC
+  // price, which we take from the POOL/FILL-IMPLIED price (P1), NOT the manipulable
+  // DAS `trade.priceUsd` oracle alone.
   let rebateBaseUnits: bigint;
   if (useUsdc) {
-    rebateBaseUnits = rebateToUsdc(rebateOwedNet, trade.priceUsd ?? 0, decimals);
+    // P1 — price source hardening. PRIMARY = pool/fill-implied price (median of
+    // recent confirmed token↔USDC fills — the venue price that already touched the
+    // pool); REFERENCE = the DAS snapshot, used only to clamp an out-of-band pool
+    // price into a deviation band (defends against a single thin-pool print), or as
+    // a last resort when no pool fill is priceable.
+    const poolUsd = await poolImpliedTokenPriceUsd(trade.tokenId, trade.token?.mintAddress ?? null, decimals);
+    const chosen = chooseRebatePrice(poolUsd, trade.priceUsd ?? 0);
+
+    // P1 — NEVER size a rebate off price=0. When a genuine token-terms rebate is
+    // owed but NO usable USD price exists, do NOT silently collapse to 0 (which
+    // would leave rebatePaid:false and re-derive 0 forever, permanently denying an
+    // owed rebate). Return a DISTINCT, surfaced reason BEFORE the reservation so a
+    // later tick (with fresh fills / a recovered DAS price) re-attempts it.
+    if (chosen.basis === 'none' || !(chosen.priceUsd > 0)) {
+      return { sent: false, reason: 'rebate-deferred-no-price' };
+    }
+
+    rebateBaseUnits = rebateToUsdc(rebateOwedNet, chosen.priceUsd, decimals);
+    if (rebateBaseUnits <= BigInt(0)) {
+      // Price is usable but the priced rebate rounds below 1 USDC base unit — a true
+      // dust no-op (distinct from the price-missing case above).
+      return { sent: false, reason: 'rebate-below-min' };
+    }
+
+    // P1 — per-trade + per-wallet USDC ceilings. Sum the wallet's already-PAID
+    // rebates (USDC base units) to enforce the lifetime cap; a manipulated-high
+    // price (within the band) or many trades cannot drain the vault past the cap.
+    let priorWalletUsdc = BigInt(0);
+    try {
+      const priorRows = await prisma.trade.findMany({
+        where: {
+          traderWallet: trade.traderWallet,
+          rebatePaid: true,
+          rebateSignature: { not: null },
+          id: { not: tradeId },
+        },
+        select: { rebateBaseUnits: true, rebateMint: true },
+        take: 1000,
+      });
+      for (const p of priorRows) {
+        if (!isUsdcMint(p.rebateMint ?? getUsdcMint())) continue;
+        try {
+          priorWalletUsdc += BigInt(p.rebateBaseUnits || '0');
+        } catch {
+          /* ignore unparseable */
+        }
+      }
+    } catch {
+      // If the prior-total read fails, fall back to per-trade cap only (still safe).
+    }
+
+    const capped = capRebateUsdc(rebateBaseUnits, priorWalletUsdc);
+    if (capped <= BigInt(0)) {
+      // Wallet is at/over its lifetime rebate cap — surface (not benign).
+      return { sent: false, reason: 'rebate-wallet-cap-reached' };
+    }
+    rebateBaseUnits = capped;
   } else {
     rebateBaseUnits = grossUpTokenRebate(rebateOwedNet, feeBps);
+    if (rebateBaseUnits <= BigInt(0)) return { sent: false, reason: 'no-rebate-owed' };
   }
-  if (rebateBaseUnits <= BigInt(0)) return { sent: false, reason: 'no-rebate-owed' };
 
   // ── (1) RESERVE before send (anti-double-pay CAS) ─────────────────────────
   // SEC P0-2 / correctness P1: the reservation is a CAS on `rebatePaid:false`.
@@ -1069,12 +1376,20 @@ export async function payRebate(
       idempotencyKey: `rebate:${tradeId}`,
     });
 
-    // ── (3) on confirm: persist signature + flip REBATE FeeEvent ─────────────
+    // ── (3) on confirm: persist signature + ACTUAL sent amount + flip FeeEvent ─
+    // P1 — persist the AUTHORITATIVE sent amount/mint (rebateBaseUnits was the
+    // pre-signature estimate). The per-wallet cap reads these confirmed totals, so
+    // recording the actually-sent USDC keeps the lifetime cap accurate.
     const now = new Date();
+    const sentRebateBase = sendAmount.toString();
     await prisma.$transaction(async (txc) => {
       await txc.trade.update({
         where: { id: tradeId },
-        data: { rebateSignature: res.signature },
+        data: {
+          rebateSignature: res.signature,
+          rebateBaseUnits: sentRebateBase,
+          rebateMint,
+        },
       });
       await txc.feeEvent.updateMany({
         where: { tradeId, type: 'REBATE', claimed: false },
@@ -1158,7 +1473,7 @@ export async function runRebateSweep(limit?: number): Promise<RebateResult> {
     if (ids.length >= take) break;
   }
 
-  const out: RebateResult = { attempted: 0, sent: 0, deduped: 0, failed: 0, signatures: [] };
+  const out: RebateResult = { attempted: 0, sent: 0, deduped: 0, failed: 0, deferred: 0, signatures: [] };
   for (const id of ids) {
     out.attempted++;
     try {
@@ -1170,15 +1485,25 @@ export async function runRebateSweep(limit?: number): Promise<RebateResult> {
         out.deduped++;
         if (r.signature) out.signatures.push(r.signature);
       } else if (
+        r.reason === 'rebate-deferred-no-price' ||
+        r.reason === 'rebate-wallet-cap-reached'
+      ) {
+        // P1 — a genuinely-owed rebate that could not be sized/sent this tick. NOT a
+        // benign no-op and NOT a transient send failure: surface it distinctly so a
+        // real obligation can never be silently zeroed out (it stays rebatePaid:false
+        // and is re-attempted later).
+        out.deferred++;
+      } else if (
         r.reason === 'not-confirmed' ||
         r.reason === 'no-confirmed-fill' ||
         r.reason === 'no-rebate-owed' ||
+        r.reason === 'rebate-below-min' ||
         r.reason === 'already-paid' ||
         r.reason === 'not-in-app' ||
         r.reason === 'trade-not-found'
       ) {
-        // Benign no-ops (not yet confirmed, nothing owed, already done) — neither
-        // a send nor a failure. Don't inflate `failed`.
+        // Benign no-ops (not yet confirmed, nothing owed, dust, already done) —
+        // neither a send nor a failure. Don't inflate `failed`.
       } else {
         out.failed++;
       }

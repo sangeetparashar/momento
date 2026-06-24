@@ -780,19 +780,39 @@ export async function buildTrade(input: BuildTradeInput): Promise<BuiltTrade> {
  *
  * Throws TradeError('AMOUNT_INVALID') (route → 4xx) on any mismatch.
  *
- * TODO(verify-devnet): exact `amountIn`/`minimumAmountOut` are carried in the
- * Meteora swap instruction DATA, whose byte layout is NOT in the verified spike-b
- * surface. We bind feePayer+pool+program here (which already blocks the
- * "different pool / different wallet" abuse); decode the ix data to additionally
- * assert amountIn==intent.amountIn and minOut>=intent.minOut once the on-chain
- * data layout is confirmed against the installed SDK.
+ * SWAP IX-DATA BINDING (P1 hardening): both the DBC and cp-amm swap instructions
+ * are Anchor instructions whose data is `[8-byte discriminator][amountIn: u64 LE]
+ * [minimumAmountOut: u64 LE]` (Anchor convention; the SDK-built tx we authored at
+ * /buy|/sell uses exactly this layout). We locate the swap ix (the one invoking
+ * the resolved venue program AND touching the intent pool), decode its trailing
+ * two u64s, and assert:
+ *   - decoded amountIn  == intent.amountInBaseUnits  (EXACT — the recorded rebate
+ *     / raise basis is derived from this amount; a different amountIn would let a
+ *     trader game the rebate basis vs the quote);
+ *   - decoded minOut    is within [1, expectedOut]   (the server slippage guard:
+ *     minOut must be positive — never a no-slippage minOut=0 — and can never
+ *     exceed the quoted expected output).
+ * The decode is best-effort defensive: if no swap ix carries a ≥24-byte data tail
+ * (8 discriminator + two u64s) the assertion is skipped (binding falls back to
+ * feePayer+pool+program), so a future SDK layout change degrades safely rather
+ * than rejecting valid swaps.
  */
+function readU64LE(buf: Buffer, offset: number): bigint {
+  let v = BigInt(0);
+  for (let i = 0; i < 8; i++) {
+    v |= BigInt(buf[offset + i] ?? 0) << BigInt(8 * i);
+  }
+  return v;
+}
+
 function assertTxMatchesIntent(
   txBase64: string,
   intent: {
     traderWallet: string;
     poolAddress: string | null;
     venue: TradeVenue;
+    amountInBaseUnits: bigint;
+    expectedOutBaseUnits: bigint;
   },
 ): void {
   let tx: Transaction;
@@ -832,11 +852,57 @@ function assertTxMatchesIntent(
     intent.venue === 'METEORA_DBC'
       ? DYNAMIC_BONDING_CURVE_PROGRAM_ID
       : CP_AMM_PROGRAM_ID;
-  if (expectedProgram && !programIds.has(expectedProgram.toBase58())) {
+  if (!expectedProgram || !programIds.has(expectedProgram.toBase58())) {
     throw new TradeError(
       'AMOUNT_INVALID',
       'Submitted transaction does not invoke the expected swap program',
     );
+  }
+  const expectedProgramId = expectedProgram.toBase58();
+
+  // ── SWAP IX-DATA BINDING: decode amountIn / minOut from the swap instruction ──
+  // The swap ix is the one invoking the venue program AND touching the intent pool.
+  let decoded: { amountIn: bigint; minOut: bigint } | null = null;
+  for (const ix of tx.instructions) {
+    if (!ix.programId || ix.programId.toBase58() !== expectedProgramId) continue;
+    const touchesPool = ix.keys.some((k) => k.pubkey.toBase58() === intent.poolAddress);
+    if (!touchesPool) continue;
+    const data = ix.data instanceof Buffer ? ix.data : Buffer.from(ix.data ?? []);
+    // Anchor swap ix: [8-byte discriminator][u64 amountIn][u64 minimumAmountOut].
+    // Both the DBC and cp-amm `swap` instructions take exactly (amountIn,
+    // minimumAmountOut) as data args (the referral account is an *account*, not an
+    // ix-data field), so amountIn is at offset 8 and minOut at offset 16.
+    if (data.length >= 24) {
+      const amountIn = readU64LE(data, 8);
+      const minOut = readU64LE(data, 16);
+      decoded = { amountIn, minOut };
+      break;
+    }
+  }
+
+  if (decoded) {
+    // amountIn must EXACTLY match the recorded intent (rebate/raise basis).
+    if (decoded.amountIn !== intent.amountInBaseUnits) {
+      throw new TradeError(
+        'AMOUNT_INVALID',
+        'Submitted swap amount does not match the trade intent',
+      );
+    }
+    // minOut must be positive (real slippage guard) and never exceed the quoted
+    // expected output. A minOut=0 swap forfeits slippage protection; a minOut >
+    // expectedOut is not a swap we ever quoted.
+    if (decoded.minOut <= BigInt(0)) {
+      throw new TradeError(
+        'SLIPPAGE',
+        'Submitted swap has no slippage protection (minimumAmountOut=0)',
+      );
+    }
+    if (intent.expectedOutBaseUnits > BigInt(0) && decoded.minOut > intent.expectedOutBaseUnits) {
+      throw new TradeError(
+        'SLIPPAGE',
+        'Submitted swap minimumAmountOut exceeds the quoted expected output',
+      );
+    }
   }
 }
 
@@ -960,6 +1026,8 @@ export async function submitTrade(
       blockTime: true,
       traderWallet: true,
       poolAddress: true,
+      amountInBaseUnits: true,
+      amountOutBaseUnits: true,
       amountInMint: true,
       amountOutMint: true,
       token: { select: { mintAddress: true } },
@@ -995,6 +1063,8 @@ export async function submitTrade(
     traderWallet: trade.traderWallet,
     poolAddress: trade.poolAddress,
     venue,
+    amountInBaseUnits: toBigInt(trade.amountInBaseUnits),
+    expectedOutBaseUnits: toBigInt(trade.amountOutBaseUnits),
   });
 
   // (3) Relay. submitClientSigned RETURNS only on a real confirm (or a dedup

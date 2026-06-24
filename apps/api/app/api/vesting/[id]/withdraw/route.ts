@@ -2,11 +2,14 @@
  * POST /api/vesting/[id]/withdraw — User (recipient) · writeLimiter
  * (CONTRACTS-P3A §d.9, D-vesting §4.3).
  *
- * requireAuth. Load VestingSchedule by id; authorize caller wallet ===
- * beneficiaryWallet (recipient-only — the recipient must sign). 400 "Nothing to
- * withdraw" if claimable 0. buildVestingWithdraw -> buildUnsignedForClient (the
- * recipient signs via embedded wallet). On the logged confirm, bump
- * releasedBaseUnits / flip COMPLETED — handled by /api/wallet/transactions/log.
+ * requireAuth. Load VestingSchedule by id; authorize the caller as the recipient
+ * (beneficiaryUserId === user.id when set, with a wallet match as a secondary
+ * gate; wallet-string equality only when beneficiaryUserId is null). 400 "Nothing
+ * to withdraw" if claimable 0. buildVestingWithdraw -> buildUnsignedForClient (the
+ * recipient signs via embedded wallet). After the recipient self-submits, the
+ * mobile client POSTs /api/vesting/[id]/confirm, which re-derives the withdrawn
+ * total from the signature's tx meta and bumps releasedBaseUnits / flips
+ * COMPLETED. (The old /api/wallet/transactions/log path never handled vesting.)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -45,20 +48,39 @@ export async function POST(
     const parsed = validateBody(vestingWithdrawSchema, body);
     if (!parsed.success) return parsed.response;
 
-    const schedule = await prisma.vestingSchedule.findUnique({ where: { id } });
+    const schedule = await prisma.vestingSchedule.findUnique({
+      where: { id },
+      include: { token: { select: { tokenProgram: true } } },
+    });
     if (!schedule) {
       return NextResponse.json({ success: false, error: 'Vesting not found' }, { status: 404 });
     }
 
-    // Recipient-only: caller's wallet must equal beneficiaryWallet.
-    if (schedule.beneficiaryWallet !== wallet) {
+    // Recipient-only authorization (P1 hardening). Prefer the resolved
+    // beneficiaryUserId (a server-side user binding) over raw wallet-string
+    // equality on a field copied verbatim from creator-supplied input.recipient.
+    //   - beneficiaryUserId set  → user.id must match it AND the signing wallet must
+    //     still match beneficiaryWallet (the tx is built for that wallet's ATA).
+    //   - beneficiaryUserId null → fall back to wallet-string equality.
+    const authorized =
+      schedule.beneficiaryUserId != null
+        ? schedule.beneficiaryUserId === user.id && schedule.beneficiaryWallet === wallet
+        : schedule.beneficiaryWallet === wallet;
+    if (!authorized) {
       return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
     }
+
+    // P1 hardening: VestingSchedule has no token-program column yet, so resolve the
+    // mint's program from CreatorToken.tokenProgram (joined above) and thread it
+    // through — the launched-token default is Token-2022; deriving ATAs under the
+    // classic program would make the claim revert (withdraw-DoS).
+    const isToken2022 = schedule.token?.tokenProgram === 'TOKEN_2022';
 
     const { built, claimableBase } = await buildVestingWithdraw({
       schedule,
       invoker: new PublicKey(wallet),
       amountBase: parsed.data.amountBase,
+      isToken2022,
     });
 
     if (claimableBase === '0') {

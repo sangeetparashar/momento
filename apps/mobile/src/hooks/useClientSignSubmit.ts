@@ -17,6 +17,7 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from './useAuth';
 import { deserializeTx, getConnection, uint8ArrayToBase64 } from '@/utils/solanaTx';
+import { ApiError } from '@/services/api';
 
 export type SignStatus =
   | 'idle'
@@ -134,6 +135,25 @@ export function useClientSignSubmit(): UseClientSignSubmit {
           status: resultStatus,
         };
       } catch (err: any) {
+        // HTTP 202 = the transaction was broadcast but NOT yet confirmed
+        // (TIMEOUT / BLOCKHASH_EXPIRED). The chain outcome is genuinely unknown:
+        // it may still land. This is NOT a hard failure — surface it as a
+        // "submitted, confirming" terminal state (reusing the PENDING UX) rather
+        // than a red "FAILED", so the user doesn't retry a tx that may succeed.
+        if (err instanceof ApiError && err.status === 202) {
+          const body =
+            err.body && typeof err.body === 'object'
+              ? (err.body as Record<string, unknown>)
+              : null;
+          // 202 bodies carry no on-chain signature (none is known yet).
+          const sig = body && typeof body.signature === 'string' ? body.signature : null;
+          setSubmitStatus('PENDING');
+          setSignature(sig);
+          setStatus('success');
+          console.warn('[useClientSignSubmit] submitted but unconfirmed (202):', err.message);
+          return { signature: sig ?? '', deduped: false, status: 'PENDING' };
+        }
+
         const message = err?.message || 'Transaction failed';
         setError(message);
         setStatus('error');

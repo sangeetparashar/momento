@@ -8,7 +8,9 @@
  *   - client path (fallback on PARTIAL_SIGN_UNSUPPORTED, or VESTING_FORCE_CLIENT_COSIGN=1):
  *     rebuild signers = [ephemeral, clientRelay(creatorWallet)], buildUnsignedForClient()
  *     pre-attaches the ephemeral sig server-side; row stays PENDING until mobile
- *     self-submits + POSTs /api/wallet/transactions/log (type 'vest_create').
+ *     self-submits + POSTs /api/vesting/[id]/confirm, which re-derives the funded
+ *     state from the signature's tx meta and flips the row ACTIVE. (The old
+ *     /api/wallet/transactions/log path never handled vesting types.)
  *
  * Response carries a signMode 'server'|'client' discriminator.
  *

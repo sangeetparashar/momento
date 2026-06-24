@@ -127,7 +127,22 @@ class ApiService {
         parsed = await response.text();
       }
 
-      if (!response.ok) {
+      // Treat as an error if either:
+      //  - the HTTP status is non-2xx, OR
+      //  - the status is 202 (broadcast-but-unconfirmed: TIMEOUT / BLOCKHASH_EXPIRED;
+      //    the chain outcome is unknown — must NOT be rendered as success), OR
+      //  - the body is an envelope with `success === false` (defensive: any 2xx
+      //    that still reports failure, e.g. an unconfirmed submit).
+      // Without this, a 202 `{ success: false, ... }` slips past the `!response.ok`
+      // check, fails the `{ success, data }` unwrap (no `data` key), and the raw
+      // `{ success: false }` is returned — surfacing a bogus "TRADE CONFIRMED" /
+      // "$TOKEN IS LIVE" for a transaction whose outcome is not yet known.
+      const bodyReportsFailure =
+        parsed !== null &&
+        typeof parsed === 'object' &&
+        (parsed as Record<string, unknown>).success === false;
+
+      if (!response.ok || response.status === 202 || bodyReportsFailure) {
         // console.warn (not console.error) — in React Native dev, console.error
         // triggers the full-screen red-box overlay. The caller still gets an
         // ApiError and decides whether to show user-facing UI.

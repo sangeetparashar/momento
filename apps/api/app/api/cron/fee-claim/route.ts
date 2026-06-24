@@ -67,6 +67,7 @@ export async function GET(request: NextRequest) {
   let claimsRecorded = 0;
   let harvestNoted = 0;
   let rebatesSent = 0;
+  let rebatesDeferred = 0;
 
   try {
     // ───────────────────────────────────────────────────────────────────────
@@ -228,6 +229,12 @@ export async function GET(request: NextRequest) {
       try {
         const rebates = await runRebateSweep();
         rebatesSent += rebates.sent;
+        // Surface owed-but-not-sent rebates (no usable price / wallet cap reached)
+        // so a real obligation that we declined to size off a bad price is visible.
+        rebatesDeferred += rebates.deferred;
+        if (rebates.deferred > 0) {
+          console.warn(`fee-claim cron: ${rebates.deferred} rebate(s) deferred (no usable price / wallet cap)`);
+        }
       } catch (e) {
         console.error('fee-claim cron: rebate sweep failed:', e);
       }
@@ -235,7 +242,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: { reclassified, rebatesQueued, claimsRecorded, harvestNoted, rebatesSent },
+      data: { reclassified, rebatesQueued, claimsRecorded, harvestNoted, rebatesSent, rebatesDeferred },
     });
   } catch (error) {
     console.error('fee-claim cron error:', error);
