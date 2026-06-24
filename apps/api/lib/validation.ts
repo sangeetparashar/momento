@@ -54,6 +54,41 @@ export const deleteAccountSchema = z.object({
   confirmation: z.literal('DELETE'),
 });
 
+// ── Phase 2 token-economy schemas (T-fees, CONTRACTS §e.1/e.2) ──
+
+/**
+ * Helius enhanced-tx webhook payload: a lax ARRAY of objects. Helius posts many
+ * optional fields, so each element is `.passthrough()`-ed and only the keys we
+ * actually read are loosely typed. Real parsing/normalization happens in
+ * `lib/helius-webhook.ts#parseHeliusBatch`; this schema only guards the shape.
+ */
+export const heliusWebhookSchema = z.array(
+  z
+    .object({
+      signature: z.string().optional(),
+      slot: z.number().optional(),
+      timestamp: z.number().optional(),
+      type: z.string().optional(),
+      source: z.string().optional(),
+      accountData: z.array(z.any()).optional(),
+      tokenTransfers: z.array(z.any()).optional(),
+      events: z.any().optional(),
+    })
+    .passthrough(),
+);
+
+/**
+ * Query params for the public trade/fee summary endpoints (§e.2/e.3).
+ *   range       — time window (default 24H)
+ *   granularity — optional series bucketing (hour|day)
+ *   limit       — recent-trades cap (default 50, max 200)
+ */
+export const tradeRangeSchema = z.object({
+  range: z.enum(['24H', '7D', '1M', '3M', '1Y', 'ALL']).default('24H'),
+  granularity: z.enum(['hour', 'day']).optional(),
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+});
+
 // Helper to validate and return parsed data or error response
 export function validateBody<T>(schema: z.ZodSchema<T>, body: unknown): { success: true; data: T } | { success: false; response: Response } {
   const result = schema.safeParse(body);
