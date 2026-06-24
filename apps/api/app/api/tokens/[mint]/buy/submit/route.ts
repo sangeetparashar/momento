@@ -42,6 +42,7 @@ export async function POST(
       txBase64: transaction,
       idempotencyKey,
       userId: user.id,
+      mint,
     });
 
     return NextResponse.json({ success: true, data: result });

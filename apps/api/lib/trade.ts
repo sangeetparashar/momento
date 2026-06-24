@@ -11,8 +11,12 @@
  *    /buy|/sell/submit` relays the client-signed tx (`submitClientSigned`) and
  *    patches `{ signature, blockTime }` so the webhook classifies it IN_APP.
  *  - Venue selection is driven by `CreatorToken.status`: GRADUATED ⇒ DAMM v2
- *    (`cpAmm.swap` / `cpAmm.getQuote`); ACTIVE ⇒ Meteora DBC bonding curve
- *    (`client.pool.swap` / `client.pool.swapQuote`). See `resolveTradeVenue`.
+ *    (`cpAmm.swap` + pool-state-derived quote — cp-amm has NO getQuote, see
+ *    REVIEW-sdk P1-3); ACTIVE ⇒ Meteora DBC bonding curve (`client.pool.swap` /
+ *    `client.pool.swapQuote`). See `resolveTradeVenue`.
+ *  - submit BINDS the client tx to the persisted intent (feePayer/pool/program)
+ *    BEFORE broadcast and records the CONFIRMED on-chain fill (tx-meta deltas +
+ *    real blockTime) AFTER confirm — never the pre-signature quote (SEC P0-1).
  *  - Rebate is COMPUTED + RECORDED here only (computeRebate → rebateToUsdc),
  *    rebateMint = USDC, rebatePaid = false. The USDC send is the fee-claim module.
  *
@@ -25,17 +29,21 @@
 
 import { randomUUID } from 'crypto';
 import BN from 'bn.js';
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Connection, PublicKey, Transaction as TransactionImpl } from '@solana/web3.js';
 import type { Transaction } from '@solana/web3.js';
 
 // Meteora DBC (@meteora-ag/dynamic-bonding-curve-sdk@1.5.10) — top-level import
 // is OK per CONTRACTS-P3A (dev-machine dep). Only the *use* is inside functions.
+// DYNAMIC_BONDING_CURVE_PROGRAM_ID is an exported PublicKey (spike-b §line 126),
+// used to assert a submitted swap tx invokes the DBC program (SEC P0-1).
 import {
   DynamicBondingCurveClient,
-  deriveDbcPoolAddress,
+  DYNAMIC_BONDING_CURVE_PROGRAM_ID,
 } from '@meteora-ag/dynamic-bonding-curve-sdk';
-// Meteora DAMM v2 (@meteora-ag/cp-amm-sdk@1.4.3)
-import { CpAmm } from '@meteora-ag/cp-amm-sdk';
+// Meteora DAMM v2 (@meteora-ag/cp-amm-sdk@1.4.3). `getTokenProgram(flag)` maps a
+// pool's tokenAFlag/tokenBFlag (0=SPL, 1=Token-2022) to the program id (spike-b);
+// CP_AMM_PROGRAM_ID is the exported cp-amm program PublicKey (spike-b §line 141).
+import { CpAmm, getTokenProgram, CP_AMM_PROGRAM_ID } from '@meteora-ag/cp-amm-sdk';
 
 import type { BuiltTx } from '@/lib/solana';
 import {
@@ -353,15 +361,18 @@ function inputOutputMints(token: ResolvedToken, side: TradeSide): {
 }
 
 /**
- * Read `expectedOut` from the live curve/pool via the Meteora SDK sync helper:
- *   DBC      client.pool.swapQuote(...)   (spike-b §line 102)
- *   DAMM v2  cpAmm.getQuote(...)          (spike-b SDK surface)
- * Returns the expected output in base units (bigint).
+ * Read `expectedOut` from the live curve/pool. Returns the expected output in
+ * base units (bigint).
  *
- * TODO(verify-devnet): the exact `swapQuote`/`getQuote` param + result shapes are
- * minor-version sensitive (spike-b flags these). We read the conventional
- * `amountOut`/`minSwapOutAmount`/`outputAmount` field and fall back to a BN-like
- * shape. Re-verify against the installed SDK `.d.ts` before relying on this live.
+ *   DBC      client.pool.swapQuote(...)            (spike-b §line 102, sync helper)
+ *   DAMM v2  derive from fetchPoolState reserves   (cp-amm 1.4.3 has NO getQuote;
+ *            the verified surface is fetchPoolState only — REVIEW-sdk P1-3)
+ *
+ * TODO(verify-devnet): the exact `swapQuote` param/result shape (DBC) and the
+ * cp-amm `PoolState` reserve/fee field names (DAMM v2) are minor-version
+ * sensitive. Re-verify against the installed SDK `.d.ts` before relying on this
+ * live; the DAMM v2 branch is an offline constant-product estimate, not an SDK
+ * quote.
  */
 async function fetchExpectedOut(input: QuoteInput): Promise<bigint> {
   const { token, side, amountInBaseUnits, slippageBps } = input;
@@ -384,21 +395,102 @@ async function fetchExpectedOut(input: QuoteInput): Promise<bigint> {
     return extractAmountOut(quote);
   }
 
-  // DAMM v2
+  // DAMM v2 (REVIEW-sdk P1-3): `cpAmm.getQuote` does NOT exist in the verified
+  // cp-amm 1.4.3 surface (spike-b lists fetchPoolState but no quote method). We
+  // compute the expected out from pool-state reserves with the constant-product
+  // formula (xy=k) minus the pool fee, instead of calling a non-existent method.
   const cpAmm = new CpAmm(conn);
-  // TODO(verify-devnet): cp-amm 1.4.3 getQuote param/result shape.
   const poolState: any = await (cpAmm as any).fetchPoolState(new PublicKey(token.poolAddress));
-  const quote: any = await (cpAmm as any).getQuote({
-    pool: new PublicKey(token.poolAddress),
-    poolState,
-    inAmount: amountIn,
-    amountIn,
-    slippage: slippageBps,
-    slippageBps,
-    // BUY: input is the quote (USDC); SELL: input is the base (token).
-    inputTokenMint: new PublicKey(isBuy(side) ? token.quoteMint : token.mint),
-  });
-  return extractAmountOut(quote);
+  return computeDammV2ExpectedOut(poolState, token, side, amountInBaseUnits);
+}
+
+/**
+ * Offline constant-product (xy=k) estimate of a DAMM v2 swap output from pool
+ * reserves. cp-amm v2 is a CLMM, so this is an APPROXIMATION (true output depends
+ * on active-bin liquidity); the trader's real protection is the on-chain
+ * `minimumAmountOut` baked into the swap ix (slippage guard), not this estimate.
+ *
+ * out = floor( (amountIn * (10_000 - feeBps) / 10_000) * reserveOut
+ *              / (reserveIn + amountIn * (10_000 - feeBps) / 10_000) )
+ *
+ * TODO(verify-devnet): confirm the cp-amm `PoolState` field names for token A/B
+ * reserves + the pool fee bps against the installed `.d.ts`. The keys below are
+ * read defensively with several common aliases; if none resolve we return 0 so
+ * getTradeQuote raises SLIPPAGE rather than quoting a fabricated number.
+ */
+function computeDammV2ExpectedOut(
+  poolState: any,
+  token: ResolvedToken,
+  side: TradeSide,
+  amountInBaseUnits: bigint,
+): bigint {
+  if (poolState == null || amountInBaseUnits <= BigInt(0)) return BigInt(0);
+
+  const readBig = (...candidates: any[]): bigint => {
+    for (const c of candidates) {
+      if (c == null) continue;
+      try {
+        if (typeof c === 'bigint') return c;
+        if (typeof c?.toString === 'function' && typeof c !== 'string') {
+          const b = toBigInt(c.toString());
+          if (b > BigInt(0)) return b;
+        }
+        const b = toBigInt(c);
+        if (b > BigInt(0)) return b;
+      } catch {
+        /* try next alias */
+      }
+    }
+    return BigInt(0);
+  };
+
+  // Token A is the base (creator token), token B is the quote (USDC) — but we do
+  // NOT assume the ordering; map by which mint matches the creator token.
+  const tokenAMint =
+    poolState.tokenAMint?.toBase58?.() ?? String(poolState.tokenAMint ?? '');
+  const baseIsA = tokenAMint === token.mint;
+
+  const reserveA = readBig(
+    poolState.tokenAReserve,
+    poolState.tokenAAmount,
+    poolState.reserveA,
+    poolState.baseReserve,
+    poolState.tokenAVaultAmount,
+  );
+  const reserveB = readBig(
+    poolState.tokenBReserve,
+    poolState.tokenBAmount,
+    poolState.reserveB,
+    poolState.quoteReserve,
+    poolState.tokenBVaultAmount,
+  );
+  if (reserveA <= BigInt(0) || reserveB <= BigInt(0)) return BigInt(0);
+
+  const baseReserve = baseIsA ? reserveA : reserveB;
+  const quoteReserve = baseIsA ? reserveB : reserveA;
+
+  // BUY: in=quote(USDC) out=base(token); SELL: in=base out=quote.
+  const reserveIn = isBuy(side) ? quoteReserve : baseReserve;
+  const reserveOut = isBuy(side) ? baseReserve : quoteReserve;
+
+  // Pool fee bps (best-effort field names). Default to the DBC base fee tier.
+  const feeBpsBig = readBig(
+    poolState.poolFeeBps,
+    poolState.tradeFeeBps,
+    poolState.baseFeeBps,
+    poolState.poolFee?.baseFeeBps,
+  );
+  const feeBps = feeBpsBig > BigInt(0) && feeBpsBig < BPS_DENOM ? feeBpsBig : BigInt(0);
+
+  const amountInAfterFee = (amountInBaseUnits * (BPS_DENOM - feeBps)) / BPS_DENOM;
+  if (amountInAfterFee <= BigInt(0)) return BigInt(0);
+
+  // out = amountInAfterFee * reserveOut / (reserveIn + amountInAfterFee)
+  const numerator = amountInAfterFee * reserveOut;
+  const denominator = reserveIn + amountInAfterFee;
+  if (denominator <= BigInt(0)) return BigInt(0);
+  const out = numerator / denominator;
+  return out > BigInt(0) ? out : BigInt(0);
 }
 
 /** Best-effort extraction of an output amount (base units) from an SDK quote. */
@@ -520,18 +612,35 @@ async function buildSwapTransaction(input: BuildTradeInput): Promise<Transaction
     } as any)) as Transaction;
   }
 
-  // DAMM v2 — cpAmm.swap. TODO(verify-devnet): cp-amm 1.4.3 swap param shape.
+  // DAMM v2 — cpAmm.swap. cp-amm 1.4.3's `SwapParams` is NOT in the verified
+  // spike-b surface (only fetchPoolState/claimPositionFee/lock/position readers
+  // were verified). REVIEW-sdk P1-2: the real SwapParams almost certainly needs
+  // the token vault + program fields, like the verified `claimPositionFee`. We
+  // therefore derive those from poolState (the proven pattern) and pass them.
+  // TODO(verify-devnet): confirm the exact cp-amm 1.4.3 `SwapParams` keys against
+  // the installed `.d.ts` — the vault/mint/program fields below mirror the
+  // verified claimPositionFee shape but `swap` was never exercised in spike-b.
   const cpAmm = new CpAmm(conn);
   const poolState: any = await (cpAmm as any).fetchPoolState(pool);
+  const inputTokenMint = new PublicKey(isBuy(side) ? token.quoteMint : token.mint);
+  const outputTokenMint = new PublicKey(isBuy(side) ? token.mint : token.quoteMint);
   return (await (cpAmm as any).swap({
     owner,
     payer: owner,
     pool,
     poolState,
-    inputTokenMint: new PublicKey(isBuy(side) ? token.quoteMint : token.mint),
-    outputTokenMint: new PublicKey(isBuy(side) ? token.mint : token.quoteMint),
+    inputTokenMint,
+    outputTokenMint,
     amountIn,
     minimumAmountOut,
+    // verified-shape fields from claimPositionFee (spike-b L629-641): vaults +
+    // mints + per-leg token programs resolved from the pool's flags.
+    tokenAMint: poolState.tokenAMint,
+    tokenBMint: poolState.tokenBMint,
+    tokenAVault: poolState.tokenAVault,
+    tokenBVault: poolState.tokenBVault,
+    tokenAProgram: getTokenProgram(poolState.tokenAFlag),
+    tokenBProgram: getTokenProgram(poolState.tokenBFlag),
     referralTokenAccount: null,
   })) as Transaction;
 }
@@ -568,6 +677,35 @@ export async function buildTrade(input: BuildTradeInput): Promise<BuiltTrade> {
     amountInBaseUnits,
     slippageBps,
   });
+
+  // (2b) QUOTE_STALE on PRICE drift, not just venue change (REVIEW-correctness
+  //      P1-2 / D-trade §5). If the fresh expectedOut/minOut moved adversely
+  //      beyond a tolerance from the quote the client was SHOWN, reject so the
+  //      client re-quotes at the new price instead of silently rebuilding at a
+  //      worse minOut. Tolerance = the trade's slippageBps + a fixed cushion,
+  //      both clamped; only ADVERSE drift (fresh < client) trips it — a more
+  //      favourable price is fine to build at.
+  const clientExpectedOut = toBigInt(input.quote.expectedOutBaseUnits);
+  const freshExpectedOut = toBigInt(quote.expectedOutBaseUnits);
+  if (clientExpectedOut > BigInt(0) && freshExpectedOut < clientExpectedOut) {
+    const toleranceBps = BigInt(
+      Math.max(
+        0,
+        Math.min(
+          slippageBps + MOMENTO_TRADE.DEFAULT_SLIPPAGE_BPS,
+          MOMENTO_TRADE.MAX_SLIPPAGE_BPS,
+        ),
+      ),
+    );
+    // Adverse drift in bps = (clientExpectedOut - freshExpectedOut) / clientExpectedOut.
+    const driftBps = ((clientExpectedOut - freshExpectedOut) * BPS_DENOM) / clientExpectedOut;
+    if (driftBps > toleranceBps) {
+      throw new TradeError(
+        'QUOTE_STALE',
+        `Quote moved ${driftBps.toString()}bps adversely since shown (tolerance ${toleranceBps.toString()}bps); re-quote required`,
+      );
+    }
+  }
 
   const { inputMint, outputMint } = inputOutputMints(fresh, side);
 
@@ -628,23 +766,189 @@ export async function buildTrade(input: BuildTradeInput): Promise<BuiltTrade> {
 // ════════════════════════════════════════════════════════════════════════════
 
 /**
- * Self-submit the client-signed tx (submitClientSigned, route forced 'rpc'),
- * then patch the Trade { signature, blockTime } so the webhook classifies it
- * IN_APP and the rebate cron pays it.
+ * SEC P0-1 (build↔submit binding): deserialize the client-submitted tx and assert
+ * it corresponds to the PERSISTED intent BEFORE we broadcast. A user must not be
+ * able to swap a different/larger amount, a different mint, or a different pool
+ * than the recorded intent (the rebate basis is derived from that intent), nor
+ * pay from a wallet other than their own.
  *
- * Auth: ownership is enforced here (the intent MUST belong to `userId`). A
- * missing intent throws TradeError('TOKEN_NOT_FOUND') (route → 404); a non-owner
- * throws TradeError('WALLET_NOT_READY') which the submit route maps to 403
- * (D-trade §6).
+ * Validated offline (no SDK decode required):
+ *   - feePayer / owner == the intent's `traderWallet`;
+ *   - the intent's `poolAddress` appears among the tx's account keys (the swap
+ *     targets the SAME pool);
+ *   - the venue swap PROGRAM (DBC or cp-amm) appears among the tx's program ids.
  *
- * Idempotent: a re-submit of the same intent whose Trade already carries a
- * signature returns that signature with `deduped:true` (Trade.signature @unique +
- * the solana idempotency store both guard re-broadcast).
+ * Throws TradeError('AMOUNT_INVALID') (route → 4xx) on any mismatch.
+ *
+ * TODO(verify-devnet): exact `amountIn`/`minimumAmountOut` are carried in the
+ * Meteora swap instruction DATA, whose byte layout is NOT in the verified spike-b
+ * surface. We bind feePayer+pool+program here (which already blocks the
+ * "different pool / different wallet" abuse); decode the ix data to additionally
+ * assert amountIn==intent.amountIn and minOut>=intent.minOut once the on-chain
+ * data layout is confirmed against the installed SDK.
+ */
+function assertTxMatchesIntent(
+  txBase64: string,
+  intent: {
+    traderWallet: string;
+    poolAddress: string | null;
+    venue: TradeVenue;
+  },
+): void {
+  let tx: Transaction;
+  try {
+    tx = TransactionImpl.from(Buffer.from(txBase64, 'base64'));
+  } catch {
+    throw new TradeError('AMOUNT_INVALID', 'Submitted transaction could not be decoded');
+  }
+
+  // feePayer / owner must be the intent's trader wallet.
+  const feePayer = tx.feePayer?.toBase58();
+  if (!feePayer || feePayer !== intent.traderWallet) {
+    throw new TradeError(
+      'AMOUNT_INVALID',
+      'Submitted transaction fee payer does not match the trade intent owner',
+    );
+  }
+
+  // Collect every account key + program id referenced by the tx.
+  const accountKeys = new Set<string>();
+  const programIds = new Set<string>();
+  for (const ix of tx.instructions) {
+    if (ix.programId) programIds.add(ix.programId.toBase58());
+    for (const k of ix.keys) accountKeys.add(k.pubkey.toBase58());
+  }
+
+  // The intent's pool MUST be one of the accounts the swap touches.
+  if (!intent.poolAddress || !accountKeys.has(intent.poolAddress)) {
+    throw new TradeError(
+      'AMOUNT_INVALID',
+      'Submitted transaction does not target the trade intent pool',
+    );
+  }
+
+  // The venue swap program MUST be present (rejects a non-swap / wrong-venue tx).
+  const expectedProgram =
+    intent.venue === 'METEORA_DBC'
+      ? DYNAMIC_BONDING_CURVE_PROGRAM_ID
+      : CP_AMM_PROGRAM_ID;
+  if (expectedProgram && !programIds.has(expectedProgram.toBase58())) {
+    throw new TradeError(
+      'AMOUNT_INVALID',
+      'Submitted transaction does not invoke the expected swap program',
+    );
+  }
+}
+
+/**
+ * SEC P0-1 / correctness P1-3 (confirmed fill): read the ACTUAL fill from the
+ * CONFIRMED tx meta (pre/post token-balance deltas for the trader), so the row
+ * records what really landed — NOT the pre-signature quote. The fee-claim rebate
+ * sweep re-derives the rebate from this confirmed fill.
+ *
+ * Returns the trader's signed deltas:
+ *   amountInBaseUnits  = |negative delta on the inputMint owned by trader|
+ *   amountOutBaseUnits = positive delta on the outputMint owned by trader
+ * plus the real on-chain `blockTime` (unix seconds). Any field that cannot be
+ * resolved is returned null so the caller can fall back without fabricating.
+ *
+ * Mirrors fee-claim.ts `claimedAmountFromMeta` (post-pre token-balance delta).
+ */
+async function deriveConfirmedFill(
+  signature: string,
+  traderWallet: string,
+  inputMint: string,
+  outputMint: string,
+): Promise<{
+  amountInBaseUnits: bigint | null;
+  amountOutBaseUnits: bigint | null;
+  blockTime: Date | null;
+}> {
+  let tx: any;
+  try {
+    // Read at 'confirmed' to align with submitClientSigned's confirmation
+    // commitment — the default 'finalized' would transiently return null right
+    // after a confirmed-level land and falsely degrade us to PENDING.
+    tx = await getConnection().getTransaction(signature, {
+      commitment: 'confirmed',
+      maxSupportedTransactionVersion: 0,
+    });
+  } catch {
+    return { amountInBaseUnits: null, amountOutBaseUnits: null, blockTime: null };
+  }
+  if (!tx || tx.meta == null || tx.meta.err != null) {
+    return { amountInBaseUnits: null, amountOutBaseUnits: null, blockTime: null };
+  }
+
+  const pre: any[] = Array.isArray(tx.meta.preTokenBalances) ? tx.meta.preTokenBalances : [];
+  const post: any[] = Array.isArray(tx.meta.postTokenBalances) ? tx.meta.postTokenBalances : [];
+
+  const rawOf = (b: any): bigint => {
+    try {
+      return BigInt(b?.uiTokenAmount?.amount ?? '0');
+    } catch {
+      return BigInt(0);
+    }
+  };
+  // Sum the signed delta for (owner==trader, mint==target) across the trader's
+  // ATAs for that mint (a swap may route through one ATA per leg).
+  const deltaFor = (mint: string): bigint => {
+    const preByIdx = new Map<number, any>();
+    for (const b of pre) {
+      if (b?.owner === traderWallet && b?.mint === mint && typeof b?.accountIndex === 'number') {
+        preByIdx.set(b.accountIndex, b);
+      }
+    }
+    let delta = BigInt(0);
+    const seen = new Set<number>();
+    for (const b of post) {
+      if (b?.owner !== traderWallet || b?.mint !== mint) continue;
+      if (typeof b?.accountIndex !== 'number') continue;
+      seen.add(b.accountIndex);
+      delta += rawOf(b) - rawOf(preByIdx.get(b.accountIndex));
+    }
+    // Account closed/absent post but present pre (e.g. fully spent leg).
+    for (const [idx, b] of preByIdx) {
+      if (!seen.has(idx)) delta -= rawOf(b);
+    }
+    return delta;
+  };
+
+  const inDelta = deltaFor(inputMint); // expected negative (spent)
+  const outDelta = deltaFor(outputMint); // expected positive (received)
+
+  const amountInBaseUnits = inDelta < BigInt(0) ? -inDelta : null;
+  const amountOutBaseUnits = outDelta > BigInt(0) ? outDelta : null;
+  const blockTime =
+    typeof tx.blockTime === 'number' && Number.isFinite(tx.blockTime)
+      ? new Date(tx.blockTime * 1000)
+      : null;
+
+  return { amountInBaseUnits, amountOutBaseUnits, blockTime };
+}
+
+/**
+ * Self-submit the client-signed tx (submitClientSigned, route forced 'rpc') then,
+ * ONLY after it actually confirms, patch the Trade with the CONFIRMED fill so the
+ * webhook classifies it IN_APP and the rebate cron re-derives the rebate from the
+ * real on-chain fill.
+ *
+ *   1. ownership + intent integrity checks;
+ *   2. SEC P0-1: assert the client tx matches the persisted intent BEFORE relay;
+ *   3. relay (submitClientSigned only RETURNS on confirm — it throws on TIMEOUT);
+ *   4. SEC P0-1 / P1-3: parse the confirmed tx meta and persist the ACTUAL
+ *      amountIn/amountOut + signature + REAL blockTime (never a fabricated one).
+ *
+ * Auth: a missing intent → TradeError('TOKEN_NOT_FOUND') (route → 404); a
+ * non-owner → TradeError('WALLET_NOT_READY') (route → 403, D-trade §6).
+ *
+ * Idempotent: a re-submit of an intent that already carries a signature returns
+ * it with `deduped:true` (Trade.signature @unique + the solana idempotency store).
  */
 export async function submitTrade(
-  input: SubmitTradeInput & { userId: string },
+  input: SubmitTradeInput & { userId: string; mint?: string },
 ): Promise<SubmitTradeResult> {
-  const { intentId, txBase64, idempotencyKey, userId } = input;
+  const { intentId, txBase64, idempotencyKey, userId, mint } = input;
 
   const trade = await prisma.trade.findUnique({
     where: { intentId },
@@ -654,6 +958,11 @@ export async function submitTrade(
       venue: true,
       signature: true,
       blockTime: true,
+      traderWallet: true,
+      poolAddress: true,
+      amountInMint: true,
+      amountOutMint: true,
+      token: { select: { mintAddress: true } },
     },
   });
   if (!trade) throw new TradeError('TOKEN_NOT_FOUND', 'Trade intent not found');
@@ -661,10 +970,16 @@ export async function submitTrade(
   if (trade.userId !== userId) {
     throw new TradeError('WALLET_NOT_READY', 'Trade intent does not belong to this user');
   }
+  // REVIEW-security P1-9: the [mint] path param MUST match the intent's token, so
+  // an intent for token A cannot be POSTed to /tokens/<mintB>/submit.
+  if (mint && trade.token?.mintAddress && trade.token.mintAddress !== mint) {
+    throw new TradeError('TOKEN_NOT_FOUND', 'Trade intent does not match this token');
+  }
 
   const venue = trade.venue as TradeVenue;
 
   // Idempotency at the DB: if the signature is already recorded, return it.
+  // CONFIRMED only when a real (on-chain) blockTime is present.
   if (trade.signature) {
     return {
       intentId,
@@ -675,7 +990,16 @@ export async function submitTrade(
     };
   }
 
-  // Relay: route forced to 'rpc' inside submitClientSigned (client tx, no tip).
+  // (2) SEC P0-1: bind the submitted tx to the recorded intent BEFORE broadcast.
+  assertTxMatchesIntent(txBase64, {
+    traderWallet: trade.traderWallet,
+    poolAddress: trade.poolAddress,
+    venue,
+  });
+
+  // (3) Relay. submitClientSigned RETURNS only on a real confirm (or a dedup
+  //     short-circuit from the durable idempotency store); it THROWS on TIMEOUT/
+  //     BLOCKHASH_EXPIRED/on-chain failure. So a returned result == confirmed.
   let result;
   try {
     result = await submitClientSigned({ txBase64, idempotencyKey });
@@ -683,13 +1007,31 @@ export async function submitTrade(
     throw classify(err);
   }
 
-  // Patch the SAME row so the webhook joins on `signature` and classifies IN_APP.
-  // Trade.signature @unique guards against two intents racing the same sig.
-  const blockTime = new Date();
+  // (4) SEC P0-1 / P1-3: derive the CONFIRMED fill from the confirmed tx meta and
+  //     persist the ACTUAL amounts + signature + REAL blockTime. Never fabricate
+  //     blockTime — if the meta read fails, leave blockTime null (PENDING) so the
+  //     authoritative webhook sets it and the rebate sweep waits for a real fill.
+  const fill = await deriveConfirmedFill(
+    result.signature,
+    trade.traderWallet,
+    trade.amountInMint,
+    trade.amountOutMint,
+  );
+
+  const data: {
+    signature: string;
+    blockTime?: Date | null;
+    amountInBaseUnits?: string;
+    amountOutBaseUnits?: string;
+  } = { signature: result.signature };
+  if (fill.blockTime) data.blockTime = fill.blockTime;
+  if (fill.amountInBaseUnits != null) data.amountInBaseUnits = fill.amountInBaseUnits.toString();
+  if (fill.amountOutBaseUnits != null) data.amountOutBaseUnits = fill.amountOutBaseUnits.toString();
+
   try {
     await prisma.trade.update({
       where: { id: trade.id },
-      data: { signature: result.signature, blockTime },
+      data,
     });
   } catch (err) {
     // A concurrent webhook/submit may have already attached this signature
@@ -697,11 +1039,16 @@ export async function submitTrade(
     if (!result.signature) throw err;
   }
 
+  // CONFIRMED only when we actually have a real on-chain blockTime; otherwise the
+  // tx is on-chain but our confirmed-fill read did not resolve → PENDING (the
+  // webhook will finalize blockTime + the rebate sweep will not run until then).
+  const status: SubmitTradeResult['status'] = fill.blockTime ? 'CONFIRMED' : 'PENDING';
+
   return {
     intentId,
     signature: result.signature,
     venue,
-    status: 'CONFIRMED',
+    status,
     deduped: result.deduped,
   };
 }
