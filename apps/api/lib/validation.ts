@@ -101,7 +101,9 @@ export const launchTokenSchema = z.object({
   symbol: z.string().min(1).max(10).transform((s) => s.toUpperCase()),
   description: z.string().max(2000).optional(),
   imageUrl: z.string().url().optional(),
-  totalSupply: z.string().regex(/^[1-9]\d*$/).default('1000000000'),
+  // WHOLE tokens (NOT base units); lib/launch converts to base units (×10^decimals).
+  // Bounded so whole×10^decimals stays well within the lib's MAX_SAFE_INTEGER guard.
+  totalSupply: z.string().regex(/^[1-9]\d*$/).refine((s) => s.length <= 15, 'totalSupply too large').default('1000000000'),
   decimals: z.number().int().min(6).max(9).default(9),
   transferFeeBps: z.number().int().min(300).max(500).default(400),
   feeSplit: z.object({
