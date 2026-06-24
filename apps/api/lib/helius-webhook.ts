@@ -546,7 +546,8 @@ export async function ingestHeliusEvents(
           //     so we add as `bigint` and write the string back. The status filter
           //     makes it a no-op when there is no fundraise row or it is already
           //     terminal — never throws, never breaks ingestion for a no-fundraise
-          //     token. `contributorCount` is an Int and uses atomic `increment`.
+          //     token. `contributorCount` increments only on a wallet's FIRST BUY
+          //     (deduped below) so repeat buyers aren't over-counted.
           //   - Authoritative USDC amount comes from `verified.byMint` for the
           //     token's quote mint (on-chain meta), never a payload float; skipped
           //     if the quote leg is not visible on-chain (keeper recomputes anyway,
@@ -569,11 +570,27 @@ export async function ingestHeliusEvents(
                 } catch {
                   prevRaised = BigInt(0);
                 }
+                // Only count a wallet ONCE: increment contributorCount solely on
+                // this wallet's FIRST BUY for the token (any prior BUY trade row
+                // from the same wallet — IN_APP or EXTERNAL — means already
+                // counted). This is still a cached approximation; the authoritative
+                // distinct-wallet count is recomputed in graduation.getRaisedProgress.
+                const priorFromWallet = await db.trade.count({
+                  where: {
+                    tokenId: token.id,
+                    traderWallet: payer,
+                    side: 'BUY',
+                    signature: { not: ev.signature },
+                  },
+                });
+                const isNewContributor = priorFromWallet === 0;
                 await db.tokenFundraise.update({
                   where: { id: fundraise.id },
                   data: {
                     raisedBaseUnits: (prevRaised + raisedQuote).toString(),
-                    contributorCount: { increment: 1 },
+                    ...(isNewContributor
+                      ? { contributorCount: { increment: 1 } }
+                      : {}),
                   },
                 });
               }
