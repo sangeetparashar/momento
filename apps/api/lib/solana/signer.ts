@@ -15,6 +15,7 @@ import { Keypair } from '@solana/web3.js';
 import type { PublicKey, Transaction } from '@solana/web3.js';
 import type { Signer } from './types';
 import { getServerWallet } from './serverWallet';
+import { SolanaTxError } from './errors';
 
 /**
  * The Momento treasury (Privy server wallet) wrapped as a Signer.
@@ -73,20 +74,95 @@ export function clientRelaySigner(userPubkey: PublicKey): Signer {
   };
 }
 
+/** Pull the current signature buffer for `pubkey` from a tx, or null if unsigned. */
+function signatureFor(tx: Transaction, pubkey: PublicKey): Buffer | null {
+  const slot = tx.signatures.find((s) => s.publicKey.equals(pubkey));
+  return slot?.signature ?? null;
+}
+
 /**
- * Applies every signer to one tx.
+ * Applies every signer to one tx, defending the ephemeral co-signatures against
+ * a server signer (Privy) that may strip pre-attached partial signatures.
  *
- * Ephemerals sign FIRST (local `partialSign`), then the others (privy-server =
- * network call; client-relay = no-op). Legacy-tx signatures are order-independent,
- * but we keep this deterministic order so:
- *   1. the privy-server signer sees the ephemeral signatures already attached
- *      (the §4 multi-signer requirement — Privy must preserve them);
- *   2. logs/idempotency are reproducible.
+ * Flow:
+ *   1. Ephemerals sign FIRST (local `partialSign` — Streamflow `metadata` /
+ *      JupLock `base`). Snapshot their signatures.
+ *   2. Other signers run (privy-server = network call; client-relay = no-op).
+ *   3. RE-ATTACH any ephemeral signature that the server sign dropped, via
+ *      `tx.addSignature(pubkey, sig)` (idempotent for surviving sigs).
+ *   4. Verify every REQUIRED non-client-relay signer slot is present; if an
+ *      ephemeral sig is still missing post-sign, throw PARTIAL_SIGN_UNSUPPORTED.
+ *
+ * Legacy-tx signatures are order-independent, but the deterministic order keeps
+ * logs/idempotency reproducible and lets Privy observe the ephemeral sigs.
+ *
+ * TODO(verify-devnet): confirm on devnet whether @privy-io/node signTransaction
+ * preserves pre-attached ephemeral partial signatures (D-signer §4). If it
+ * strips them and re-attach below fails verification, route co-signed
+ * (Streamflow/JupLock) txns through the CLIENT embedded wallet relay instead and
+ * keep server-wallet txns single-signer (documented fallback in serverWallet.ts).
  */
 export async function applySigners(tx: Transaction, signers: Signer[]): Promise<Transaction> {
   const ephemerals = signers.filter((s) => s.kind === 'ephemeral');
   const others = signers.filter((s) => s.kind !== 'ephemeral');
-  for (const s of ephemerals) await s.sign(tx); // local partialSign first
-  for (const s of others) await s.sign(tx); // privy-server (network) / client-relay (no-op)
+  const hasServerSigner = others.some((s) => s.kind === 'privy-server');
+
+  // 1. Ephemerals sign first (local partialSign).
+  for (const s of ephemerals) await s.sign(tx);
+
+  // 2. Snapshot ephemeral signatures BEFORE the server sign, so we can detect +
+  //    repair stripping. Only matters when a server signer participates.
+  const captured = new Map<string, Buffer>();
+  if (hasServerSigner) {
+    for (const s of ephemerals) {
+      const sig = signatureFor(tx, s.publicKey);
+      if (sig) captured.set(s.publicKey.toBase58(), Buffer.from(sig));
+    }
+  }
+
+  // 3. Other signers (privy-server network call / client-relay no-op).
+  for (const s of others) await s.sign(tx);
+
+  // 4. Re-attach any ephemeral signature dropped by the server sign.
+  // TODO(verify-devnet): re-attaching the CAPTURED bytes is only valid if Privy
+  // signs the SAME compiled message (does not mutate blockhash/ixs). If Privy
+  // re-serializes the message, the captured ephemeral sig is over stale bytes and
+  // will fail on-chain verifySignatures even though the slot is present. Confirm
+  // on devnet; if message mutation is observed, fall back to client-wallet relay
+  // for co-signed txns (documented in serverWallet.ts TODO(verify-devnet)).
+  if (hasServerSigner) {
+    for (const s of ephemerals) {
+      const present = signatureFor(tx, s.publicKey);
+      const original = captured.get(s.publicKey.toBase58());
+      if (!present && original) {
+        // Privy stripped it — restore the captured signature in-place.
+        tx.addSignature(s.publicKey, original);
+      }
+    }
+  }
+
+  // 5. Verify every required signer (everything except client-relay, whose sig
+  //    the client supplies out-of-band) now has a signature. A still-missing
+  //    ephemeral sig means the server signer is incompatible with multi-signing.
+  for (const s of others) {
+    if (s.kind === 'client-relay') continue;
+    if (!signatureFor(tx, s.publicKey)) {
+      throw new SolanaTxError(
+        'SIGNER_REJECTED',
+        `Required ${s.kind} signature missing after signing for ${s.publicKey.toBase58()}`,
+      );
+    }
+  }
+  for (const s of ephemerals) {
+    if (!signatureFor(tx, s.publicKey)) {
+      throw new SolanaTxError(
+        'PARTIAL_SIGN_UNSUPPORTED',
+        `Ephemeral co-signer ${s.publicKey.toBase58()} signature was stripped and could not be ` +
+          're-attached after the server sign — server signer does not support multi-signing. ' +
+          'Route this co-signed tx through the client embedded wallet instead.',
+      );
+    }
+  }
+
   return tx;
 }

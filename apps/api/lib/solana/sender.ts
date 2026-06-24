@@ -29,13 +29,20 @@ export function getSenderUrl(): string {
 
 /**
  * Resolve the default Jito tip (lamports), respecting the swqos_only minimum.
- * `JITO_TIP_LAMPORTS` env overrides the default; the relevant minimum is enforced.
+ *
+ * `JITO_TIP_LAMPORTS` env, when set, overrides the default for BOTH routes. When
+ * it is unset, the default is the ROUTE-CORRECT minimum: 5_000 lamports for the
+ * swqos route (its whole point — 0.000005 SOL), 200_000 for the standard route.
+ * The earlier code defaulted unset swqos to 200_000, over-tipping the cheap route
+ * 40× (sdk P1-4 / correctness P1-6).
  */
 export function getDefaultTipLamports(swqosOnly = false): number {
   const min = swqosOnly ? MIN_TIP_LAMPORTS_SWQOS : MIN_TIP_LAMPORTS;
   const raw = process.env.JITO_TIP_LAMPORTS;
   const parsed = raw ? parseInt(raw, 10) : NaN;
-  const want = Number.isFinite(parsed) ? parsed : MIN_TIP_LAMPORTS;
+  // Env override applies if set; otherwise fall back to the route's own minimum
+  // (NOT the standard-route 200_000) so swqos defaults to 5_000.
+  const want = Number.isFinite(parsed) ? parsed : min;
   return Math.max(min, want);
 }
 

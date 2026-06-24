@@ -4,17 +4,25 @@
  * Key = caller-supplied `idempotencyKey`, else derived from the UNSIGNED message
  * (stable across retries; independent of the not-yet-present signatures).
  *
- * Default store is an in-process `Map` with TTL — import-safe, zero deps, but
- * does NOT survive serverless cold starts / multi-instance.
+ * DEFAULT store (when Upstash is configured): a Redis-backed, cross-instance,
+ * ATOMIC store built on the same Upstash REST creds as `lib/redis.ts`
+ * (`UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN`). `reserve()` is an
+ * atomic `SET key <value> NX EX <ttl>`; `get`/`put` persist the landed signature.
+ * This survives serverless cold starts / multi-instance fan-out, so a treasury /
+ * fee-claim tx is broadcast at most once even across Vercel instances.
  *
- * TODO(ops): back the store with the existing Postgres/Prisma or the rate-limit
- * Redis (`lib/ratelimit` / `lib/redis`) so reservations + landed signatures
- * survive across instances. This is REQUIRED before any treasury/fee-claim
- * action goes live (those must never double-fire). Swap getIdempotencyStore()'s
- * default implementation; the interface stays identical.
+ * FAIL-CLOSED: when Upstash is NOT configured, the durable store is unavailable.
+ * `submit.ts` MUST refuse to broadcast a server/treasury-signed tx with only the
+ * in-process Map (see REVIEW-security P0: serverless double-broadcast risk). The
+ * in-process `InMemoryIdempotencyStore` therefore remains ONLY as an explicit
+ * dev/test opt-in via `setIdempotencyStore()`, never as the live default.
+ *
+ * IMPORT-SAFE: no env read at module top-level; the Upstash client is constructed
+ * lazily on first store use (mirrors `lib/redis.ts` getRedis()).
  */
 
 import { createHash } from 'crypto';
+import { Redis } from '@upstash/redis';
 
 export interface IdempotencyStore {
   /** returns the prior signature if this key already landed, else null. */
@@ -32,15 +40,22 @@ interface Entry {
   expiresAt: number;
 }
 
-/** Default TTL for in-process entries (10 min — covers a blockhash lifetime + slack). */
+/** Default TTL (10 min — covers a blockhash lifetime + slack). */
 const DEFAULT_TTL_MS = 10 * 60 * 1000;
+const DEFAULT_TTL_S = Math.ceil(DEFAULT_TTL_MS / 1000);
+
+/** Marker stored in Redis for a reserved-but-not-yet-landed key. */
+const RESERVED_MARKER = '__reserved__';
+/** Redis key namespace for idempotency entries. */
+const REDIS_PREFIX = 'solana:idem:';
 
 /**
- * In-process Map store. Single-instance only.
+ * In-process Map store. Single-instance only — DEV/TEST opt-in via
+ * setIdempotencyStore(), never the live default (see file header / security P0).
  * Note: JS is single-threaded per instance, so `reserve` is atomic here without
  * locks — the get/set pair cannot be interleaved by another call.
  */
-class InMemoryIdempotencyStore implements IdempotencyStore {
+export class InMemoryIdempotencyStore implements IdempotencyStore {
   private readonly map = new Map<string, Entry>();
   private readonly ttlMs: number;
 
@@ -81,18 +96,97 @@ class InMemoryIdempotencyStore implements IdempotencyStore {
   }
 }
 
-let _store: IdempotencyStore | null = null;
+/**
+ * Redis-backed, cross-instance idempotency store (Upstash REST).
+ *
+ * Layout: one key per idempotency key, value = landed signature, or the
+ * RESERVED_MARKER while in-flight. `reserve` uses `SET ... NX EX` (atomic;
+ * succeeds only if the key is absent). `put` overwrites the reservation with the
+ * landed signature (still TTL'd, so dedup holds for the blockhash window + slack).
+ */
+export class RedisIdempotencyStore implements IdempotencyStore {
+  private readonly ttlS: number;
+  private _redis: Redis | null = null;
 
-/** Singleton idempotency store. In-process Map default; TODO(ops): Prisma/Redis. */
-export function getIdempotencyStore(): IdempotencyStore {
-  if (!_store) {
-    _store = new InMemoryIdempotencyStore();
+  constructor(ttlS: number = DEFAULT_TTL_S) {
+    this.ttlS = ttlS;
   }
-  return _store;
+
+  /** Lazy Upstash client — mirrors lib/redis.ts getRedis() (no top-level env read). */
+  private redis(): Redis {
+    if (!this._redis) {
+      const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
+      const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+      if (!url || !token) {
+        // Should never reach here: isRedisConfigured() gates construction/use.
+        throw new Error('Missing UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN');
+      }
+      this._redis = new Redis({ url, token });
+    }
+    return this._redis;
+  }
+
+  private k(key: string): string {
+    return REDIS_PREFIX + key;
+  }
+
+  async get(key: string): Promise<string | null> {
+    const v = await this.redis().get<string>(this.k(key));
+    if (v == null || v === RESERVED_MARKER) return null;
+    return v;
+  }
+
+  async put(key: string, signature: string): Promise<void> {
+    // Overwrite the reservation with the landed signature; keep a TTL so the
+    // dedup record lives past the blockhash window but doesn't accumulate.
+    await this.redis().set(this.k(key), signature, { ex: this.ttlS });
+  }
+
+  async reserve(key: string): Promise<boolean> {
+    // Atomic SETNX with TTL: only the first caller across ALL instances wins.
+    const res = await this.redis().set(this.k(key), RESERVED_MARKER, {
+      nx: true,
+      ex: this.ttlS,
+    });
+    return res === 'OK';
+  }
 }
 
-/** Allow ops/tests to inject a durable store (Prisma/Redis-backed). */
-export function setIdempotencyStore(store: IdempotencyStore): void {
+/** True if Upstash REST creds are present (the durable store can be used). */
+export function isRedisConfigured(): boolean {
+  return Boolean(
+    process.env.UPSTASH_REDIS_REST_URL?.trim() && process.env.UPSTASH_REDIS_REST_TOKEN?.trim(),
+  );
+}
+
+let _store: IdempotencyStore | null = null;
+
+/**
+ * Singleton idempotency store.
+ *
+ * DEFAULT: Redis-backed (durable, atomic, cross-instance) when Upstash is
+ * configured. Otherwise returns `null` — there is NO live in-process fallback,
+ * because a per-process Map cannot guarantee at-most-once broadcast under
+ * serverless fan-out (security P0). Callers that require durability for a
+ * server/treasury-signed broadcast MUST treat `null` as fail-closed
+ * (`submit.ts` throws CONFIG_MISSING). An explicit dev/test Map can be installed
+ * via `setIdempotencyStore(new InMemoryIdempotencyStore())`.
+ */
+export function getIdempotencyStore(): IdempotencyStore | null {
+  if (_store) return _store;
+  if (isRedisConfigured()) {
+    _store = new RedisIdempotencyStore();
+    return _store;
+  }
+  return null;
+}
+
+/**
+ * Inject a store. Ops may supply a durable (Redis/Prisma) store; tests/dev may
+ * opt into the in-process Map. Pass `null` to reset back to the default
+ * (Redis-when-configured) resolution.
+ */
+export function setIdempotencyStore(store: IdempotencyStore | null): void {
   _store = store;
 }
 

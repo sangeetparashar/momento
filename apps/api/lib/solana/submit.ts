@@ -5,11 +5,15 @@
  *   build (caller-supplied BuiltTx)
  *     -> Connection (Helius) + recent blockhash (lastValidBlockHeight)
  *     -> set feePayer (server wallet for platform; user pubkey for client actions)
- *     -> [simulate to size compute units unless computeUnitLimit given]
+ *     -> use built.computeUnitLimit, else DEFAULT_COMPUTE_UNIT_LIMIT
+ *        (NOTE: no pre-flight simulation today — CU sizing via simulate is a
+ *        TODO; callers should pass computeUnitLimit for tight CU provisioning)
  *     -> prepend ComputeBudget: setComputeUnitLimit + setComputeUnitPrice (priorityFee)
  *     -> [route==='sender'] prepend Jito tip transfer ix (sender.ts)
- *     -> applySigners(tx, signers)             (ephemerals first; server last)
- *     -> idempotency reserve/get — short-circuit if already landed
+ *     -> applySigners(tx, signers)  (ephemerals first; server signs; ephemeral
+ *        sigs re-attached + all required sigs verified afterward)
+ *     -> idempotency: durable Redis store REQUIRED for server/treasury-signed
+ *        txns (fail-closed if Upstash unconfigured) — reserve/get short-circuit
  *     -> self-submit:
  *          route 'rpc'    : Connection.sendRawTransaction(raw, { skipPreflight, maxRetries:0 })
  *          route 'sender' : POST Helius Sender (skipPreflight, maxRetries:0)
@@ -19,7 +23,10 @@
  *
  * Two relay entry points for the client-action path:
  *   buildUnsignedForClient(built)  -> { txBase64, idempotencyKey }
+ *     (idempotencyKey is an OPAQUE blob carrying the real key + lastValidBlockHeight
+ *      + applied priority fee; the client round-trips it back verbatim)
  *   submitClientSigned({ txBase64, idempotencyKey, extraSigners, opts }) -> SubmitResult
+ *     (route 'sender' is forced to 'rpc' here: a client tx carries no Jito tip)
  *
  * IMPORT-SAFE: all env/network access is inside the exported functions.
  */
@@ -36,7 +43,13 @@ import {
   DEFAULT_COMPUTE_UNIT_LIMIT,
 } from './priorityFee';
 import { sendViaSender, jitoTipIx, getDefaultTipLamports } from './sender';
-import { getIdempotencyStore, deriveIdempotencyKey } from './idempotency';
+import {
+  getIdempotencyStore,
+  setIdempotencyStore,
+  deriveIdempotencyKey,
+  InMemoryIdempotencyStore,
+  type IdempotencyStore,
+} from './idempotency';
 import { SolanaTxError, classify } from './errors';
 
 const DEFAULT_MAX_RETRIES_RPC = 5;
@@ -54,6 +67,53 @@ function sleep(ms: number): Promise<void> {
 function unsignedMessageB64(tx: Transaction): string {
   // compileMessage() requires feePayer + recentBlockhash to be set first.
   return tx.compileMessage().serialize().toString('base64');
+}
+
+/**
+ * Relay opaque blob. buildUnsignedForClient returns this as `idempotencyKey`
+ * (the §b.4 surface is unchanged — it stays a `string`), packing the real key
+ * PLUS the build-time `lastValidBlockHeight` and `priorityFeeMicroLamports` so
+ * submitClientSigned can confirm against the true expiry window (not 0) and
+ * report the real applied fee (not 0). It is opaque to the client; the client
+ * just round-trips it back to submitClientSigned.
+ */
+interface RelayBlob {
+  /** the actual idempotency key (sha256 hex from deriveIdempotencyKey). */
+  k: string;
+  /** lastValidBlockHeight from getLatestBlockhash at build time. */
+  lvbh: number;
+  /** priority fee (micro-lamports/CU) actually baked into the budget ixs. */
+  pf: number;
+}
+
+const RELAY_BLOB_PREFIX = 'v1:';
+
+function encodeRelayBlob(blob: RelayBlob): string {
+  return RELAY_BLOB_PREFIX + Buffer.from(JSON.stringify(blob), 'utf8').toString('base64url');
+}
+
+/**
+ * Decode the opaque relay blob. Falls back to treating `value` as a bare
+ * idempotency key (caller-supplied keys, or legacy callers) with no carried
+ * metadata, so the public string contract stays backward compatible.
+ */
+function decodeRelayBlob(value: string): RelayBlob {
+  if (value.startsWith(RELAY_BLOB_PREFIX)) {
+    try {
+      const json = Buffer.from(value.slice(RELAY_BLOB_PREFIX.length), 'base64url').toString('utf8');
+      const parsed = JSON.parse(json) as Partial<RelayBlob>;
+      if (typeof parsed.k === 'string') {
+        return {
+          k: parsed.k,
+          lvbh: typeof parsed.lvbh === 'number' ? parsed.lvbh : 0,
+          pf: typeof parsed.pf === 'number' ? parsed.pf : 0,
+        };
+      }
+    } catch {
+      // fall through to bare-key handling
+    }
+  }
+  return { k: value, lvbh: 0, pf: 0 };
 }
 
 /**
@@ -183,13 +243,49 @@ async function submitSignedTail(
     priorityFeeMicroLamports: number;
     jitoTipLamports?: number;
     idempotencyKey: string;
+    /**
+     * True when this broadcast carries a server/treasury (Privy) signature. Such
+     * txns MUST NOT be broadcast without a durable, cross-instance idempotency
+     * store — a per-process Map risks serverless double-broadcast (double
+     * fee-claim / double rebate). See REVIEW-security P0.
+     */
+    requiresDurableStore: boolean;
   },
 ): Promise<SubmitResult> {
-  const { route, priorityFeeMicroLamports, jitoTipLamports, idempotencyKey } = meta;
+  const { route, priorityFeeMicroLamports, jitoTipLamports, idempotencyKey, requiresDurableStore } =
+    meta;
   const commitment = (opts.commitment ?? 'confirmed') as 'processed' | 'confirmed' | 'finalized';
-  const maxRetries = opts.maxRetries ?? (route === 'rpc' ? DEFAULT_MAX_RETRIES_RPC : DEFAULT_MAX_RETRIES_RPC);
+  const maxRetries = opts.maxRetries ?? DEFAULT_MAX_RETRIES_RPC;
 
-  const store = getIdempotencyStore();
+  // FAIL-CLOSED (security P0): a server/treasury-signed broadcast requires the
+  // durable Redis-backed store. If Upstash is not configured, getIdempotencyStore()
+  // returns null and we refuse to broadcast rather than fall back to the
+  // per-process Map (which cannot dedup across serverless instances/cold starts).
+  // A dev/test Map may be installed explicitly via setIdempotencyStore().
+  //
+  // STUB MODE is dev/test by definition and never touches the network, so we
+  // auto-install an in-process Map when none is configured — keeps stub builds
+  // (ephemeral/client-relay only) running without Upstash.
+  let store: IdempotencyStore | null = getIdempotencyStore();
+  if (!store && isStub()) {
+    store = new InMemoryIdempotencyStore();
+    setIdempotencyStore(store);
+  }
+  if (!store) {
+    if (requiresDurableStore) {
+      throw new SolanaTxError(
+        'CONFIG_MISSING',
+        'Durable idempotency store unavailable (Upstash not configured): refusing to broadcast a ' +
+          'server/treasury-signed transaction without cross-instance at-most-once protection. ' +
+          'Set UPSTASH_REDIS_REST_URL/TOKEN, or install a store via setIdempotencyStore() for dev/test.',
+      );
+    }
+    throw new SolanaTxError(
+      'CONFIG_MISSING',
+      'No idempotency store configured. Set UPSTASH_REDIS_REST_URL/TOKEN, or install one via ' +
+        'setIdempotencyStore() for dev/test.',
+    );
+  }
 
   // Idempotency: short-circuit if a prior landed signature exists.
   const prior = await store.get(idempotencyKey);
@@ -331,14 +427,20 @@ export async function submit(built: BuiltTx, opts: SubmitOptions = {}): Promise<
     opts.idempotencyKey ??
     deriveIdempotencyKey(built.label ?? 'tx', tx.feePayer!.toBase58(), unsignedMessageB64(tx));
 
-  // Apply all signers (ephemerals first, then server/client-relay).
+  // Apply all signers (ephemerals first, then server/client-relay). applySigners
+  // re-attaches ephemeral signatures AFTER the Privy server sign (defensive against
+  // Privy stripping pre-attached partial sigs) and verifies all required sigs.
   await applySigners(tx, built.signers);
+
+  // A treasury/server-signed broadcast must have a durable idempotency store.
+  const requiresDurableStore = built.signers.some((s) => s.kind === 'privy-server');
 
   return submitSignedTail(tx, blockhash, { ...opts, route }, {
     route,
     priorityFeeMicroLamports,
     jitoTipLamports,
     idempotencyKey,
+    requiresDurableStore,
   });
 }
 
@@ -356,11 +458,16 @@ export async function buildUnsignedForClient(
 ): Promise<{ txBase64: string; idempotencyKey: string }> {
   const tx = built.tx;
   resolveFeePayer(built);
-  await ensureBlockhash(tx);
+  // Capture the REAL lastValidBlockHeight so submitClientSigned can confirm
+  // against the true expiry window instead of defaulting to 0 (correctness P1).
+  const blockhash = await ensureBlockhash(tx);
 
-  await prependBudget(tx, built, { route: 'rpc' });
+  // Capture the priority fee actually baked into the budget ixs so it can be
+  // reported by submitClientSigned (telemetry P1) instead of 0. (§b.4 keeps this
+  // entry point opts-free, so the Helius estimate / builder CU limit applies.)
+  const { priorityFeeMicroLamports } = await prependBudget(tx, built, { route: 'rpc' });
 
-  const idempotencyKey = deriveIdempotencyKey(
+  const key = deriveIdempotencyKey(
     built.label ?? 'tx',
     tx.feePayer!.toBase58(),
     unsignedMessageB64(tx),
@@ -375,6 +482,14 @@ export async function buildUnsignedForClient(
   const txBase64 = tx
     .serialize({ requireAllSignatures: false, verifySignatures: false })
     .toString('base64');
+
+  // Pack the real key + expiry height + applied fee into the opaque blob the
+  // client round-trips back. The §b.4 return type is still { txBase64, idempotencyKey }.
+  const idempotencyKey = encodeRelayBlob({
+    k: key,
+    lvbh: blockhash.lastValidBlockHeight,
+    pf: priorityFeeMicroLamports,
+  });
 
   return { txBase64, idempotencyKey };
 }
@@ -392,8 +507,26 @@ export async function submitClientSigned(input: {
   extraSigners?: Signer[];
   opts?: SubmitOptions;
 }): Promise<SubmitResult> {
-  const { txBase64, idempotencyKey, extraSigners = [], opts = {} } = input;
-  const route = opts.route ?? 'rpc';
+  const { txBase64, idempotencyKey: idempotencyBlob, extraSigners = [], opts = {} } = input;
+
+  // A client-built tx carries NO Jito tip (buildUnsignedForClient forces route
+  // 'rpc' and never prepends jitoTipIx). If 'sender' is requested for a relayed
+  // client tx, Helius Sender would reject it for a missing tip — so FORCE 'rpc'
+  // and warn rather than land a guaranteed tip-too-low failure (sdk P1).
+  let route = opts.route ?? 'rpc';
+  if (route === 'sender') {
+    // eslint-disable-next-line no-console
+    console.warn(
+      'submitClientSigned: route="sender" is not supported on the client-relay path ' +
+        '(client-built tx carries no Jito tip); forcing route="rpc".',
+    );
+    route = 'rpc';
+  }
+
+  // Decode the opaque relay blob: real key + build-time lastValidBlockHeight +
+  // applied priority fee. Falls back to a bare key for caller-supplied keys.
+  const { k: idempotencyKey, lvbh: carriedLvbh, pf: carriedPriorityFee } =
+    decodeRelayBlob(idempotencyBlob);
 
   const tx = Transaction.from(Buffer.from(txBase64, 'base64'));
   if (!tx.feePayer) {
@@ -404,27 +537,39 @@ export async function submitClientSigned(input: {
   }
 
   // Apply any remaining server/ephemeral signers (e.g. a platform co-sign).
-  // applySigners preserves the client's signature (partial-sign semantics).
+  // applySigners preserves the client's signature (partial-sign semantics) and
+  // re-attaches ephemeral sigs if a server co-sign strips them.
   if (extraSigners.length > 0) {
     await applySigners(tx, extraSigners);
   }
 
-  // Reconstruct the blockhash struct for the tail (lastValidBlockHeight may be
-  // absent on a deserialized tx; default to the carried value if present).
+  // Reconstruct the blockhash struct for the tail. A deserialized Transaction
+  // does NOT carry lastValidBlockHeight (it's not on the wire), so prefer the
+  // carried build-time value; defaulting to 0 would make the expiry guard fire on
+  // the FIRST height check and kill legitimate submissions (correctness P1).
+  const lastValidBlockHeight = tx.lastValidBlockHeight ?? carriedLvbh ?? 0;
+  tx.lastValidBlockHeight = lastValidBlockHeight; // the tail reads tx.lastValidBlockHeight
   const blockhash: BlockhashWithExpiryBlockHeight = {
     blockhash: tx.recentBlockhash,
-    lastValidBlockHeight: tx.lastValidBlockHeight ?? 0,
+    lastValidBlockHeight,
   };
 
-  // Priority fee is already baked into the budget ixs from buildUnsignedForClient;
-  // we report the override if given, else 0 (estimate already applied at build).
-  const priorityFeeMicroLamports = opts.computeUnitPriceMicroLamports ?? 0;
-  const jitoTipLamports = route === 'sender' ? opts.jitoTipLamports ?? getDefaultTipLamports(opts.swqosOnly) : undefined;
+  // Report the REAL priority fee: a per-call override wins (note: it cannot
+  // change the already-signed budget ix, so it is reported, not re-applied),
+  // else the build-time fee carried in the blob (telemetry P1) — not 0.
+  const priorityFeeMicroLamports = opts.computeUnitPriceMicroLamports ?? carriedPriorityFee;
+  // route is forced to 'rpc' above, so there is no Jito tip on this path.
+  const jitoTipLamports = undefined;
+
+  // A platform co-signature (privy-server in extraSigners) makes this a
+  // server/treasury-signed broadcast and demands the durable store.
+  const requiresDurableStore = extraSigners.some((s) => s.kind === 'privy-server');
 
   return submitSignedTail(tx, blockhash, { ...opts, route }, {
     route,
     priorityFeeMicroLamports,
     jitoTipLamports,
     idempotencyKey,
+    requiresDurableStore,
   });
 }
