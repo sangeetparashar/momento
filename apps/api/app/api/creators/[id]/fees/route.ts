@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readLimiter, applyRateLimit } from '@/lib/ratelimit';
 import { getAuthUser } from '@/lib/auth';
 import { getCreatorFeeSummary } from '@/lib/fees';
+import { isValidUuid } from '@/lib/validation';
 
 /**
  * GET /api/creators/[id]/fees — creator fee summary (CONTRACTS §e.4).
@@ -19,6 +20,13 @@ export async function GET(
     if (rateLimitResponse) return rateLimitResponse;
 
     const { id } = await params;
+    // Bound the param before any DB use (REVIEW-security P1).
+    if (!isValidUuid(id)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid creator id' },
+        { status: 400 },
+      );
+    }
 
     const user = await getAuthUser(request);
     const includeClaimable = !!user && (user.isAdmin || user.id === id);

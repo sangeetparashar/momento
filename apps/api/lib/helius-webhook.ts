@@ -22,7 +22,15 @@ import crypto from 'crypto';
 import type { NextRequest } from 'next/server';
 import { Redis } from '@upstash/redis';
 import prisma from './prisma';
+import { invalidateCache } from './redis';
+import { getConnection } from '@/lib/solana';
 import { calcFee } from './fees';
+
+// Hard cap on the number of enhanced-tx objects accepted in one delivery. Helius
+// batches deliveries; a single body carrying an unbounded array would let one
+// (authenticated or replayed) request exhaust the function and hammer the DB
+// (DoS). Reject oversized batches before the per-event loop.
+const MAX_BATCH_EVENTS = 200;
 
 // ── env ─────────────────────────────────────────────────────────────────────
 function getWebhookSecret(): string | undefined {
@@ -32,6 +40,10 @@ function getMaxAgeSeconds(): number {
   const raw = process.env.WEBHOOK_MAX_AGE;
   const n = raw ? parseInt(raw, 10) : NaN;
   return Number.isFinite(n) && n > 0 ? n : 600; // default 10 min
+}
+/** Largest accepted batch size; never below 1. */
+export function getMaxBatchEvents(): number {
+  return MAX_BATCH_EVENTS;
 }
 
 // ── Redis (lazy, optional) ───────────────────────────────────────────────────
@@ -120,6 +132,12 @@ export interface ParsedHeliusEvent {
     fromUserAccount: string;
     toUserAccount: string;
     tokenAmount: number;
+    // Base-unit integer string from Helius `rawTokenAmount.tokenAmount` when
+    // present. Carried so the ingest path can avoid `float * 10**decimals`
+    // (precision loss past 2^53). Best-effort only — on-chain verification
+    // re-derives the authoritative amount from confirmed tx meta.
+    rawTokenAmount?: string;
+    rawDecimals?: number;
   }>;
   accountData: any[];
   events: any;
@@ -153,12 +171,22 @@ export function parseHeliusBatch(rawBody: string): ParsedHeliusEvent[] {
     const tokenTransfersRaw = Array.isArray(e.tokenTransfers) ? e.tokenTransfers : [];
     const tokenTransfers = tokenTransfersRaw
       .filter((t: any) => t && typeof t === 'object')
-      .map((t: any) => ({
-        mint: String(t.mint ?? ''),
-        fromUserAccount: String(t.fromUserAccount ?? ''),
-        toUserAccount: String(t.toUserAccount ?? ''),
-        tokenAmount: typeof t.tokenAmount === 'number' ? t.tokenAmount : Number(t.tokenAmount ?? 0),
-      }));
+      .map((t: any) => {
+        // Helius enhanced txs may carry `rawTokenAmount: { tokenAmount, decimals }`
+        // — a base-unit integer string. Prefer it; never multiply the display
+        // float by 10**decimals for on-chain money (CONTRACTS invariant #1).
+        const rta = t.rawTokenAmount && typeof t.rawTokenAmount === 'object' ? t.rawTokenAmount : null;
+        const rawAmt = rta?.tokenAmount;
+        const rawDec = rta?.decimals;
+        return {
+          mint: String(t.mint ?? ''),
+          fromUserAccount: String(t.fromUserAccount ?? ''),
+          toUserAccount: String(t.toUserAccount ?? ''),
+          tokenAmount: typeof t.tokenAmount === 'number' ? t.tokenAmount : Number(t.tokenAmount ?? 0),
+          rawTokenAmount: rawAmt !== undefined && rawAmt !== null ? String(rawAmt) : undefined,
+          rawDecimals: typeof rawDec === 'number' ? rawDec : undefined,
+        };
+      });
 
     out.push({
       signature,
@@ -183,19 +211,158 @@ function blockTimeToDate(blockTime: number | null): Date | null {
   return new Date(blockTime * 1000);
 }
 
+// ── On-chain verification ─────────────────────────────────────────────────────
+// SECURITY (REVIEW-security P0): the webhook secret only proves the SENDER, not
+// that the asserted tx is real. We therefore treat the payload as low-trust even
+// after the secret check and confirm every event against chain before any row is
+// written. Amounts are DERIVED from the confirmed tx meta (pre/post token
+// balances, base-unit integer strings) — never from the payload float. If the tx
+// cannot be confirmed (not landed / RPC unavailable / not a watched mint), we
+// SKIP persistence entirely, so unverified data can never drive rebate accrual,
+// claimable summaries, or the Phase-4 payout path.
+
+interface VerifiedMint {
+  /** Authoritative gross moved (base units) for this mint, from on-chain meta. */
+  grossBaseUnits: bigint;
+  /** Net signed balance delta over all owners (>0 ⇒ supply credited net). */
+  side: 'BUY' | 'SELL';
+  /** Best-effort trader wallet (largest debited owner) from meta. */
+  trader: string;
+}
+
+interface VerifiedTx {
+  /** Authoritative block time (unix seconds) from the confirmed tx. */
+  blockTime: number | null;
+  /** Per-mint derived amounts, keyed by mint address. */
+  byMint: Map<string, VerifiedMint>;
+}
+
+/**
+ * Confirm a signature on-chain and derive per-mint base-unit amounts from the
+ * confirmed transaction's pre/post token balances. Returns `null` when the tx
+ * is not found / not confirmed / verification is unavailable — caller MUST skip
+ * persistence in that case.
+ *
+ * Uses base-unit integer strings (`uiTokenAmount.amount`) end-to-end — no float
+ * multiply, no 2^53 precision loss, no multi-leg double counting (gross per mint
+ * = sum of POSITIVE owner deltas = the credited side, which equals the debited
+ * magnitude for a transfer).
+ */
+async function verifyOnChain(signature: string): Promise<VerifiedTx | null> {
+  let tx: any;
+  try {
+    tx = await getConnection().getTransaction(signature, {
+      maxSupportedTransactionVersion: 0,
+    });
+  } catch {
+    return null; // RPC unavailable / transient → treat as unverified (skip)
+  }
+  if (!tx || tx.meta == null || tx.meta.err != null) return null;
+
+  const pre: any[] = Array.isArray(tx.meta.preTokenBalances) ? tx.meta.preTokenBalances : [];
+  const post: any[] = Array.isArray(tx.meta.postTokenBalances) ? tx.meta.postTokenBalances : [];
+
+  // Index pre/post balances by (accountIndex). Each carries { mint, owner,
+  // uiTokenAmount: { amount: <base-unit string> } }.
+  const rawOf = (b: any): bigint => {
+    try {
+      return BigInt(b?.uiTokenAmount?.amount ?? '0');
+    } catch {
+      return BigInt(0);
+    }
+  };
+  const preByIdx = new Map<number, any>();
+  for (const b of pre) if (typeof b?.accountIndex === 'number') preByIdx.set(b.accountIndex, b);
+
+  // Aggregate signed deltas per (mint, owner).
+  const deltas = new Map<string, { mint: string; owner: string; delta: bigint }>();
+  const accountIndexes = new Set<number>();
+  for (const b of pre) if (typeof b?.accountIndex === 'number') accountIndexes.add(b.accountIndex);
+  for (const b of post) if (typeof b?.accountIndex === 'number') accountIndexes.add(b.accountIndex);
+
+  const postByIdx = new Map<number, any>();
+  for (const b of post) if (typeof b?.accountIndex === 'number') postByIdx.set(b.accountIndex, b);
+
+  for (const idx of accountIndexes) {
+    const p = preByIdx.get(idx);
+    const q = postByIdx.get(idx);
+    const meta = q ?? p;
+    if (!meta?.mint) continue;
+    const mint = String(meta.mint);
+    const owner = String(meta.owner ?? q?.owner ?? p?.owner ?? '');
+    const delta = rawOf(q) - rawOf(p);
+    if (delta === BigInt(0)) continue;
+    const key = `${mint}:${owner}`;
+    const cur = deltas.get(key) ?? { mint, owner, delta: BigInt(0) };
+    cur.delta += delta;
+    deltas.set(key, cur);
+  }
+
+  interface MintAcc {
+    grossBaseUnits: bigint;
+    net: bigint;
+    maxDebit: bigint;
+    trader: string;
+  }
+  const acc = new Map<string, MintAcc>();
+  for (const { mint, owner, delta } of deltas.values()) {
+    const c = acc.get(mint) ?? {
+      grossBaseUnits: BigInt(0),
+      net: BigInt(0),
+      maxDebit: BigInt(0),
+      trader: '',
+    };
+    // Gross = sum of credited (positive) deltas = transferred magnitude.
+    if (delta > BigInt(0)) c.grossBaseUnits += delta;
+    c.net += delta;
+    // Trader heuristic: the owner with the largest single debit.
+    if (delta < BigInt(0)) {
+      const debit = -delta;
+      if (debit > c.maxDebit && owner) {
+        c.maxDebit = debit;
+        c.trader = owner;
+      }
+    }
+    acc.set(mint, c);
+  }
+
+  // Side from the net supply-side delta (best-effort; pool identity is not
+  // distinguishable from meta alone). Mark BUY when ambiguous (display-only).
+  const byMint = new Map<string, VerifiedMint>();
+  for (const [mint, c] of acc) {
+    byMint.set(mint, {
+      grossBaseUnits: c.grossBaseUnits,
+      side: c.net > BigInt(0) ? 'BUY' : c.net < BigInt(0) ? 'SELL' : 'BUY',
+      trader: c.trader,
+    });
+  }
+
+  const blockTime =
+    typeof tx.blockTime === 'number' && Number.isFinite(tx.blockTime) ? tx.blockTime : null;
+
+  return { blockTime, byMint };
+}
+
 /**
  * Ingest a parsed batch. For each event:
- *   1. Redis SETNX fast-path dedupe on the signature.
- *   2. Find watched creator tokens for the mints in `tokenTransfers`.
- *   3. Classify: existing `Trade` with this signature → IN_APP (confirm it);
+ *   1. Bound the batch size (DoS guard) — caller passes a capped array.
+ *   2. Freshness/replay window: drop events older than WEBHOOK_MAX_AGE by event
+ *      timestamp (a captured valid body cannot be replayed indefinitely).
+ *   3. Redis SETNX fast-path dedupe on the signature.
+ *   4. ON-CHAIN VERIFICATION (P0): confirm the signature and DERIVE amounts from
+ *      the confirmed tx meta. Unverifiable events are SKIPPED (never persisted).
+ *   5. Find watched creator tokens for the mints actually moved on-chain.
+ *   6. Classify: existing `Trade` with this signature → IN_APP (confirm it);
  *      else if the mint is a watched creator mint → EXTERNAL (insert Trade).
- *   4. Emit a TRANSFER_FEE_WITHHELD `FeeEvent` per (signature, mint) leg with
- *      `source` matching the trade. On-chain row → set `signature` (encodes the
- *      leg key), leave `internalRef` null. `createMany({ skipDuplicates: true })`
- *      makes a duplicate leg an insert-or-ignore no-op (durable backstop).
+ *   7. Persist the per-event legs in a SINGLE prisma.$transaction (no swallowed
+ *      errors): a `TRANSFER_FEE_WITHHELD` `FeeEvent` per (signature, mint) leg
+ *      with `source` matching the trade. On-chain row → set `signature` (encodes
+ *      the leg key), leave `internalRef` null. Inserts use `skipDuplicates` so a
+ *      re-delivery is an insert-or-ignore no-op (durable backstop, CONTRACTS §a.6).
+ *   8. Invalidate the affected fee-summary caches after a successful batch.
  *
- * Always safe to re-run (at-least-once delivery). Returns counts for the
- * receiver response (§e.1).
+ * At-least-once safe. Unexpected DB errors are NOT swallowed — they surface to
+ * the route so Helius retries and monitoring fires. Returns counts (§e.1).
  */
 export async function ingestHeliusEvents(
   events: ParsedHeliusEvent[],
@@ -205,15 +372,25 @@ export async function ingestHeliusEvents(
   let skipped = 0;
 
   const redis = getRedis();
+  const maxAge = getMaxAgeSeconds();
+  const nowSec = Math.floor(Date.now() / 1000);
+  const touchedMints = new Set<string>();
 
   for (const ev of events) {
     received++;
 
-    // (1) Redis fast-path dedupe. NX = only set if absent → true on first sight.
+    // (2) Replay/freshness window: reject stale events by their own timestamp.
+    // Admin back-fill should bypass via a separate path, not this receiver.
+    if (ev.blockTime !== null && nowSec - ev.blockTime > maxAge) {
+      skipped++;
+      continue;
+    }
+
+    // (3) Redis fast-path dedupe. NX = only set if absent → true on first sight.
     if (redis) {
       try {
         const key = `webhook:helius:${ev.signature}`;
-        const set = await redis.set(key, '1', { nx: true, ex: getMaxAgeSeconds() });
+        const set = await redis.set(key, '1', { nx: true, ex: maxAge });
         if (set === null) {
           // already processed recently → skip without DB work
           skipped++;
@@ -224,10 +401,25 @@ export async function ingestHeliusEvents(
       }
     }
 
-    // Distinct watched mints touched by this tx.
-    const mints = Array.from(
-      new Set(ev.tokenTransfers.map((t) => t.mint).filter((m) => !!m)),
-    );
+    // (4) ON-CHAIN VERIFICATION (P0). Confirm the signature + derive amounts from
+    // the confirmed tx meta. Unverifiable ⇒ skip persistence (no rebate/claim
+    // poisoning). On a transient RPC failure, drop the Redis fast-path marker so
+    // a later re-delivery can retry verification (DB unique key still dedupes).
+    const verified = await verifyOnChain(ev.signature);
+    if (!verified) {
+      if (redis) {
+        try {
+          await redis.del(`webhook:helius:${ev.signature}`);
+        } catch {
+          /* best effort */
+        }
+      }
+      skipped++;
+      continue;
+    }
+
+    // (5) Only mints the confirmed tx actually moved are eligible.
+    const mints = Array.from(verified.byMint.keys()).filter((m) => !!m);
     if (mints.length === 0) {
       skipped++;
       continue;
@@ -244,132 +436,139 @@ export async function ingestHeliusEvents(
     }
 
     const tokenByMint = new Map(tokens.map((t) => [t.mintAddress as string, t]));
-    const blockTime = blockTimeToDate(ev.blockTime);
+    // Authoritative block time from the confirmed tx (fall back to payload).
+    const blockTime = blockTimeToDate(verified.blockTime ?? ev.blockTime);
 
-    // (3) Classify on the signature: hit ⇒ IN_APP (confirm), miss ⇒ EXTERNAL.
+    // (6) Classify on the signature: hit ⇒ IN_APP (confirm), miss ⇒ EXTERNAL.
     const existingTrade = await prisma.trade.findUnique({
       where: { signature: ev.signature },
       select: { id: true, source: true, tokenId: true },
     });
 
+    // Commit all legs for this event atomically (7): trade create/update +
+    // fee leg inserts run inside ONE interactive transaction so a partial
+    // failure rolls back the whole event rather than leaving an orphaned Trade
+    // or FeeEvent.
     let anyWork = false;
+    const watchedMints = mints.filter((m) => tokenByMint.has(m));
 
-    for (const mint of mints) {
-      const token = tokenByMint.get(mint);
-      if (!token) continue;
+    try {
+      await prisma.$transaction(async (db) => {
+        for (const mint of watchedMints) {
+          const token = tokenByMint.get(mint);
+          if (!token) continue;
 
-      const feeBps =
-        token.feeConfig?.transferFeeBps ?? token.transferFeeBps ?? 0;
-      const maxFee = token.transferFeeMaxBaseUnits
-        ? BigInt(token.transferFeeMaxBaseUnits)
-        : BigInt(0);
-      const decimals = token.decimals ?? 9;
+          const vm = verified.byMint.get(mint)!;
+          const feeBps = token.feeConfig?.transferFeeBps ?? token.transferFeeBps ?? 0;
+          const maxFee = token.transferFeeMaxBaseUnits
+            ? BigInt(token.transferFeeMaxBaseUnits)
+            : BigInt(0);
 
-      // Gross transferred for this mint = sum of token-transfer legs on the mint.
-      let grossWhole = 0;
-      for (const tt of ev.tokenTransfers) {
-        if (tt.mint === mint) grossWhole += Math.abs(tt.tokenAmount || 0);
+          // Gross is the authoritative on-chain base-unit integer (no float).
+          const grossBaseUnits = vm.grossBaseUnits;
+          const withheld = calcFee(grossBaseUnits, feeBps, maxFee);
+
+          let tradeId: string | null = null;
+          let source: 'IN_APP' | 'EXTERNAL';
+
+          if (existingTrade && existingTrade.tokenId === token.id) {
+            source = existingTrade.source === 'IN_APP' ? 'IN_APP' : 'EXTERNAL';
+            tradeId = existingTrade.id;
+            await db.trade.update({
+              where: { id: existingTrade.id },
+              data: { blockTime: blockTime ?? undefined },
+            });
+          } else if (!existingTrade) {
+            source = 'EXTERNAL';
+            const payer = vm.trader || '';
+            const created = await db.trade.upsert({
+              where: { signature: ev.signature },
+              update: { blockTime: blockTime ?? undefined },
+              create: {
+                tokenId: token.id,
+                traderWallet: payer,
+                side: vm.side,
+                source: 'EXTERNAL',
+                venue: token.poolType ?? 'METEORA_DAMM_V2',
+                signature: ev.signature,
+                amountInBaseUnits: grossBaseUnits.toString(),
+                amountInMint: mint,
+                amountOutBaseUnits: '0',
+                amountOutMint: token.quoteMint ?? '',
+                transferFeeBaseUnits: withheld.toString(),
+                feeBps: feeBps || null,
+                poolAddress: token.dbcPoolAddress ?? token.poolAddress ?? null,
+                blockTime: blockTime ?? undefined,
+              },
+              select: { id: true },
+            });
+            tradeId = created.id;
+          } else {
+            // Signature matched a Trade on a DIFFERENT token — record the leg
+            // for this mint without touching the other token's trade row.
+            source = 'EXTERNAL';
+          }
+
+          // (7) TRANSFER_FEE_WITHHELD fee leg. ON-CHAIN row: set `signature`
+          // (encode the leg key so each (sig,kind,mint) is unique), leave
+          // `internalRef` null (CONTRACTS §a.6). Pre-attribution → recipient
+          // PROTOCOL (deliberately excluded from claimable summaries; the
+          // attributed CREATOR/PARTNER legs are written by the Phase-3 claim).
+          const legSignature = `${ev.signature}:TRANSFER_FEE_WITHHELD:${mint}`;
+          await db.feeEvent.createMany({
+            data: [
+              {
+                tokenId: token.id,
+                tradeId: tradeId ?? undefined,
+                type: 'TRANSFER_FEE_WITHHELD',
+                source,
+                recipient: 'PROTOCOL',
+                grossBaseUnits: grossBaseUnits.toString(),
+                feeBaseUnits: withheld.toString(),
+                netBaseUnits: (grossBaseUnits - withheld).toString(),
+                amountMint: mint,
+                feeBps: feeBps || null,
+                signature: legSignature,
+                blockTime: blockTime ?? undefined,
+              },
+            ],
+            skipDuplicates: true, // durable idempotency backstop
+          });
+
+          touchedMints.add(mint);
+          anyWork = true;
+        }
+      });
+    } catch (err) {
+      // Do NOT swallow: drop the Redis fast-path marker so the retry is not
+      // deduped away, and rethrow so the route returns 5xx and Helius retries.
+      if (redis) {
+        try {
+          await redis.del(`webhook:helius:${ev.signature}`);
+        } catch {
+          /* best effort */
+        }
       }
-      const grossBaseUnits = BigInt(Math.round(grossWhole * 10 ** decimals));
-      const withheld = calcFee(grossBaseUnits, feeBps, maxFee);
-
-      // Determine the trade for THIS mint (in-app trades are per-token).
-      let tradeId: string | null = null;
-      let source: 'IN_APP' | 'EXTERNAL';
-
-      if (existingTrade && existingTrade.tokenId === token.id) {
-        // IN_APP confirmation: stamp blockTime, keep source as recorded.
-        source = existingTrade.source === 'IN_APP' ? 'IN_APP' : 'EXTERNAL';
-        tradeId = existingTrade.id;
-        await prisma.trade
-          .update({
-            where: { id: existingTrade.id },
-            data: { blockTime: blockTime ?? undefined },
-          })
-          .catch(() => {});
-      } else if (!existingTrade) {
-        // EXTERNAL: insert a Trade keyed by signature (unique → idempotent).
-        source = 'EXTERNAL';
-        const payer =
-          ev.tokenTransfers.find((t) => t.mint === mint && t.fromUserAccount)
-            ?.fromUserAccount || '';
-        const side = inferSide(ev, mint);
-        const created = await prisma.trade
-          .upsert({
-            where: { signature: ev.signature },
-            update: { blockTime: blockTime ?? undefined },
-            create: {
-              tokenId: token.id,
-              traderWallet: payer,
-              side,
-              source: 'EXTERNAL',
-              venue: token.poolType ?? 'METEORA_DAMM_V2',
-              signature: ev.signature,
-              amountInBaseUnits: grossBaseUnits.toString(),
-              amountInMint: mint,
-              amountOutBaseUnits: '0',
-              amountOutMint: token.quoteMint ?? '',
-              transferFeeBaseUnits: withheld.toString(),
-              feeBps: feeBps || null,
-              poolAddress: token.dbcPoolAddress ?? token.poolAddress ?? null,
-              blockTime: blockTime ?? undefined,
-            },
-            select: { id: true },
-          })
-          .catch(() => null);
-        tradeId = created?.id ?? null;
-      } else {
-        // Signature matched a Trade on a DIFFERENT token — record EXTERNAL leg
-        // for this mint without touching the other token's trade row.
-        source = 'EXTERNAL';
-      }
-
-      // (4) Emit the TRANSFER_FEE_WITHHELD fee event for this leg. ON-CHAIN row:
-      // set `signature` (encode the leg key so each (sig,kind,mint) is unique),
-      // leave `internalRef` null (CONTRACTS §a.6).
-      const legSignature = `${ev.signature}:TRANSFER_FEE_WITHHELD:${mint}`;
-      await prisma.feeEvent
-        .createMany({
-          data: [
-            {
-              tokenId: token.id,
-              tradeId: tradeId ?? undefined,
-              type: 'TRANSFER_FEE_WITHHELD',
-              source,
-              recipient: 'PROTOCOL', // withheld fee — destined for harvest/claim accounting
-              grossBaseUnits: grossBaseUnits.toString(),
-              feeBaseUnits: withheld.toString(),
-              netBaseUnits: (grossBaseUnits - withheld).toString(),
-              amountMint: mint,
-              feeBps: feeBps || null,
-              signature: legSignature,
-              blockTime: blockTime ?? undefined,
-            },
-          ],
-          skipDuplicates: true, // durable idempotency backstop
-        })
-        .catch(() => {});
-
-      anyWork = true;
+      throw err;
     }
 
     if (anyWork) processed++;
     else skipped++;
   }
 
-  return { received, processed, skipped };
-}
+  // (8) Invalidate affected fee-summary caches after a successful batch
+  // (REVIEW-security P1 / SPEC §5.6). The summary read models in `lib/fees.ts`
+  // currently query Prisma directly (no getOrSetCache), so today this is a
+  // forward-safe no-op; wiring it now means a future cached summary cannot serve
+  // stale post-ingest data. Mirrors the kyc-webhook invalidation pattern.
+  if (touchedMints.size > 0) {
+    try {
+      const keys = ['feeSummary:*', ...Array.from(touchedMints).map((m) => `feeSummary:${m}:*`)];
+      await invalidateCache(...keys);
+    } catch {
+      // Cache invalidation is best-effort; never fail ingest on a cache miss.
+    }
+  }
 
-/**
- * Best-effort BUY/SELL inference for an EXTERNAL trade: if the creator mint
- * flows OUT of a user account (they're sending the token away), treat as SELL;
- * if it flows IN, treat as BUY. Defaults to BUY when ambiguous (display-only;
- * rebate eligibility is driven by `source`, not `side`).
- */
-function inferSide(ev: ParsedHeliusEvent, mint: string): 'BUY' | 'SELL' {
-  const legs = ev.tokenTransfers.filter((t) => t.mint === mint);
-  // Heuristic: a swap that increases a holder's creator-token balance == BUY.
-  // Without per-account deltas we cannot be precise; bias to BUY.
-  if (legs.length === 0) return 'BUY';
-  return 'BUY';
+  return { received, processed, skipped };
 }

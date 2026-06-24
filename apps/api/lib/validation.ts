@@ -58,9 +58,11 @@ export const deleteAccountSchema = z.object({
 
 /**
  * Helius enhanced-tx webhook payload: a lax ARRAY of objects. Helius posts many
- * optional fields, so each element is `.passthrough()`-ed and only the keys we
- * actually read are loosely typed. Real parsing/normalization happens in
- * `lib/helius-webhook.ts#parseHeliusBatch`; this schema only guards the shape.
+ * optional fields, so each element is `.loose()`-ed (unknown keys pass through)
+ * and only the keys we actually read are loosely typed. Real parsing /
+ * normalization happens in `lib/helius-webhook.ts#parseHeliusBatch`; this schema
+ * only guards the shape. (`.loose()` is the zod v4 canonical name for the
+ * previously-deprecated `.passthrough()` alias — REVIEW-correctness P2-1.)
  */
 export const heliusWebhookSchema = z.array(
   z
@@ -74,7 +76,7 @@ export const heliusWebhookSchema = z.array(
       tokenTransfers: z.array(z.any()).optional(),
       events: z.any().optional(),
     })
-    .passthrough(),
+    .loose(),
 );
 
 /**
@@ -88,6 +90,25 @@ export const tradeRangeSchema = z.object({
   granularity: z.enum(['hour', 'day']).optional(),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
+
+// ── Route param validators (REVIEW-security P1) ──
+// Bound `[mint]` / `[id]` BEFORE any DB or cache use so attacker-controlled
+// unbounded strings cannot become cache keys / enumeration probes.
+
+// Base58 alphabet (no 0, O, I, l); a Solana mint is 32–44 base58 chars.
+const BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
+// uuid v4-ish (the schema uses `@default(uuid())`).
+const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+/** True if `mint` looks like a Solana base58 mint address. */
+export function isValidMint(mint: string | null | undefined): boolean {
+  return typeof mint === 'string' && BASE58_RE.test(mint);
+}
+
+/** True if `id` looks like a uuid (the user/creator id format). */
+export function isValidUuid(id: string | null | undefined): boolean {
+  return typeof id === 'string' && UUID_RE.test(id);
+}
 
 // Helper to validate and return parsed data or error response
 export function validateBody<T>(schema: z.ZodSchema<T>, body: unknown): { success: true; data: T } | { success: false; response: Response } {

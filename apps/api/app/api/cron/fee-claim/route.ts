@@ -5,11 +5,24 @@ import { computeRebate, rebateToUsdc, grossUpTokenRebate } from '@/lib/fees';
 import { MOMENTO_FEE } from '@momento/shared';
 
 /**
+ * Whether the intent-recon sweep should run. FALSE for all of Phase 2: the
+ * in-app swap builder that writes Momento intent rows is Phase 4, so there is no
+ * intent to reconcile against and the sweep is a deliberate no-op seam (NOT a
+ * silently-broken matcher). Phase 4 flips this on (e.g. via `INTENT_RECON=1`)
+ * once it backfills `Trade.intentId` on the signature-matched EXTERNAL rows.
+ */
+function intentReconEnabled(): boolean {
+  return process.env.INTENT_RECON === '1';
+}
+
+/**
  * GET /api/cron/fee-claim — partner+creator fee-claim / reconciliation cron
  * (CONTRACTS §e.5, D-fees §7). On the `keep-warm` cron pattern.
  *
- * Auth: `Authorization: Bearer ${CRON_SECRET}`, constant-time. Fail-open ONLY
- * when CRON_SECRET is unset (dev), exactly like `keep-warm`. No rate limiter.
+ * Auth: `Authorization: Bearer ${CRON_SECRET}`, constant-time. FAIL-CLOSED: a
+ * missing/empty CRON_SECRET returns 401 (REVIEW-security P1) — we never infer
+ * "dev" from an absent secret. The ONLY fail-open path is an EXPLICIT dev opt-in
+ * (`ALLOW_INSECURE_CRON=1` AND `NODE_ENV !== 'production'`). No rate limiter.
  *
  * Phase 2 responsibilities (accounting + scaffolding ONLY — idempotent, safe on
  * overlapping ticks via the FeeEvent/Trade unique keys):
@@ -23,9 +36,18 @@ import { MOMENTO_FEE } from '@momento/shared';
  * Phase-3/Phase-4 seams are explicit TODOs below — do NOT implement here.
  */
 export async function GET(request: NextRequest) {
-  // ── Auth (constant-time bearer compare; fail-open only when unset) ──
-  const secret = process.env.CRON_SECRET;
-  if (secret) {
+  // ── Auth (constant-time bearer compare; FAIL-CLOSED) ──
+  const secret = process.env.CRON_SECRET?.trim();
+  if (!secret) {
+    // No secret configured. Fail CLOSED unless an EXPLICIT dev opt-in is set —
+    // a missing var in a misconfigured prod deploy must NOT expose this
+    // state-mutating endpoint (REVIEW-security P1).
+    const allowInsecure =
+      process.env.ALLOW_INSECURE_CRON === '1' && process.env.NODE_ENV !== 'production';
+    if (!allowInsecure) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+  } else {
     const authHeader = request.headers.get('authorization') || '';
     const presented = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
     // Hash both sides to fixed-width digests so the compare never throws on a
@@ -47,24 +69,42 @@ export async function GET(request: NextRequest) {
   try {
     // ───────────────────────────────────────────────────────────────────────
     // (1) Reconcile classification + enqueue rebates (D-fees §7.1).
-    // `signature` is unique, so the webhook-vs-intent race cannot produce two
-    // rows sharing a signature; instead the merge surfaces as a row that is
-    // `source=EXTERNAL` yet carries our `intentId` (linked back to a Momento
-    // intent). Reclassify those → IN_APP and compute the owed rebate. Operate
-    // only on trades not yet rebated so re-runs are idempotent.
     //
-    // NOTE: the in-app swap BUILDER that writes intent rows is Phase 4, so in
-    // Phase 2 this sweep is a safe no-op until those rows exist — the seam.
+    // JOIN KEY = `signature` (SPEC §3.3 / REVIEW-correctness P1-1). The race the
+    // recon resolves is: the webhook lands an EXTERNAL `Trade` (keyed by
+    // `signature`) BEFORE the Momento intent row that proves the same signature
+    // was an IN_APP swap WE built. The correct reconciliation is therefore:
+    // "find EXTERNAL trades whose `signature` matches a Momento-built intent and
+    // reclassify them IN_APP".
+    //
+    // PHASE-4 DEPENDENCY — DELIBERATE NO-OP SEAM (not a silently-broken matcher):
+    // the in-app swap BUILDER that writes intent rows is Phase 4. Until it exists
+    // there is no source of Momento intents to join against, so the recon has
+    // NOTHING to match and MUST be a no-op. We express that explicitly by gating
+    // the whole sweep behind `intentReconEnabled()` (always false in Phase 2)
+    // rather than running a predicate that *looks* live but can never fire.
+    //
+    // When Phase 4 lands, its builder must EITHER (a) backfill `Trade.intentId`
+    // onto any pre-existing EXTERNAL row sharing the `signature` (then this query
+    // — `source=EXTERNAL AND intentId != null AND rebatePaid=false` — becomes the
+    // live matcher, unchanged), OR (b) provide a signature-keyed intent table and
+    // this sweep is rewritten to join on `signature`. Either way the join key is
+    // `signature`; `intentId` is only the in-row marker the builder must set.
+    // Recorded in CONTRACTS §e.5 as the Phase-4 half of the contract.
     // ───────────────────────────────────────────────────────────────────────
-    const toReclassify = await prisma.trade.findMany({
-      where: {
-        source: 'EXTERNAL',
-        intentId: { not: null },
-        rebatePaid: false,
-      },
-      include: { token: { include: { feeConfig: true } } },
-      take: 500,
-    });
+    const toReclassify = intentReconEnabled()
+      ? await prisma.trade.findMany({
+          where: {
+            source: 'EXTERNAL',
+            // Webhook ingest NEVER sets `intentId` (it only sets `signature`);
+            // only the Phase-4 builder does. So this is unsatisfiable in Phase 2.
+            intentId: { not: null },
+            rebatePaid: false,
+          },
+          include: { token: { include: { feeConfig: true } } },
+          take: 500,
+        })
+      : [];
 
     for (const trade of toReclassify) {
       const token = trade.token;

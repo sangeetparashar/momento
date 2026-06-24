@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readLimiter, applyRateLimit } from '@/lib/ratelimit';
-import { tradeRangeSchema } from '@/lib/validation';
+import { tradeRangeSchema, isValidMint } from '@/lib/validation';
 import { getTokenTradeSummary } from '@/lib/fees';
 
 /**
@@ -19,6 +19,13 @@ export async function GET(
     if (rateLimitResponse) return rateLimitResponse;
 
     const { mint } = await params;
+    // Bound the param before any DB/cache use (REVIEW-security P1).
+    if (!isValidMint(mint)) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid mint address' },
+        { status: 400 },
+      );
+    }
 
     const { searchParams } = new URL(request.url);
     const parsed = tradeRangeSchema.safeParse({

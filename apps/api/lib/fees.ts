@@ -94,21 +94,44 @@ export function grossUpTokenRebate(rebateOwedNet: bigint, feeBps: number): bigin
 /**
  * DEFAULT path: convert a token-denominated net rebate to USDC base units.
  * USDC is fee-exempt so there is NO gross-up.
- *   tokenWhole = rebateOwedNet / 10^tokenDecimals
- *   usdc       = floor(tokenWhole * price * 10^USDC_DECIMALS)
- * Computed in floating point for the price multiply, then floored to USDC base
- * units (6 dp). `priceTs` on the Trade lets the recon job true-up.
+ *
+ *   usdcBase = floor( rebateOwedNet * (price scaled to micro-USD) * 10^USDC_DECIMALS
+ *                     / (10^PRICE_SCALE * 10^tokenDecimals) )
+ *
+ * KEPT IN BIGINT END-TO-END (REVIEW-correctness P1-4): the ONLY float operation
+ * is scaling the display `price` to an integer micro-price; the
+ * `rebateOwedNet`-times-price multiply and the floor to 6-dp USDC base units are
+ * done entirely in the bigint domain, so large base-unit values cannot lose
+ * precision past 2^53. `priceTs` on the Trade lets the recon job true-up.
  */
+// Price is a display float (e.g. 0.0042 USDC/token). Scale it to an integer with
+// this many fractional digits before doing exact integer arithmetic. 12 digits
+// comfortably covers sub-cent token prices without overflowing a JS safe integer
+// (a price < ~9000 stays under 2^53 at 1e12 scale).
+const PRICE_SCALE_DIGITS = 12;
+const PRICE_SCALE = BigInt(10) ** BigInt(PRICE_SCALE_DIGITS);
+
 export function rebateToUsdc(
   rebateOwedNet: bigint,
   tokenToUsdcPrice: number,
   tokenDecimals: number,
 ): bigint {
   if (rebateOwedNet <= BigInt(0) || tokenToUsdcPrice <= 0) return BigInt(0);
-  const tokenWhole = Number(rebateOwedNet) / 10 ** tokenDecimals;
-  const usdcWhole = tokenWhole * tokenToUsdcPrice;
-  const usdcBase = Math.floor(usdcWhole * 10 ** MOMENTO_FEE.USDC_DECIMALS);
-  return usdcBase > 0 ? BigInt(usdcBase) : BigInt(0);
+  if (!Number.isFinite(tokenToUsdcPrice)) return BigInt(0);
+
+  // Scale the float price to an integer micro-price (the only float op).
+  const scaledPrice = BigInt(Math.floor(tokenToUsdcPrice * 10 ** PRICE_SCALE_DIGITS));
+  if (scaledPrice <= BigInt(0)) return BigInt(0);
+
+  const dec = Number.isFinite(tokenDecimals) && tokenDecimals >= 0 ? Math.floor(tokenDecimals) : 0;
+  const usdcScale = BigInt(10) ** BigInt(MOMENTO_FEE.USDC_DECIMALS);
+  const tokenScale = BigInt(10) ** BigInt(dec);
+
+  // floor( rebateOwedNet * scaledPrice * usdcScale / (PRICE_SCALE * tokenScale) )
+  const numerator = rebateOwedNet * scaledPrice * usdcScale;
+  const denominator = PRICE_SCALE * tokenScale;
+  const usdcBase = numerator / denominator; // integer floor (both bigint)
+  return usdcBase > BigInt(0) ? usdcBase : BigInt(0);
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -313,11 +336,20 @@ export async function getTokenFeeSummary(
       recipient: true,
       grossBaseUnits: true,
       feeBaseUnits: true,
+      amountMint: true,
       amountUsd: true,
       claimed: true,
       claimedAt: true,
     },
   });
+
+  // `feesGeneratedBase` / `*Base` are base-unit INTEGER STRINGS — additive ONLY
+  // within a single mint (REVIEW-correctness P1-2b). A token's fee legs can be
+  // denominated in different mints (transfer fees in the token; LP fees in the
+  // quote/USDC), and summing base units across mints yields a meaningless
+  // integer. We therefore sum `*Base` ONLY over legs whose `amountMint` equals
+  // the token's own mint; USD (`*Usd`) is mint-agnostic and stays fully additive.
+  const tokenMint = token.mintAddress ?? mint;
 
   let feesGeneratedBase = BigInt(0);
   let feesGeneratedUsd = 0;
@@ -329,15 +361,16 @@ export async function getTokenFeeSummary(
 
   for (const ev of feeEvents) {
     const fee = toBigInt(ev.feeBaseUnits);
-    feesGeneratedBase += fee;
+    const sameMint = ev.amountMint === tokenMint;
+    if (sameMint) feesGeneratedBase += fee;
     feesGeneratedUsd += ev.amountUsd ?? 0;
 
     if (!ev.claimed) {
       if (ev.recipient === 'CREATOR') {
-        creatorClaimableBase += fee;
+        if (sameMint) creatorClaimableBase += fee;
         creatorClaimableUsd += ev.amountUsd ?? 0;
       } else if (ev.recipient === 'PLATFORM') {
-        momentoClaimableBase += fee;
+        if (sameMint) momentoClaimableBase += fee;
         momentoClaimableUsd += ev.amountUsd ?? 0;
       }
     } else if (ev.claimedAt) {
