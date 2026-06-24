@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Momento Solana Migration — Validation Work-Items</title>
+<style>
+  :root{
+    --bg:#000;--surface:#1A1A1A;--surface2:#121212;--accent:#00FF88;
+    --text:#fff;--muted:#888;--faint:#555;--border:#2A2A2A;
+    --blocker:#FF4D4D;--high:#FFA53D;--med:#FFE03D;--track:#5AC8FA;
+    --mono:'SF Mono',ui-monospace,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--mono);
+    line-height:1.55;font-size:14px;letter-spacing:.02em}
+  .wrap{max-width:980px;margin:0 auto;padding:32px 20px 120px}
+  header{border-bottom:1px solid var(--border);padding-bottom:18px;margin-bottom:8px}
+  h1{font-size:20px;letter-spacing:.12em;text-transform:uppercase;margin:0 0 6px}
+  h1 .dot{color:var(--accent)}
+  .sub{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.1em}
+  .intro{color:var(--muted);font-size:12.5px;margin:16px 0;padding:14px 16px;background:var(--surface2);
+    border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:6px}
+  .intro b{color:var(--text)}
+  h2{font-size:14px;letter-spacing:.12em;text-transform:uppercase;margin:34px 0 4px;color:var(--accent)}
+  h2 .n{color:var(--faint);margin-right:8px}
+  h3{font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:18px 0 6px}
+  .secnote{color:var(--faint);font-size:12px;margin:2px 0 12px}
+  ul{list-style:none;margin:0;padding:0}
+  li.item{display:flex;gap:11px;align-items:flex-start;padding:11px 13px;margin:7px 0;background:var(--surface);
+    border:1px solid var(--border);border-radius:7px;transition:border-color .15s,opacity .15s}
+  li.item:hover{border-color:#3a3a3a}
+  li.item.done{opacity:.5}
+  li.item.done .txt{text-decoration:line-through;text-decoration-color:var(--faint)}
+  input[type=checkbox]{appearance:none;-webkit-appearance:none;min-width:18px;height:18px;margin-top:1px;
+    border:1.5px solid var(--faint);border-radius:5px;background:transparent;cursor:pointer;position:relative}
+  input[type=checkbox]:checked{border-color:var(--accent);background:var(--accent)}
+  input[type=checkbox]:checked::after{content:"";position:absolute;left:5px;top:1px;width:5px;height:10px;
+    border:solid #000;border-width:0 2.5px 2.5px 0;transform:rotate(45deg)}
+  .body{flex:1}
+  .txt{font-size:13px}
+  .txt b{color:var(--text)}
+  .acc{display:block;color:var(--muted);font-size:11.5px;margin-top:5px}
+  .acc::before{content:"ACCEPT — ";color:var(--accent);letter-spacing:.08em}
+  .pri{font-size:9.5px;font-weight:700;letter-spacing:.1em;padding:2px 7px;border-radius:4px;
+    white-space:nowrap;margin-top:1px;border:1px solid}
+  .p-blocker{color:var(--blocker);border-color:var(--blocker)}
+  .p-high{color:var(--high);border-color:var(--high)}
+  .p-med{color:var(--med);border-color:var(--med)}
+  .p-track{color:var(--track);border-color:var(--track)}
+  code{background:#0e0e0e;border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:11.5px;color:var(--accent)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin:14px 0 0;font-size:10.5px;color:var(--muted)}
+  .progress{position:sticky;top:0;background:rgba(0,0,0,.92);backdrop-filter:blur(6px);
+    padding:12px 0 10px;margin-bottom:6px;z-index:5;border-bottom:1px solid var(--border)}
+  .bar{height:6px;background:var(--surface);border-radius:99px;overflow:hidden;border:1px solid var(--border)}
+  .bar > i{display:block;height:100%;width:0;background:var(--accent);transition:width .25s}
+  .pmeta{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:7px;text-transform:uppercase;letter-spacing:.08em}
+  .signoff{margin-top:34px;padding:16px;border:1px dashed var(--accent);border-radius:8px;color:var(--muted);font-size:12.5px}
+  .signoff b{color:var(--accent)}
+  .reset{background:none;border:1px solid var(--border);color:var(--muted);font-family:var(--mono);
+    font-size:10px;letter-spacing:.08em;padding:4px 9px;border-radius:5px;cursor:pointer}
+  .reset:hover{border-color:var(--accent);color:var(--accent)}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Momento <span class="dot">●</span> Solana Migration — Validation Work-Items</h1>
+    <div class="sub">Human runbook to validate &amp; ship the token economy · generated 2026-06-24</div>
+    <div class="legend">
+      <span class="pri p-blocker">BLOCKER</span> cannot ship without
+      <span class="pri p-high">HIGH</span>
+      <span class="pri p-med">MED</span>
+      <span class="pri p-track">TRACK</span> non-blocking
+    </div>
+  </header>
+
+  <div class="progress">
+    <div class="pmeta"><span id="pcount">0 / 0 complete</span><button class="reset" onclick="resetAll()">Reset</button></div>
+    <div class="bar"><i id="pbar"></i></div>
+  </div>
+
+  <div class="intro">
+    The agent fleet built and self-reviewed all code (Phases 1, 2, 3A, 3B + 2 hardening rounds) but
+    <b>could not compile, run, or touch a real cluster</b>. Work sections <b>A → G in order</b>; nothing
+    below A is trustworthy until the build is green. Companion docs: <code>PHASE-*-STATUS.md</code>,
+    <code>PHASE-0-OPS-RUNBOOK.md</code>, <code>SECRETS_REMEDIATION.md</code>,
+    <code>hardening/CRITIC*.md</code>, <code>scripts/spikes/README.md</code>. Checkboxes persist in this browser.
+  </div>
+
+  <h2><span class="n">A.</span>Make the build green (dev machine)</h2>
+  <div class="secnote">Code was written without node_modules/network — it is not yet compiled. Do this first.</div>
+  <ul>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Refresh lockfile + install</b> — <code>pnpm install</code>. Phase 1 dropped <code>@ethersproject/shims</code> from package.json but not the lockfile (frozen-lockfile CI/EAS fail otherwise).<span class="acc">clean install, lockfile updated.</span></span></div><span class="pri p-blocker">BLOCKER</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Add on-chain SDK deps (api)</b> — <code>dynamic-bonding-curve-sdk@1.5.10</code>, <code>cp-amm-sdk@1.4.3</code>, <code>@streamflow/stream@12.4.0</code>, <code>@coral-xyz/anchor</code>, <code>@solana/spl-token</code>, <code>bn.js</code>, <code>@privy-io/node</code>, <code>@upstash/redis</code>.<span class="acc">pnpm ls shows them.</span></span></div><span class="pri p-blocker">BLOCKER</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Add mobile dep</b> — <code>@react-native-community/slider</code> (PercentSlider).<span class="acc">installs; wizard slider renders.</span></span></div><span class="pri p-high">HIGH</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Prisma</b> — <code>prisma validate</code> → <code>prisma migrate deploy</code> (20260624010000 + 20260625000000) → <code>prisma generate</code>. <b>NEVER <code>db push</code></b> (PostGIS lives outside schema.prisma).<span class="acc">migrate succeeds; generate clean.</span></span></div><span class="pri p-blocker">BLOCKER</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Type-check + lint</b> — <code>tsc --noEmit</code> + <code>turbo lint</code>. Fix residual errors at the <code>TODO(verify-devnet)</code> SDK sites once real types are present.<span class="acc">tsc + lint clean across all packages.</span></span></div><span class="pri p-blocker">BLOCKER</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Builds</b> — api <code>next build</code>; mobile <code>expo export</code>/<code>prebuild</code>.<span class="acc">both build.</span></span></div><span class="pri p-high">HIGH</span></li>
+  </ul>
+
+  <h2><span class="n">B.</span>Devnet validation — the two blockers + end-to-end</h2>
+  <div class="secnote">Helius devnet RPC, funded SPIKE_KEYPAIR, a Privy server wallet, SOLANA_NETWORK=devnet.</div>
+  <h3>B1 · Architecture blockers (resolve, or the design changes)</h3>
+  <ul>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>DBC transfer-fee-on-mint</b> — confirm <code>dynamic-bonding-curve-sdk@1.5.10</code> accepts a Token-2022 TransferFeeConfig on the base mint it mints. Run spike-b + a real launch; inspect the mint's extensions (Helius DAS).<span class="acc">launched mint carries the fee. If NOT → the tax can't ride DBC; escalate (separate mint / other rail).</span></span></div><span class="pri p-blocker">BLOCKER</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Privy ephemeral co-signer</b> — confirm <code>@privy-io/node</code> preserves a pre-attached ephemeral signature (graduation NFTs; vesting metadata/base). <code>applySigners</code> re-attaches + raises PARTIAL_SIGN_UNSUPPORTED; vesting falls back to client co-sign.<span class="acc">server multi-signer lands, OR the client-relay fallback does. Pick the canonical path.</span></span></div><span class="pri p-blocker">BLOCKER</span></li>
+  </ul>
+  <h3>B2 · Spikes (GO/NO-GO)</h3>
+  <ul>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>spike-a</b> Token-2022 fee + harvest/withdraw + rebate math.<span class="acc">GO.</span></span></div><span class="pri p-high">HIGH</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>spike-b</b> Meteora DBC create → graduate → claim.<span class="acc">GO.</span></span></div><span class="pri p-high">HIGH</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>spike-c</b> Streamflow + Jup-Lock (metadata/base co-signer).<span class="acc">GO.</span></span></div><span class="pri p-high">HIGH</span></li>
+  </ul>
+  <h3>B3 · Full end-to-end</h3>
+  <ul>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Launch</b> a creator token.<span class="acc">CreatorToken ACTIVE; DBC config+pool on chain; mint taxed; quote = devnet USDC (getUsdcMint resolved).</span></span></div><span class="pri p-blocker">BLOCKER</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Trade</b> buy+sell (build → Privy signTransaction → /submit → confirm).<span class="acc">Trade gets intentId then signature/blockTime; webhook = IN_APP; PENDING→CONFIRMED correct.</span></span></div><span class="pri p-blocker">BLOCKER</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Fundraise → graduation</b> via the cron keeper; force a partial failure too.<span class="acc">raise tracks confirmed buys; migrates to DAMM v2; BOTH LpPositions on the correct base-mint pool; locks LP; GRADUATED/COMPLETED. Partial failure stays FINALIZING + retries (never finalizes wrong/unlocked).</span></span></div><span class="pri p-blocker">BLOCKER</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Fee claim</b> via cron (FEE_CLAIM_ENABLED=1).<span class="acc">partner+creator+withheld claimed; correct FeeEvent type/recipient; no double-claim on re-tick.</span></span></div><span class="pri p-high">HIGH</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Vesting</b> create + withdraw (after cliff).<span class="acc">ACTIVE; client calls /vesting/[id]/confirm; recipient-only enforced; 403 + zero-claimable gated.</span></span></div><span class="pri p-high">HIGH</span></li>
+  </ul>
+
+  <h2><span class="n">C.</span>Fund-safety behavioral checks (devnet)</h2>
+  <div class="secnote">Confirm the hardening fixes behave correctly against a live cluster.</div>
+  <ul>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Idempotency durable + fail-closed</b> — server tx with no Upstash fails closed (CONFIG_MISSING), not a double-broadcast; replaying /submit dedups.<span class="acc">no second on-chain tx.</span></span></div><span class="pri p-high">HIGH</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Rebate can't double-pay/drain</b> — force a rebate tx to land-and-fail → reservation released (R-1), next tick re-sends (not "paid" on a failed sig). Rebate sized from confirmed fill, bounded by price band + per-trade/wallet cap; price=0 defers.<span class="acc">no double pay; no rebate off a failed tx or zero price.</span></span></div><span class="pri p-blocker">BLOCKER</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Webhook rejects forgery</b> — fabricated event with no real tx is skipped (on-chain verify gate); shared-secret + replay window hold.<span class="acc">never persisted, never drives rebate/raise.</span></span></div><span class="pri p-high">HIGH</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>AuthZ</b> — per-user fail-closed rate limits (XFF can't bypass); no cross-user trade submit; non-recipient can't withdraw; crons reject missing/wrong CRON_SECRET.<span class="acc">all denied as expected.</span></span></div><span class="pri p-high">HIGH</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Server-wallet custody</b> — fee/withheld claims skip (not mis-sign) when authority isn't the server wallet.<span class="acc">needs-custody deferral, no unsignable broadcast.</span></span></div><span class="pri p-med">MED</span></li>
+  </ul>
+
+  <h2><span class="n">D.</span>Legal &amp; compliance</h2>
+  <ul>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Legal/regulatory read</b> on token issuance, fee custody (we hold the feeClaimer), and rebate disbursement (USDC from our vault) — likely MSB/securities. Keep <code>REBATE_LEGAL_APPROVED</code> OFF in prod until sign-off (claims unaffected; only rebate sends gate).<span class="acc">written sign-off filed; gate flipped intentionally.</span></span></div><span class="pri p-blocker">BLOCKER</span></li>
+  </ul>
+
+  <h2><span class="n">E.</span>Mainnet ops &amp; go-live (Phase 0)</h2>
+  <div class="secnote">See PHASE-0-OPS-RUNBOOK.md.</div>
+  <ul>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Rotate committed secrets</b> (SECRETS_REMEDIATION.md): Supabase service-role, DB password, Privy secret, Veriff keys, Upstash token, Helius key → Vercel/EAS env; add .gitignore entries.<span class="acc">new keys live, old revoked.</span></span></div><span class="pri p-blocker">BLOCKER</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>MoonPay onramp</b> — enable the MoonPay plugin in Privy; SOLANA_NETWORK=mainnet-beta; verify "Buy USDC" in a native build.<span class="acc">real USDC settles to the embedded wallet.</span></span></div><span class="pri p-high">HIGH</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Fix 0%-fee bug</b> — reconcile the canonical fee wallet; run <code>scripts/create-fee-atas.ts</code> on mainnet.<span class="acc">test swap routes the platform fee (non-zero).</span></span></div><span class="pri p-high">HIGH</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Provision Privy server wallet</b> + set all new env (PRIVY_AUTHORIZATION_KEY, PRIVY_SERVER_WALLET_ID, MOMENTO_REBATE_USDC_VAULT, MOMENTO_LP_FEE_CLAIMER, HELIUS_WEBHOOK_SECRET, cron secrets, *_ENABLED flags, USDC_MINT override).<span class="acc">backend signs+lands a memo via the server wallet.</span></span></div><span class="pri p-blocker">BLOCKER</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Register Helius webhook</b> for token mints/fee accounts → /api/webhooks/helius.<span class="acc">a real transfer appears as a FeeEvent/Trade.</span></span></div><span class="pri p-high">HIGH</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Confirm Meteora params</b> — protocolFeeBps=2000 vs deployed program; CAIP-2 cluster string.<span class="acc">match verified.</span></span></div><span class="pri p-med">MED</span></li>
+  </ul>
+
+  <h2><span class="n">F.</span>Mobile manual QA</h2>
+  <ul>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Launch wizard</b> end-to-end (LP % sum to 100; fee/tax disclosure ~1% vs ~4% accurate).<span class="acc">launch completes; disclosure correct.</span></span></div><span class="pri p-high">HIGH</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Token detail + buy/sell</b> — slippage control; MAX floors; PENDING≠CONFIRMED; RETRY rebuilds; no "Coming Soon"/$0.004 left.<span class="acc">trade works; states correct.</span></span></div><span class="pri p-high">HIGH</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Vesting</b> — amounts at real decimals; withdraw gates zero/403; confirm updates status.<span class="acc">correct amounts + gating.</span></span></div><span class="pri p-high">HIGH</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Design fidelity</b> vs docs/design/ (black/green, all-caps mono, brand hero font).<span class="acc">matches the design system.</span></span></div><span class="pri p-med">MED</span></li>
+  </ul>
+
+  <h2><span class="n">G.</span>Known deferred / future hardening</h2>
+  <div class="secnote">Non-blocking — track into post-launch.</div>
+  <ul>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>VestingSchedule.tokenProgram</b> durable column (additive migration); today resolved via a CreatorToken lookup (works).</span></div><span class="pri p-track">TRACK</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Signing P1-D</b> — HMAC the client-relay idempotency blob (worst case: wrong confirm window/telemetry; never moves funds).</span></div><span class="pri p-track">TRACK</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>contributorCount</b> concurrency (+1 over-count, cached display only; graduation recomputes authoritative count).</span></div><span class="pri p-track">TRACK</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Rebate oracle</b> — consider a dedicated TWAP before high-volume mainnet rebates.</span></div><span class="pri p-track">TRACK</span></li>
+    <li class="item"><input type="checkbox"><div class="body"><span class="txt"><b>Test harness</b> — add a runner to apps/api; backfill rebate/claim/graduation idempotency tests.</span></div><span class="pri p-track">TRACK</span></li>
+  </ul>
+
+  <div class="signoff">
+    <b>SIGN-OFF</b> — Production-ready when <b>A, B, C, D, E</b> are fully checked and <b>F</b> has no open
+    BLOCKER/HIGH. <b>G</b> trails into post-launch hardening.
+  </div>
+</div>
+
+<script>
+  var KEY='momento-validation-v1';
+  var boxes=[].slice.call(document.querySelectorAll('input[type=checkbox]'));
+  boxes.forEach(function(b,i){b.dataset.i=i;});
+  function save(){var s={};boxes.forEach(function(b){if(b.checked)s[b.dataset.i]=1;});localStorage.setItem(KEY,JSON.stringify(s));}
+  function load(){try{var s=JSON.parse(localStorage.getItem(KEY)||'{}');boxes.forEach(function(b){b.checked=!!s[b.dataset.i];});}catch(e){}}
+  function refresh(){
+    var done=boxes.filter(function(b){return b.checked;}).length;
+    document.getElementById('pcount').textContent=done+' / '+boxes.length+' complete';
+    document.getElementById('pbar').style.width=(boxes.length?Math.round(done/boxes.length*100):0)+'%';
+    boxes.forEach(function(b){b.closest('li.item').classList.toggle('done',b.checked);});
+  }
+  boxes.forEach(function(b){b.addEventListener('change',function(){save();refresh();});});
+  function resetAll(){localStorage.removeItem(KEY);boxes.forEach(function(b){b.checked=false;});refresh();}
+  load();refresh();
+</script>
+</body>
+</html>
