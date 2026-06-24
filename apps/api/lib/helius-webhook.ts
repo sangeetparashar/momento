@@ -515,7 +515,7 @@ export async function ingestHeliusEvents(
           // PROTOCOL (deliberately excluded from claimable summaries; the
           // attributed CREATOR/PARTNER legs are written by the Phase-3 claim).
           const legSignature = `${ev.signature}:TRANSFER_FEE_WITHHELD:${mint}`;
-          await db.feeEvent.createMany({
+          const legInsert = await db.feeEvent.createMany({
             data: [
               {
                 tokenId: token.id,
@@ -534,6 +534,51 @@ export async function ingestHeliusEvents(
             ],
             skipDuplicates: true, // durable idempotency backstop
           });
+
+          // (7b) GRADUATION raised tracking (D-graduation §3.2). On the FIRST
+          // confirmation of a curve BUY (USDC-in) for a watched fundraise mint,
+          // bump the cached `raisedBaseUnits` / `contributorCount` counters by the
+          // CONFIRMED quote (USDC) base units this tx moved. ADDITIVE + idempotent:
+          //   - Gated on `legInsert.count === 1` (the per-(sig,mint) unique key
+          //     above): a deduped re-delivery skips the insert ⇒ no double increment.
+          //   - Read-then-write inside THIS `$transaction`: `raisedBaseUnits` is a
+          //     base-unit STRING (Prisma `increment` is numeric-only / 2^53-lossy),
+          //     so we add as `bigint` and write the string back. The status filter
+          //     makes it a no-op when there is no fundraise row or it is already
+          //     terminal — never throws, never breaks ingestion for a no-fundraise
+          //     token. `contributorCount` is an Int and uses atomic `increment`.
+          //   - Authoritative USDC amount comes from `verified.byMint` for the
+          //     token's quote mint (on-chain meta), never a payload float; skipped
+          //     if the quote leg is not visible on-chain (keeper recomputes anyway,
+          //     §3.1 — this counter is a cached display value, not the decision).
+          if (legInsert.count === 1 && vm.side === 'BUY' && token.quoteMint) {
+            const quoteVm = verified.byMint.get(token.quoteMint);
+            const raisedQuote = quoteVm?.grossBaseUnits ?? BigInt(0);
+            if (raisedQuote > BigInt(0)) {
+              const fundraise = await db.tokenFundraise.findFirst({
+                where: {
+                  tokenId: token.id,
+                  status: { in: ['DRAFT', 'ACTIVE', 'THRESHOLD_MET'] },
+                },
+                select: { id: true, raisedBaseUnits: true },
+              });
+              if (fundraise) {
+                let prevRaised: bigint;
+                try {
+                  prevRaised = BigInt(fundraise.raisedBaseUnits);
+                } catch {
+                  prevRaised = BigInt(0);
+                }
+                await db.tokenFundraise.update({
+                  where: { id: fundraise.id },
+                  data: {
+                    raisedBaseUnits: (prevRaised + raisedQuote).toString(),
+                    contributorCount: { increment: 1 },
+                  },
+                });
+              }
+            }
+          }
 
           touchedMints.add(mint);
           anyWork = true;

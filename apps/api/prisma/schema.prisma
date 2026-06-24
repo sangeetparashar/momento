@@ -499,6 +499,7 @@ model TokenFundraise {
   endsAt            DateTime?
   finalizedAt       DateTime?
   finalizeSignature String?   @unique
+  finalizeStartedAt DateTime? // ── P3A ADD ── graduation lease timestamp (D-graduation §4.2)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

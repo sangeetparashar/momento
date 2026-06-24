@@ -36,3 +36,28 @@ export const MOMENTO_FEE = {
   DEFAULT_CREATOR_TRADING_FEE_BPS: 5000,
   DEFAULT_PARTNER_TRADING_FEE_BPS: 5000,
 } as const;
+
+// ── Phase 3A constants (see docs/solana-migration/design/phase3/CONTRACTS-P3A.md §g.2) ──
+// Launch defaults (P3-launch). Rebate USDC source vault is the env
+// MOMENTO_REBATE_USDC_VAULT (no constant — wallet, not a default).
+export const MOMENTO_LAUNCH = {
+  DEFAULT_TOTAL_SUPPLY: '1000000000',
+  DEFAULT_DECIMALS: 9,
+  DEFAULT_PARTNER_LOCKED_LP_PCT: 50,
+  DEFAULT_CREATOR_LOCKED_LP_PCT: 50,
+  DEFAULT_INITIAL_MARKET_CAP_USD: 100,
+  DEFAULT_MIGRATION_FEE_BPS: 100,        // 1% graduated-pool swap fee
+} as const;
+
+// Trade defaults (P3-trade).
+export const MOMENTO_TRADE = {
+  DEFAULT_SLIPPAGE_BPS: 50,
+  MAX_SLIPPAGE_BPS: 5000,
+  DEFAULT_COMPUTE_UNIT_LIMIT: 200_000,   // devnet-measured constant TODO(verify-devnet)
+} as const;
+
+// Claim/rebate batch sizes (P3-feeclaim). Overridable by FEE_CLAIM_BATCH / REBATE_BATCH env.
+export const MOMENTO_CLAIM = {
+  DEFAULT_FEE_CLAIM_BATCH: 25,
+  DEFAULT_REBATE_BATCH: 50,
+} as const;

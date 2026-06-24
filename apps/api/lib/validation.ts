@@ -91,6 +91,72 @@ export const tradeRangeSchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
 
+// ── Phase 3A request schemas (CONTRACTS-P3A §e) ──
+// Owned by P3-foundation; consumed by the five module routes. Money = base-unit
+// strings, USD = number, bps = number, unix times = number (seconds).
+
+// launch (P3-launch consumes — POST /api/tokens/launch, §d.1)
+export const launchTokenSchema = z.object({
+  name: z.string().min(1).max(32),
+  symbol: z.string().min(1).max(10).transform((s) => s.toUpperCase()),
+  description: z.string().max(2000).optional(),
+  imageUrl: z.string().url().optional(),
+  totalSupply: z.string().regex(/^[1-9]\d*$/).default('1000000000'),
+  decimals: z.number().int().min(6).max(9).default(9),
+  transferFeeBps: z.number().int().min(300).max(500).default(400),
+  feeSplit: z.object({
+    creatorBps: z.number().int().min(0).max(10000),
+    partnerBps: z.number().int().min(0).max(10000),
+  }).refine((f) => f.creatorBps + f.partnerBps === 10000, 'feeSplit must sum to 10000')
+    .default({ creatorBps: 5000, partnerBps: 5000 }),
+  fundraise: z.object({
+    targetUsd: z.number().positive(),
+    initialMarketCapUsd: z.number().positive().optional(),
+    partnerLockedLpPct: z.number().int().min(0).max(100).default(50),
+    partnerLpPct: z.number().int().min(0).max(100).default(0),
+    creatorLockedLpPct: z.number().int().min(0).max(100).default(50),
+    creatorLpPct: z.number().int().min(0).max(100).default(0),
+    minContributionBaseUnits: z.string().regex(/^\d+$/).optional(),
+    maxContributionBaseUnits: z.string().regex(/^\d+$/).optional(),
+  }).refine((f) => f.partnerLockedLpPct + f.partnerLpPct + f.creatorLockedLpPct + f.creatorLpPct === 100,
+    'LP percentages must sum to 100'),
+}).strict();
+
+// trade (P3-trade consumes — POST /api/tokens/[mint]/{buy,sell} + /submit, §d.3/§d.4)
+export const tradeOrderSchema = z.object({
+  amountInBase: z.string().regex(/^[1-9]\d*$/),
+  inputMint: z.enum(['USDC']).optional(),
+  slippageBps: z.number().int().min(1).max(5000).default(50),
+});
+export const tradeSubmitSchema = z.object({
+  intentId: z.string().uuid(),
+  transaction: z.string().min(1),
+  idempotencyKey: z.string().min(1),
+});
+
+// fee-claim admin (P3-feeclaim consumes — POST /api/creators/[id]/fees/claim, §d.6)
+export const feeClaimSchema = z.object({
+  tokenId: z.string().uuid().optional(),
+  mint: z.string().optional(),       // route also runs isValidMint when present
+}).strict();
+
+// vesting (P3-vesting consumes — POST /api/vesting/create + /api/vesting/[id]/withdraw, §d.7/§d.9)
+export const vestingCreateSchema = z.object({
+  kind: z.enum(['vesting', 'lock']).default('vesting'),
+  tokenId: z.string().uuid(),
+  mint: z.string(),
+  recipient: z.string(),
+  amountBase: z.string().regex(/^[1-9]\d*$/),
+  cliffAmountBase: z.string().regex(/^\d+$/).default('0'),
+  startAt: z.number().int(),
+  cliffAt: z.number().int(),
+  endAt: z.number().int(),
+  unlockEvery: z.number().int().positive(),
+}).refine((v) => v.cliffAt >= v.startAt, 'cliffAt must be >= startAt')
+  .refine((v) => v.endAt > v.cliffAt, 'endAt must be > cliffAt')
+  .refine((v) => (v.endAt - v.cliffAt) % v.unlockEvery === 0, 'endAt-cliffAt must be a multiple of unlockEvery');
+export const vestingWithdrawSchema = z.object({ amountBase: z.string().regex(/^[1-9]\d*$/).optional() });
+
 // ── Route param validators (REVIEW-security P1) ──
 // Bound `[mint]` / `[id]` BEFORE any DB or cache use so attacker-controlled
 // unbounded strings cannot become cache keys / enumeration probes.

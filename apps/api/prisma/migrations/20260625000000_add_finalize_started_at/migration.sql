@@ -1,0 +1,31 @@
+-- =============================================================================
+-- Migration: add_finalize_started_at
+-- Part of the Solana-only migration (Phase 3A: graduation, 2026-06).
+-- See docs/solana-migration/design/phase3/CONTRACTS-P3A.md (§a) and D-graduation.md §4.2/§8.
+-- =============================================================================
+--
+-- WHAT THIS MIGRATION DOES (purely ADDITIVE — no drops, no backfill, no data loss)
+--   1. ALTER TABLE "token_fundraises" ADD COLUMN "finalizeStartedAt" — the
+--      graduation keeper's lease timestamp. Nullable, no default, so the column
+--      is invisible to existing rows (NULL = no lease held). The keeper does a
+--      conditional update to claim/expire the lease (D-graduation §4.2).
+--
+-- This is the ONLY schema change in Phase 3A. The Phase 2 migration
+-- `20260624010000_add_token_economy` is already applied; this stacks on top.
+--
+-- DEV vs PROD CAVEAT
+--   This repo uses BOTH a `migrations/` folder AND `prisma db push` in dev/CI.
+--     * PROD / CI: applied verbatim via `prisma migrate deploy`.
+--     * DEV (`prisma db push`): Prisma diffs schema.prisma against the live DB and
+--       may NOT execute this exact SQL. Confirm both paths stay in sync.
+--   WARNING: NEVER run `prisma db push --accept-data-loss` blindly — the PostGIS
+--   geography columns/indexes/triggers from `00_postgis_setup` are invisible to
+--   Prisma and would be dropped.
+-- =============================================================================
+
+
+-- -----------------------------------------------------------------------------
+-- 1. AlterTable "token_fundraises" — add graduation lease timestamp
+-- -----------------------------------------------------------------------------
+-- AlterTable
+ALTER TABLE "token_fundraises" ADD COLUMN IF NOT EXISTS "finalizeStartedAt" TIMESTAMP(3);
