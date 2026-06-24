@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { computeRebate, rebateToUsdc, grossUpTokenRebate } from '@/lib/fees';
+import { runClaimSweep, runRebateSweep } from '@/lib/fee-claim';
 import { MOMENTO_FEE } from '@momento/shared';
 
 /**
@@ -65,6 +66,7 @@ export async function GET(request: NextRequest) {
   let rebatesQueued = 0;
   let claimsRecorded = 0;
   let harvestNoted = 0;
+  let rebatesSent = 0;
 
   try {
     // ───────────────────────────────────────────────────────────────────────
@@ -195,30 +197,45 @@ export async function GET(request: NextRequest) {
       where: { type: 'TRANSFER_FEE_WITHHELD', claimed: false },
     });
 
-    // TODO(Phase 3): execute Meteora claims via @meteora-ag/dynamic-bonding-curve-sdk
-    //   - partner:  claimPartnerTradingFee()  -> fee_claimer = MOMENTO_LP_FEE_CLAIMER
-    //   - creator:  creator trading-fee + locked-LP fee claim
-    //   - harvest:  harvestWithheldTokensToMint + withdrawWithheldTokensFromMint (spike-a)
-    //   - sign with Privy Server Wallet (lib/solana getServerWallet/serverSigner),
-    //     self-submit via Helius Sender (lib/solana submit)
-    //   - on confirm: insert CLAIMED / PARTNER_TRADING_FEE / CREATOR_TRADING_FEE
-    //     FeeEvents keyed by `signature` (claim tx) with attribute2080() split.
-    //   Phase 2 ONLY records claims observed via webhook; it does NOT initiate the CPI.
-    //
-    // `claimsRecorded` stays 0 here: claims land via the webhook ingest path in
-    // Phase 2; this cron records them only once the Phase-3 CPI seam above runs.
+    // ───────────────────────────────────────────────────────────────────────
+    // (3) Phase-3 CLAIM seam (D-fee-claim §3, §7). Execute Meteora DBC partner/
+    // creator trading-fee + DAMM v2 locked-LP fee claims and Token-2022 withheld
+    // harvest/withdraw via lib/fee-claim.runClaimSweep — Privy server-signed,
+    // self-submitted via Helius Sender (lib/solana). Idempotent + safe on
+    // overlapping ticks: each claim is keyed in the durable idempotency store and
+    // the CLAIMED / accrual FeeEvent rows are unique. DEFAULT-OFF env gate
+    // (FEE_CLAIM_ENABLED) keeps this a no-op until ops flips it on.
+    // ───────────────────────────────────────────────────────────────────────
+    if (process.env.FEE_CLAIM_ENABLED === '1') {
+      try {
+        const sweep = await runClaimSweep();
+        for (const r of sweep.results) claimsRecorded += r.recorded;
+      } catch (e) {
+        // A sweep-level failure must not 500 the whole cron (the recon + harvest
+        // accounting above already succeeded). Log + continue.
+        console.error('fee-claim cron: claim sweep failed:', e);
+      }
+    }
 
-    // TODO(Phase 4): rebate execution (REBATE FeeEvent rebatePaid PENDING -> SENT)
-    //   - read the off-chain REBATE FeeEvents enqueued in (1) (rebatePaid=false)
-    //   - USDC default: SPL transfer from MOMENTO_REBATE_USDC_VAULT (fee-exempt)
-    //   - token fallback: grossed-up Token-2022 transfer (grossUpTokenRebate)
-    //   - on confirm: set Trade.rebatePaid=true, Trade.rebateSignature,
-    //     FeeEvent.claimed=true, FeeEvent.claimSignature. Batchable per
-    //     trader/token/epoch to amortize fees.
+    // ───────────────────────────────────────────────────────────────────────
+    // (4) Phase-4 REBATE seam (D-fee-claim §4, §7). Pay unpaid IN_APP rebates
+    // (USDC default; reserve-before-send anti-double-pay) via
+    // lib/fee-claim.runRebateSweep. DOUBLE-GATED: REBATE_SEND_ENABLED AND the
+    // BLOCKING compliance gate REBATE_LEGAL_APPROVED — both default OFF, so prod
+    // rebate disbursement stays a no-op until ops + legal flip them (REVIEW §6).
+    // ───────────────────────────────────────────────────────────────────────
+    if (process.env.REBATE_SEND_ENABLED === '1' && process.env.REBATE_LEGAL_APPROVED === '1') {
+      try {
+        const rebates = await runRebateSweep();
+        rebatesSent += rebates.sent;
+      } catch (e) {
+        console.error('fee-claim cron: rebate sweep failed:', e);
+      }
+    }
 
     return NextResponse.json({
       success: true,
-      data: { reclassified, rebatesQueued, claimsRecorded, harvestNoted },
+      data: { reclassified, rebatesQueued, claimsRecorded, harvestNoted, rebatesSent },
     });
   } catch (error) {
     console.error('fee-claim cron error:', error);
