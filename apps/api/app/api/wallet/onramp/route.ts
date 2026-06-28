@@ -222,7 +222,7 @@ async function buildTransakUrl(walletAddress: string): Promise<string> {
     // Clear cached token
     _transakAccessToken = null;
     _transakTokenExpiry = 0;
-    return buildTransakDirectUrl(walletAddress, chain);
+    return buildTransakDirectUrl(walletAddress);
   }
 }
 

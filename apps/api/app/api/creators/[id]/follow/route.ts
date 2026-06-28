@@ -67,7 +67,7 @@ export async function POST(
         });
         isFollowing = false;
         newFollowerCount = Math.max(0, updatedUser?.followerCount ?? 0);
-      } catch (error) {
+      } catch (error: any) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
           const currentFollow = await prisma.follow.findUnique({
             where: { followerId_followingId: { followerId: user.id, followingId } },
@@ -102,7 +102,7 @@ export async function POST(
             data: { followingCount: { increment: 1 } },
           }),
         ]);
-      } catch (error) {
+      } catch (error: any) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
           // Concurrent follow request already created the follow — return current state
           const currentFollow = await prisma.follow.findUnique({
@@ -154,7 +154,7 @@ export async function POST(
         followerCount: newFollowerCount,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof Response) {
       return error;
     }

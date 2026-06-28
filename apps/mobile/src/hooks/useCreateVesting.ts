@@ -52,7 +52,7 @@ export function useCreateVesting(): UseMutationResult<
           // the backend cannot reconcile — re-throw so the caller doesn't treat
           // a stuck-PENDING row as a clean success.
           await confirmVesting(res.vestingId, signature);
-          return { signature, status: null };
+          return { signature, status: undefined };
         },
       });
 
