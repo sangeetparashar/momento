@@ -19,8 +19,6 @@ export interface AuthUser {
   id: string;
   privyUserId: string;
   walletAddress: string;
-  baseWalletAddress: string | null;
-  primaryChain: 'solana' | 'base';
   role: string;
   isAdmin: boolean;
 }
@@ -40,7 +38,8 @@ async function verifyToken(request: NextRequest) {
     const claims = await getPrivy().verifyAuthToken(token);
     return claims;
   } catch (error: any) {
-    console.error('Auth token verification failed:', error?.message || error, 'Token preview:', token.substring(0, 20) + '...');
+    // Do not log any portion of the token (it is a credential).
+    console.error('Auth token verification failed:', error?.message || error);
     return null;
   }
 }
@@ -64,32 +63,23 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
       id: true,
       privyUserId: true,
       walletAddress: true,
-      baseWalletAddress: true,
-      primaryChain: true,
       role: true,
       isAdmin: true,
     },
   });
 
   if (!user) {
-    // Fetch Privy user to get wallet addresses and email
+    // Fetch Privy user to get wallet address and email
     const privyUser = await getPrivy().getUser(privyUserId);
     const email = privyUser.email?.address || privyUser.google?.email || (privyUser as any).apple?.email;
 
-    // Extract Solana and Ethereum wallet addresses from linked accounts
+    // Extract the Solana wallet address from linked accounts
     const solanaWallet = privyUser.linkedAccounts?.find(
       (a: any) => a.type === 'wallet' && a.chainType === 'solana'
-    ) as { address: string } | undefined;
-    const ethWallet = privyUser.linkedAccounts?.find(
-      (a: any) => a.type === 'wallet' && a.chainType === 'ethereum'
     ) as { address: string } | undefined;
 
     // Fall back to privyUser.wallet for Solana if not found in linkedAccounts
     const walletAddress = solanaWallet?.address || privyUser.wallet?.address || `pending-${privyUserId}`;
-    const baseWalletAddress = ethWallet?.address || null;
-
-    // Determine primary chain based on which wallets exist
-    const primaryChain = baseWalletAddress && !solanaWallet?.address ? 'base' : 'solana';
 
     // Use upsert to avoid race condition when two concurrent first-login
     // requests both pass the findUnique check above. The second request
@@ -101,57 +91,40 @@ export async function getAuthUser(request: NextRequest): Promise<AuthUser | null
       create: {
         privyUserId,
         walletAddress,
-        baseWalletAddress,
-        primaryChain,
         email: email || null,
       },
       select: {
         id: true,
         privyUserId: true,
         walletAddress: true,
-        baseWalletAddress: true,
-        primaryChain: true,
         role: true,
         isAdmin: true,
       },
     });
-  } else if (user.walletAddress.startsWith('pending-') || !user.baseWalletAddress) {
-    // User exists but Solana wallet needs syncing or Base wallet is missing
+  } else if (user.walletAddress.startsWith('pending-')) {
+    // User exists but the Solana wallet still needs syncing
     try {
       const privyUser = await getPrivy().getUser(privyUserId);
 
       const solanaWallet = privyUser.linkedAccounts?.find(
         (a: any) => a.type === 'wallet' && a.chainType === 'solana'
       ) as { address: string } | undefined;
-      const ethWallet = privyUser.linkedAccounts?.find(
-        (a: any) => a.type === 'wallet' && a.chainType === 'ethereum'
-      ) as { address: string } | undefined;
 
-      const updateData: Record<string, string> = {};
-      if (user.walletAddress.startsWith('pending-') && (solanaWallet?.address || privyUser.wallet?.address)) {
-        updateData.walletAddress = solanaWallet?.address || privyUser.wallet!.address;
-      }
-      if (!user.baseWalletAddress && ethWallet?.address) {
-        updateData.baseWalletAddress = ethWallet.address;
-      }
-
-      if (Object.keys(updateData).length > 0) {
+      if (solanaWallet?.address || privyUser.wallet?.address) {
         user = await prisma.user.update({
           where: { privyUserId },
-          data: updateData,
+          data: { walletAddress: solanaWallet?.address || privyUser.wallet!.address },
           select: {
             id: true,
             privyUserId: true,
             walletAddress: true,
-            baseWalletAddress: true,
-            primaryChain: true,
             role: true,
             isAdmin: true,
           },
         });
       }
     } catch (error: any) {
-      console.error('Failed to sync wallet addresses:', error?.message || error);
+      console.error('Failed to sync wallet address:', error?.message || error);
     }
   }
 
@@ -207,23 +180,20 @@ export async function requireAdmin(
 }
 
 /**
- * Returns the wallet address for a given chain, or null if unavailable.
+ * Returns the user's Solana wallet address, or null if it is not yet provisioned.
+ *
+ * Momento is Solana-only; the `chain` argument is retained for call-site
+ * compatibility but is always treated as Solana.
  */
-export function getWalletForChain(user: AuthUser, chain: string): string | null {
-  if (chain === 'base') {
-    return user.baseWalletAddress || null;
-  }
+export function getWalletForChain(user: AuthUser, _chain?: string): string | null {
   const addr = user.walletAddress;
   return addr && !addr.startsWith('pending-') ? addr : null;
 }
 
 /**
- * Extracts the chain parameter from the request URL query string.
- * Defaults to 'solana' if not specified or invalid.
+ * Chain selector for wallet routes. Momento is Solana-only, so this always
+ * returns 'solana'.
  */
-export function getChainParam(request: NextRequest): 'solana' | 'base' {
-  const url = new URL(request.url);
-  const chain = url.searchParams.get('chain');
-  if (chain === 'base') return 'base';
+export function getChainParam(_request: NextRequest): 'solana' {
   return 'solana';
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth, getChainParam } from '@/lib/auth';
+import { requireAuth } from '@/lib/auth';
 import { readLimiter, applyRateLimit } from '@/lib/ratelimit';
 import prisma from '@/lib/prisma';
 
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const rateLimitResponse = await applyRateLimit(request, readLimiter);
     if (rateLimitResponse) return rateLimitResponse;
     const user = await requireAuth(request);
-    const chain = getChainParam(request);
+    const chain = 'solana';
 
     const { searchParams } = new URL(request.url);
     const range = searchParams.get('range') || '1M';

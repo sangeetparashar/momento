@@ -1,0 +1,86 @@
+-- =============================================================================
+-- Migration: remove_base_support
+-- Part of the Solana-only migration (Phase 1: EVM/Base removal, 2026-06).
+-- See docs/solana-migration/README.md and
+--     docs/solana-migration/research/06-evm-removal-surface.md (§5).
+-- =============================================================================
+--
+-- WHAT THIS MIGRATION DOES
+--   1. Drops the pure-EVM column `users.baseWalletAddress` and its unique index.
+--   2. Removes the Base/Aerodrome-only value `AERODROME` from the `PoolType`
+--      enum -- see the "AERODROME ENUM DECISION" note below for the chosen
+--      approach (TS-only by default) and the Postgres-safe DB-drop pattern.
+--
+-- WHAT THIS MIGRATION DELIBERATELY KEEPS (Risk R2/R3 from report 06)
+--   - `users.primaryChain` (default 'solana') -- column stays as a harmless
+--     no-op that always reads 'solana'; the shared TS type no longer exposes it.
+--   - All `chain` columns (`creator_tokens.chain`, `portfolio_snapshots.chain`,
+--     `wallet_transactions.chain`) and their unique constraints / indexes.
+--   - `portfolio_snapshots.nativeBalance` / `nativeValueUsd` and
+--     `WalletBalance`'s native fields -- these were RENAMED FROM the sol-specific
+--     columns in 20260411000000 and now back Solana data. Renaming back is
+--     gratuitous churn and risks breaking the snapshot read path.
+--
+-- DEV vs PROD CAVEAT (report 06 §5)
+--   This repo uses BOTH a `migrations/` folder AND `prisma db push` in dev/CI
+--   (`db:push`; `vercel-build` runs `prisma generate`, not `migrate deploy`).
+--     * PROD / CI with migrations: this file is applied verbatim via
+--       `prisma migrate deploy`.
+--     * DEV with `prisma db push`: Prisma diffs schema.prisma against the live
+--       DB and may NOT execute this exact SQL. After `db push`, `baseWalletAddress`
+--       will be dropped to match schema.prisma, but the `AERODROME` enum value
+--       will only be removed if schema.prisma drops it AND Prisma deems it safe
+--       (zero rows). Confirm both paths stay in sync before deploying.
+--   WARNING: never run `prisma db push --accept-data-loss` blindly -- the PostGIS
+--   geography columns/indexes/triggers from `00_postgis_setup` are invisible to
+--   Prisma and would be dropped.
+-- =============================================================================
+
+
+-- -----------------------------------------------------------------------------
+-- 1. Drop users.baseWalletAddress + its unique index (pure EVM, safe to drop)
+-- -----------------------------------------------------------------------------
+-- Postgres normally drops the dependent unique index automatically when the
+-- column is dropped, but we drop it explicitly first to be deterministic and
+-- idempotent (IF EXISTS guards make this safe to re-run).
+DROP INDEX IF EXISTS "users_baseWalletAddress_key";
+ALTER TABLE "users" DROP COLUMN IF EXISTS "baseWalletAddress";
+
+
+-- -----------------------------------------------------------------------------
+-- 2. AERODROME ENUM DECISION
+-- -----------------------------------------------------------------------------
+-- CHOSEN APPROACH (default, active in this migration): TS-ONLY REMOVAL.
+--   `AERODROME` is removed from the Prisma/TypeScript `PoolType` enum (in
+--   schema.prisma and packages/shared) but LEFT IN THE POSTGRES ENUM here.
+--   Rationale:
+--     * Dropping a Postgres enum value is NOT a simple ALTER. It requires the
+--       create-new-type / swap-columns / drop-old-type dance below, and it
+--       FAILS if any row still has poolType = 'AERODROME'.
+--     * This migration is authored offline; we cannot verify the row count
+--       (`SELECT count(*) FROM creator_tokens WHERE "poolType" = 'AERODROME'`).
+--     * Leaving an unused enum value in Postgres is harmless: nothing in the
+--       Solana-only code will ever write it, and Prisma tolerates extra DB enum
+--       values that are absent from the schema for reads. This is the lowest-
+--       risk cut for Phase 1.
+--
+-- TO FULLY DROP AERODROME FROM THE DB LATER (run only after the guard passes):
+--
+--   -- GUARD: must return 0 or the type swap will fail.
+--   -- SELECT count(*) FROM "creator_tokens" WHERE "poolType" = 'AERODROME';
+--
+--   -- Postgres-safe enum-value removal (create new type, migrate columns,
+--   -- drop old, rename). Uncomment and run as a single transaction once the
+--   -- guard above confirms zero AERODROME rows:
+--   --
+--   -- ALTER TYPE "PoolType" RENAME TO "PoolType_old";
+--   -- CREATE TYPE "PoolType" AS ENUM ('BONDING_CURVE', 'RAYDIUM');
+--   -- ALTER TABLE "creator_tokens"
+--   --   ALTER COLUMN "poolType" TYPE "PoolType"
+--   --   USING ("poolType"::text::"PoolType");
+--   -- DROP TYPE "PoolType_old";
+--
+--   -- Note: `creator_tokens.poolType` is nullable with no default, so no
+--   -- DEFAULT needs to be dropped/re-added around the column type swap. If a
+--   -- default is ever added, drop it before the swap and re-add it after.
+-- -----------------------------------------------------------------------------

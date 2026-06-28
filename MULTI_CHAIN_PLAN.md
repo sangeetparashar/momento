@@ -1,3 +1,5 @@
+> ⚠️ SUPERSEDED by the Solana-only migration (2026-06). See docs/solana-migration/README.md. Retained for history.
+
 # Multi-Chain Orchestration Plan: Base Chain + Solana
 
 > **Status**: Planning Complete

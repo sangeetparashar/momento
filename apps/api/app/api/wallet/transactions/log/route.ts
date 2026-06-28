@@ -27,9 +27,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (chain !== 'solana' && chain !== 'base') {
+    if (chain !== 'solana') {
       return NextResponse.json(
-        { success: false, error: 'Invalid chain. Must be "solana" or "base".' },
+        { success: false, error: 'Invalid chain. Must be "solana".' },
         { status: 400 },
       );
     }

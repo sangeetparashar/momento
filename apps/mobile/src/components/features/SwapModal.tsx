@@ -19,23 +19,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSwap, TOKEN_MINTS } from '@/hooks/useSwap';
 import { useAuth } from '@/hooks/useAuth';
 import { apiService } from '@/services/api';
-import { useChain } from '@/hooks/useChain';
 import { useWalletBalance } from '@/hooks/useWalletBalance';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { CHAIN_CONFIG } from '@momento/shared';
-import type { ChainType } from '@momento/shared';
 
 const TX_STORAGE_KEY_BASE = 'momento_recent_txs';
 const MAX_TX_RECORDS = 20;
 
-/** Per-user, per-chain tx storage key — must match wallet.tsx getTxStorageKey */
-function getTxStorageKey(userId: string | undefined, chain: ChainType): string {
-  if (!userId) return `${TX_STORAGE_KEY_BASE}:${chain}`;
-  return `${TX_STORAGE_KEY_BASE}:${userId}:${chain}`;
+/** Per-user tx storage key — must match wallet.tsx getTxStorageKey */
+function getTxStorageKey(userId: string | undefined): string {
+  if (!userId) return `${TX_STORAGE_KEY_BASE}:solana`;
+  return `${TX_STORAGE_KEY_BASE}:${userId}:solana`;
 }
-
-/** Native ETH placeholder address used by KyberSwap/0x */
-const ETH_NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 
 interface SwapModalProps {
   visible: boolean;
@@ -46,13 +41,10 @@ interface SwapModalProps {
 const SOL_DECIMALS = 9;
 const USDC_DECIMALS = 6;
 
-/** Minimum swap amounts (per native symbol) */
-const MIN_SWAP: Record<string, number> = { SOL: 0.01, ETH: 0.001, USDC: 1 };
-/** Minimum native balance required in wallet for transaction fees */
-const MIN_NATIVE_FOR_FEES: Record<'solana' | 'base', number> = {
-  solana: 0.005,
-  base: 0.0002,
-};
+/** Minimum swap amounts (per token symbol) */
+const MIN_SWAP: Record<string, number> = { SOL: 0.01, USDC: 1 };
+/** Minimum native (SOL) balance required in wallet for transaction fees */
+const MIN_NATIVE_FOR_FEES = 0.005;
 
 interface TokenInfo {
   symbol: string;
@@ -66,11 +58,6 @@ const SOLANA_TOKENS: TokenInfo[] = [
   { symbol: 'USDC', mint: TOKEN_MINTS.USDC, decimals: USDC_DECIMALS, icon: '$' },
 ];
 
-const BASE_TOKENS: TokenInfo[] = [
-  { symbol: 'ETH', mint: ETH_NATIVE, decimals: 18, icon: 'Ξ' },
-  { symbol: 'USDC', mint: CHAIN_CONFIG.base.usdcAddress, decimals: USDC_DECIMALS, icon: '$' },
-];
-
 /**
  * Native in-app swap modal powered by Jupiter + Privy wallet signing.
  *
@@ -81,17 +68,16 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const auth = useAuth();
-  const { walletAddress, ethWalletAddress } = auth;
-  const { chain } = useChain();
-  const activeWalletAddress = chain === 'base' ? ethWalletAddress : walletAddress;
+  const { walletAddress } = auth;
+  const activeWalletAddress = walletAddress;
   const { user: profile } = useUserProfile();
   const { quote, status, error, fetchQuote, executeSwap, reset } = useSwap();
   const balanceQuery = useWalletBalance(visible);
 
-  const tokens = chain === 'base' ? BASE_TOKENS : SOLANA_TOKENS;
-  const nativeSymbol = CHAIN_CONFIG[chain].symbol;
-  const explorerBase = CHAIN_CONFIG[chain].explorerUrl;
-  const explorerName = CHAIN_CONFIG[chain].explorerName;
+  const tokens = SOLANA_TOKENS;
+  const nativeSymbol = CHAIN_CONFIG.solana.symbol;
+  const explorerBase = CHAIN_CONFIG.solana.explorerUrl;
+  const explorerName = CHAIN_CONFIG.solana.explorerName;
 
   const [inputToken, setInputToken] = useState<TokenInfo>(tokens[0]);
   const [outputToken, setOutputToken] = useState<TokenInfo>(tokens[1]);
@@ -111,11 +97,8 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
     const isNative = inputToken.symbol === nativeSymbol;
     if (isNative) {
       // Reserve a small buffer of native token for fees
-      const raw =
-        balanceData.nativeBalance ??
-        (chain === 'solana' ? balanceData.solBalance : 0) ??
-        0;
-      const buffer = chain === 'base' ? 0.0002 : 0.01;
+      const raw = balanceData.nativeBalance ?? balanceData.solBalance ?? 0;
+      const buffer = 0.01;
       return Math.max(0, raw - buffer);
     }
     const tokenHolding = balanceData.tokens?.find(
@@ -142,16 +125,6 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
       if (quoteTimer) clearTimeout(quoteTimer);
     }
   }, [visible]);
-
-  // Reset state and tokens when chain changes
-  useEffect(() => {
-    setInputToken(tokens[0]);
-    setOutputToken(tokens[1]);
-    setInputAmount('');
-    setSwapResult(null);
-    reset();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chain]);
 
   // Auto-fetch quote with debounce when amount changes
   useEffect(() => {
@@ -199,7 +172,7 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
 
       // Persist tx record for wallet history
       try {
-        const txKey = getTxStorageKey(profile?.id, chain);
+        const txKey = getTxStorageKey(profile?.id);
         const raw = await AsyncStorage.getItem(txKey);
         const existing = raw ? JSON.parse(raw) : [];
         const record = {
@@ -216,7 +189,7 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
 
       // Log to server for persistent history (fire-and-forget)
       apiService.post('/wallet/transactions/log', {
-        chain,
+        chain: 'solana',
         signature,
         type: 'swap',
         label: `${inputAmount} ${inputToken.symbol} → ${outputAmount ?? '?'} ${outputToken.symbol}`,
@@ -277,10 +250,8 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
   // Check if user has enough native token for transaction fees
   const balanceData: any = balanceQuery.data;
   const nativeBalance =
-    balanceData?.nativeBalance ??
-    (chain === 'solana' ? balanceData?.solBalance : 0) ??
-    0;
-  const minNativeForFees = MIN_NATIVE_FOR_FEES[chain];
+    balanceData?.nativeBalance ?? balanceData?.solBalance ?? 0;
+  const minNativeForFees = MIN_NATIVE_FOR_FEES;
   const insufficientFees = balanceQuery.data != null && nativeBalance < minNativeForFees;
 
   const canSwap = quote && !isBusy && !isQuoting && inputNum > 0 && !insufficientBalance && !belowMinimum && !insufficientFees;
@@ -355,7 +326,7 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
           <View style={styles.headerCenter}>
             <Text style={styles.headerTitle}>Swap</Text>
             <Text style={styles.headerSubtitle}>
-              {chain === 'base' ? 'Powered by KyberSwap' : 'Powered by Jupiter'}
+              Powered by Jupiter
             </Text>
           </View>
           <View style={styles.headerRight} />
@@ -502,7 +473,7 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
                   ? 'Signing Transaction'
                   : status === 'sending'
                   ? 'Sending Transaction'
-                  : `Confirming on ${CHAIN_CONFIG[chain].name}`}
+                  : `Confirming on ${CHAIN_CONFIG.solana.name}`}
               </Text>
               <Text style={styles.progressSubtitle}>
                 {status === 'approving'
@@ -510,7 +481,7 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
                   : status === 'signing'
                   ? 'Approve the transaction in your wallet...'
                   : status === 'sending'
-                  ? `Broadcasting to the ${CHAIN_CONFIG[chain].name} network...`
+                  ? `Broadcasting to the ${CHAIN_CONFIG.solana.name} network...`
                   : 'Waiting for block confirmation...'}
               </Text>
             </View>
@@ -556,9 +527,7 @@ export function SwapModal({ visible, onClose }: SwapModalProps) {
           <View style={styles.infoRow}>
             <Ionicons name="shield-checkmark" size={14} color={COLORS.textTertiary} />
             <Text style={styles.infoText}>
-              {chain === 'base'
-                ? 'Network fees on Base are typically <$0.01. Transactions are signed locally with your embedded wallet.'
-                : 'Transactions are signed locally with your embedded wallet. Momento never has access to your private keys.'}
+              Transactions are signed locally with your embedded wallet. Momento never has access to your private keys.
             </Text>
           </View>
           </>

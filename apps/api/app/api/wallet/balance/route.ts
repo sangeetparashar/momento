@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAuth, getChainParam, getWalletForChain } from '@/lib/auth';
+import { requireAuth, getWalletForChain } from '@/lib/auth';
 import { fetchWalletBalance } from '@/lib/helius';
-import { fetchBaseWalletBalance } from '@/lib/base';
 import { getOrSetCache, cacheKeys, cacheTTL } from '@/lib/redis';
 import { readLimiter, applyRateLimit } from '@/lib/ratelimit';
 import prisma from '@/lib/prisma';
@@ -12,18 +11,18 @@ export async function GET(request: NextRequest) {
     if (rateLimitResponse) return rateLimitResponse;
     const user = await requireAuth(request);
 
-    const chain = getChainParam(request);
-    const walletAddress = getWalletForChain(user, chain);
+    const chain = 'solana';
+    const walletAddress = getWalletForChain(user);
 
     if (!walletAddress) {
-      // Return empty balance for users without a real wallet for this chain
+      // Return empty balance for users without a real wallet yet
       return NextResponse.json({
         success: true,
         data: {
           chain,
           nativeBalance: 0,
           nativePriceUsd: 0,
-          nativeSymbol: chain === 'base' ? 'ETH' : 'SOL',
+          nativeSymbol: 'SOL',
           solBalance: 0,
           solPriceUsd: 0,
           tokens: [],
@@ -37,9 +36,6 @@ export async function GET(request: NextRequest) {
     const cacheKey = cacheKeys.walletBalance(user.id, chain);
 
     const balance = await getOrSetCache(cacheKey, cacheTTL.walletBalance, async () => {
-      if (chain === 'base') {
-        return await fetchBaseWalletBalance(walletAddress);
-      }
       const solBalance = await fetchWalletBalance(walletAddress);
       // Ensure legacy Solana balance also has the new chain-aware fields
       solBalance.chain = 'solana';

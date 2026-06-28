@@ -11,3 +11,5 @@ export { MomentoLogo } from './MomentoLogo';
 export { LoadingView } from './LoadingView';
 export { CoachMark } from './CoachMark';
 export { PillButton } from './PillButton';
+export { FormField } from './FormField';
+export type { FormFieldProps } from './FormField';

@@ -20,17 +20,70 @@ export const CHAIN_CONFIG = {
     usdcAddress: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
     usdcDecimals: 6,
   },
-  base: {
-    name: 'Base',
-    symbol: 'ETH',
-    decimals: 18,
-    nativeIcon: 'Ξ',
-    iconColor: '#0052FF',
-    explorerUrl: 'https://basescan.org',
-    explorerName: 'BaseScan',
-    usdcAddress: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-    usdcDecimals: 6,
-  },
 } as const;
 
 export type ChainConfig = typeof CHAIN_CONFIG;
+
+// ── USDC mint, network-aware (see wallet/send/route.ts:22-24) ──
+// Devnet has no mainnet (Circle) USDC, so the quote/rebate mint MUST follow the
+// cluster. Consumers (launch/trade/fee-claim) read this at REQUEST time via
+// getUsdcMint() — never the frozen MOMENTO_FEE.USDC_MINT literal (which is
+// mainnet-only and kept for back-compat / mainnet default).
+export const USDC_MINT_MAINNET = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+export const USDC_MINT_DEVNET = '4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU';
+
+/**
+ * Resolve the USDC mint for the active cluster, at call time.
+ *
+ * Precedence: explicit `USDC_MINT` env override → mainnet mint when
+ * `SOLANA_NETWORK === 'mainnet-beta'` → devnet mint otherwise.
+ *
+ * IMPORT-SAFE: reads env lazily on each call (no module-top env read), so it
+ * picks up the cluster in the request context rather than at import time.
+ */
+export function getUsdcMint(): string {
+  const override = process.env.USDC_MINT?.trim();
+  if (override) return override;
+  return process.env.SOLANA_NETWORK === 'mainnet-beta' ? USDC_MINT_MAINNET : USDC_MINT_DEVNET;
+}
+
+// ── Phase 2 token-economy fee defaults (see CONTRACTS.md §d.2) ──
+export const MOMENTO_FEE = {
+  // DEPRECATED for cluster-scoped use: this is the MAINNET literal. Use
+  // getUsdcMint() at request time for the quote/rebate mint. Kept only as the
+  // mainnet default + back-compat reference.
+  USDC_MINT: USDC_MINT_MAINNET,
+  USDC_DECIMALS: 6,
+  TOKEN_2022_PROGRAM_ID: 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb',
+  TOKEN_CLASSIC_PROGRAM_ID: 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA',
+  DEFAULT_TRANSFER_FEE_BPS: 400,   // locked range 300–500
+  TARGET_IN_APP_BPS: 100,          // ~1% effective after rebate (spike-a)
+  PROTOCOL_FEE_BPS: 2000,          // Meteora fixed 20% (confirm vs deployed program)
+  DEFAULT_CREATOR_TRADING_FEE_BPS: 5000,
+  DEFAULT_PARTNER_TRADING_FEE_BPS: 5000,
+} as const;
+
+// ── Phase 3A constants (see docs/solana-migration/design/phase3/CONTRACTS-P3A.md §g.2) ──
+// Launch defaults (P3-launch). Rebate USDC source vault is the env
+// MOMENTO_REBATE_USDC_VAULT (no constant — wallet, not a default).
+export const MOMENTO_LAUNCH = {
+  DEFAULT_TOTAL_SUPPLY: '1000000000',
+  DEFAULT_DECIMALS: 9,
+  DEFAULT_PARTNER_LOCKED_LP_PCT: 50,
+  DEFAULT_CREATOR_LOCKED_LP_PCT: 50,
+  DEFAULT_INITIAL_MARKET_CAP_USD: 100,
+  DEFAULT_MIGRATION_FEE_BPS: 100,        // 1% graduated-pool swap fee
+} as const;
+
+// Trade defaults (P3-trade).
+export const MOMENTO_TRADE = {
+  DEFAULT_SLIPPAGE_BPS: 50,
+  MAX_SLIPPAGE_BPS: 5000,
+  DEFAULT_COMPUTE_UNIT_LIMIT: 200_000,   // devnet-measured constant TODO(verify-devnet)
+} as const;
+
+// Claim/rebate batch sizes (P3-feeclaim). Overridable by FEE_CLAIM_BATCH / REBATE_BATCH env.
+export const MOMENTO_CLAIM = {
+  DEFAULT_FEE_CLAIM_BATCH: 25,
+  DEFAULT_REBATE_BATCH: 50,
+} as const;

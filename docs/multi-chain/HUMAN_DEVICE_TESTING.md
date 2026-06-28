@@ -1,3 +1,5 @@
+> ⚠️ SUPERSEDED by the Solana-only migration (2026-06). See docs/solana-migration/README.md. Retained for history.
+
 # Human Device Testing — Multi-Chain (Base + Solana)
 
 This is the verification checklist for end-to-end testing of the multi-chain

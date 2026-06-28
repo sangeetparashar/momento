@@ -1,3 +1,5 @@
+> ⚠️ SUPERSEDED by the Solana-only migration (2026-06). See docs/solana-migration/README.md. Retained for history.
+
 # Agent 4: Base Balance Library + Route
 
 ## Mission

@@ -50,9 +50,9 @@ function PrivyWithAuth({ children }: { children: React.ReactNode }) {
   console.log('[PrivyWithAuth] Rendering...');
   const { PrivyProvider } = require('@privy-io/expo');
   // PrivyElements renders Privy's prebuilt modal UIs (login, signing, and the
-  // fiat-funding flow). The useFundWallet / useFundSolanaWallet hooks require
-  // it to be mounted in the tree, otherwise fundWallet() throws
-  // 'privy_elements_not_ready'. Mount it once, here, alongside the provider.
+  // fiat-funding flow). The useFundSolanaWallet hook requires it to be mounted
+  // in the tree, otherwise fundWallet() throws 'privy_elements_not_ready'.
+  // Mount it once, here, alongside the provider.
   const { PrivyElements } = require('@privy-io/expo/ui');
   const { AuthBridge } = require('@/providers/AuthBridge');
   console.log('[PrivyWithAuth] PrivyProvider:', typeof PrivyProvider, 'AuthBridge:', typeof AuthBridge);
@@ -64,7 +64,6 @@ function PrivyWithAuth({ children }: { children: React.ReactNode }) {
         clientId="client-WY6UDfFofojZafsbGzmGDGYExCP86xeQuKCcUvoyGmpqZ"
         config={{
           embedded: {
-            ethereum: { createOnLogin: 'users-without-wallets' },
             solana: { createOnLogin: 'users-without-wallets' },
           },
         }}
