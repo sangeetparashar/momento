@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true, data: user });
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof Response) {
       return error;
     }
@@ -150,7 +150,7 @@ export async function PATCH(request: NextRequest) {
         updatedAt: updatedUser.updatedAt.toISOString(),
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       return NextResponse.json(
         { success: false, error: 'Username already taken' },

@@ -58,7 +58,7 @@ export async function POST(
         });
         isLiked = false;
         newLikeCount = Math.max(0, updatedPost?.likeCount ?? 0);
-      } catch (error) {
+      } catch (error: any) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
           const currentLike = await prisma.like.findUnique({
             where: { userId_postId: { userId: user.id, postId } },
@@ -89,7 +89,7 @@ export async function POST(
             data: { likeCount: { increment: 1 } },
           }),
         ]);
-      } catch (error) {
+      } catch (error: any) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
           // Concurrent like request already created the like — return current state
           const currentLike = await prisma.like.findUnique({
@@ -143,7 +143,7 @@ export async function POST(
         likeCount: newLikeCount,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof Response) {
       return error;
     }

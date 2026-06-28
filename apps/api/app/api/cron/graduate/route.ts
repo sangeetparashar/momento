@@ -15,7 +15,7 @@ import { runGraduationSweep } from '@/lib/graduation';
  * The sweep itself is idempotent and NEVER double-migrates: the DB lease
  * (FINALIZING + finalizeStartedAt), the durable submit() Redis store
  * (at-most-once broadcast), and on-chain/unique constraints make overlapping
- * cron ticks safe (D-graduation §5). Suggested cadence `*/5 * * * *`
+ * cron ticks safe (D-graduation §5). Suggested cadence: every 5 minutes
  * (latency-sensitive vs the 30-min fee-claim) — added to vercel.json by
  * P3-foundation.
  *

@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
         hasMore,
       },
     });
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof Response) return error;
     console.error('List saved posts error:', error);
     return NextResponse.json(
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
         await prisma.savedPost.create({
           data: { userId: user.id, postId },
         });
-      } catch (error) {
+      } catch (error: any) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
           return NextResponse.json({
             success: true,
@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: { saved: isSaved },
     });
-  } catch (error) {
+  } catch (error: any) {
     if (error instanceof Response) return error;
     console.error('Toggle save error:', error);
     return NextResponse.json(
