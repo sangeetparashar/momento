@@ -50,13 +50,13 @@ export function useWithdrawVesting(): UseWithdrawVesting {
         submit: async (signature) => {
           try {
             const c = await confirmVesting(vestingId, signature);
-            return { signature, status: c.status };
+            return { signature, status: c.status ?? undefined };
           } catch (confirmErr: any) {
             console.warn(
               '[useWithdrawVesting] confirm failed (tx landed):',
               confirmErr?.message,
             );
-            return { signature, status: null };
+            return { signature, status: undefined };
           }
         },
       });
