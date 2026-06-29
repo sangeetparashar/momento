@@ -37,7 +37,7 @@ import {
 } from '@solana/web3.js';
 import BN from 'bn.js';
 
-import { StreamflowSolana, ICluster } from '@streamflow/stream';
+import { SolanaStreamClient, ICluster } from '@streamflow/stream';
 
 import type { BuiltTx } from './solana/types';
 import { serverSigner, ephemeralSigner, clientRelaySigner } from './solana/signer';
@@ -108,7 +108,7 @@ export interface VestingPlan {
 
 function streamClient() {
   const cluster = getNetwork() === 'mainnet-beta' ? ICluster.Mainnet : ICluster.Devnet;
-  return new StreamflowSolana.SolanaStreamClient(getRpcUrl(), cluster, 'confirmed');
+  return new SolanaStreamClient(getRpcUrl(), cluster, 'confirmed');
 }
 
 function tokenProgramId(input: { isToken2022?: boolean }): PublicKey {

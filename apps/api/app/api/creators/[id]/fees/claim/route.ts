@@ -120,7 +120,7 @@ export async function POST(
           r.partnerLpFeeSig,
           r.creatorLpFeeSig,
           r.withdrawWithheldSig,
-        ].filter(Boolean),
+        ].filter((s): s is string => Boolean(s)),
       );
       await prisma.promotionLog.create({
         data: {
