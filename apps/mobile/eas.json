@@ -51,6 +51,20 @@
         "EXPO_PUBLIC_SOLANA_NETWORK": "mainnet-beta"
       }
     },
+    "development-devnet": {
+      "extends": "base",
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "ios": { "simulator": true },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://REPLACE-WITH-DEVNET-API/api",
+        "EXPO_PUBLIC_PRIVY_APP_ID": "cmjbzyj4q00twlb0d1uc5w0sb",
+        "EXPO_PUBLIC_SOLANA_NETWORK": "devnet",
+        "EXPO_PUBLIC_SOLANA_RPC_URL": "https://devnet.helius-rpc.com/?api-key=REPLACE_WITH_DEVNET_HELIUS_KEY",
+        "EXPO_PUBLIC_HELIUS_RPC_URL": "https://devnet.helius-rpc.com/?api-key=REPLACE_WITH_DEVNET_HELIUS_KEY"
+      }
+    },
     "production": {
       "extends": "base",
       "autoIncrement": true,
